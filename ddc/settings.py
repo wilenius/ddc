@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-zk$2yw!!n#qk2eyf18fuu4#qthf3dz51%%+k#la$e9l9g+y7px
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['0.0.0.0', '127.0.0.1']
 
 
 # Application definition
@@ -37,7 +37,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'tournament_creator.apps.TournamentCreatorConfig',
 ]
+
+AUTH_USER_MODEL = 'tournament_creator.User'
+
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

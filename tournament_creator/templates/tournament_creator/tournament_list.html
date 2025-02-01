@@ -1,0 +1,39 @@
+{% extends 'tournament_creator/base.html' %}
+
+{% block title %}Tournaments - DDC Tournament Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>Tournaments</h2>
+    </div>
+    <div class="col text-end">
+        <a href="{% url 'tournament_create' %}" class="btn btn-primary">Create New Tournament</a>
+    </div>
+</div>
+
+{% if tournaments %}
+    <div class="row row-cols-1 row-cols-md-2 g-4">
+        {% for tournament in tournaments %}
+            <div class="col">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ tournament.name }}</h5>
+                        <p class="card-text">
+                            Date: {{ tournament.date }}<br>
+                            Players: {{ tournament.players.count }}<br>
+                            Rounds: {{ tournament.number_of_rounds }}<br>
+                            Courts: {{ tournament.number_of_courts }}
+                        </p>
+                        <a href="{% url 'tournament_detail' tournament.id %}" class="btn btn-primary">View Details</a>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        No tournaments have been created yet. Click "Create New Tournament" to get started.
+    </div>
+{% endif %}
+{% endblock %}

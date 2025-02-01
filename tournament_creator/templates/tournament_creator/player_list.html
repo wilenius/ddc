@@ -1,0 +1,48 @@
+{% extends 'tournament_creator/base.html' %}
+
+{% block title %}Players - DDC Tournament Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>Players</h2>
+    </div>
+    <div class="col text-end">
+        <a href="{% url 'player_create' %}" class="btn btn-primary">Add New Player</a>
+    </div>
+</div>
+
+{% if players %}
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Ranking</th>
+                            <th>Name</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for player in players %}
+                            <tr>
+                                <td>{{ player.ranking }}</td>
+                                <td>{{ player.first_name }} {{ player.last_name }}</td>
+                                <td>
+                                    <a href="{% url 'player_update' player.id %}" class="btn btn-sm btn-primary">Edit</a>
+                                    <a href="{% url 'player_delete' player.id %}" class="btn btn-sm btn-danger">Delete</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        No players have been added yet. Click "Add New Player" to get started.
+    </div>
+{% endif %}
+{% endblock %}

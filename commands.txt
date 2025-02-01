@@ -1,0 +1,15 @@
+# From the project root directory (/home/hwileniu/git/ddc):
+
+# 1. Activate the virtual environment
+source venv/bin/activate
+
+# 2. Start the development server (will be accessible at http://127.0.0.1:8000)
+python3 manage.py runserver
+
+# To stop the server, press Ctrl+C
+
+# If you want to make it accessible from other devices on your network, use:
+python3 manage.py runserver 0.0.0.0:8000
+
+# To deactivate the virtual environment when you're done:
+deactivate

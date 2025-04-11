@@ -1,6 +1,6 @@
 # DDC Tournament Manager
 
-A Django-based tournament management system specifically designed for Double Disc Court (DDC) tournaments, featuring Cade Loving's 8-player King of the Court format.
+A Django-based tournament management system specifically designed for Double Disc Court (DDC) tournaments. This initial release support only one tournament type: Cade Loving's 8-player King of the Court format. However, it's easy to add tournament types.
 
 ## Features
 
@@ -93,14 +93,6 @@ python manage.py test tournament_creator.tests.test_scoring
    - View match results and standings
    - No editing capabilities
 
-## Tournament Format
-
-The system implements Cade Loving's 8-player King of the Court format:
-- 7 rounds
-- 2 courts per round
-- Predetermined matchups based on player rankings
-- Automatic score tracking and standings calculation
-
 ## Development
 
 - Built with Django 5.1
@@ -118,4 +110,4 @@ The system implements Cade Loving's 8-player King of the Court format:
 
 ## License
 
-[Add your license information here]
+GPL

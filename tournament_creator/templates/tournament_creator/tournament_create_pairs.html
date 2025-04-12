@@ -2,6 +2,7 @@
 {% block content %}
 <h2>Create {{ archetype.name }}</h2>
 <form method="post">
+  <input type="hidden" name="archetype" value="{{ archetype.id }}">
   {% csrf_token %}
   {{ pair_formset.management_form }}
   <table class="table">

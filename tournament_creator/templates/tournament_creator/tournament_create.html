@@ -26,11 +26,22 @@
 
                     <div class="mb-3">
                         <label class="form-label">Tournament Type</label>
-                        <select name="archetype" class="form-select" required>
-                            {% for archetype in archetypes %}
-                                <option value="{{ archetype.id }}">{{ archetype.name }}</option>
-                            {% endfor %}
-                        </select>
+                        <select name="archetype" id="archetype-select" class="form-select" required>
+    <option value="">Select a tournament type</option>
+    {% for archetype in archetypes %}
+        <option value="{{ archetype.id }}" {% if archetype.id|stringformat:'s' == request.GET.archetype %}selected{% endif %}>{{ archetype.name }}</option>
+    {% endfor %}
+</select>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var select = document.getElementById('archetype-select');
+    select.addEventListener('change', function() {
+        if (this.value) {
+            window.location = "{% url 'tournament_create' %}?archetype=" + this.value;
+        }
+    });
+});
+</script>
                     </div>
                 </div>
             </div>

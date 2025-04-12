@@ -28,4 +28,14 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         context['archetypes'] = TournamentArchetype.objects.all()
         return context
 
-    # ...the rest of your create logic can be filled in as previously implemented...
+class TournamentDetailView(SpectatorAccessMixin, DetailView):
+    model = TournamentChart
+    template_name = 'tournament_creator/tournament_detail.html'
+    context_object_name = 'tournament'
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        tournament = self.get_object()
+        context['matchups'] = Matchup.objects.filter(tournament_chart=tournament).order_by('round_number', 'court_number')
+        return context
+
+# keep record_match_result and other logic as already defined ...

@@ -2,13 +2,21 @@ from django.contrib.auth.mixins import UserPassesTestMixin, LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 
 class AdminRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
-    def test_func(self):
+    """
+    Allows access only to admin users.
+    """
+    def test_func(self) -> bool:
         return self.request.user.is_admin()
 
 class PlayerOrAdminRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
-    def test_func(self):
+    """
+    Allows access to users who are either players or admins.
+    """
+    def test_func(self) -> bool:
         return self.request.user.is_admin() or self.request.user.is_player()
 
 class SpectatorAccessMixin(LoginRequiredMixin):
-    # All logged-in users can view
+    """
+    Allows access to all logged-in users, typically for view-only data.
+    """
     pass

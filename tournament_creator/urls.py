@@ -7,21 +7,18 @@ from .views.tournament_views import (
 from .views.player_views import (
     PlayerListView, PlayerCreateView, PlayerUpdateView, PlayerDeleteView
 )
+from .views.autocomplete import PlayerAutocomplete
 
 urlpatterns = [
-    # Root URL - redirect to tournament list
     path('', RedirectView.as_view(pattern_name='tournament_list', permanent=False)),
-
-    # Tournament URLs
     path('tournaments/', TournamentListView.as_view(), name='tournament_list'),
     path('tournaments/create/', TournamentCreateView.as_view(), name='tournament_create'),
     path('tournaments/<int:pk>/', TournamentDetailView.as_view(), name='tournament_detail'),
     path('tournaments/<int:tournament_id>/matchup/<int:matchup_id>/record/', 
          record_match_result, name='record_match_result'),
-
-    # Player URLs
     path('players/', PlayerListView.as_view(), name='player_list'),
     path('players/create/', PlayerCreateView.as_view(), name='player_create'),
     path('players/<int:pk>/update/', PlayerUpdateView.as_view(), name='player_update'),
     path('players/<int:pk>/delete/', PlayerDeleteView.as_view(), name='player_delete'),
+    path('player-autocomplete/', PlayerAutocomplete.as_view(), name='player-autocomplete'),
 ]

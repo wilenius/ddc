@@ -1,0 +1,22 @@
+{% extends "tournament_creator/base.html" %}
+{% block content %}
+<h2>Create {{ archetype.name }}</h2>
+<form method="post">
+  {% csrf_token %}
+  {{ pair_formset.management_form }}
+  <table class="table">
+    <tr><th>Pair</th><th>Player 1</th><th>Player 2</th></tr>
+    {% for form in pair_formset %}
+      <tr>
+        <td>Pair {{ forloop.counter }}</td>
+        <td>{{ form.player1 }}</td>
+        <td>{{ form.player2 }}</td>
+      </tr>
+    {% endfor %}
+  </table>
+  {% if pair_formset.non_form_errors %}
+    <div class="alert alert-danger">{{ pair_formset.non_form_errors }}</div>
+  {% endif %}
+  <button type="submit" class="btn btn-primary">Create tournament</button>
+</form>
+{% endblock %}

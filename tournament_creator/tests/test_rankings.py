@@ -1,6 +1,6 @@
 from django.test import TestCase
 from ..models import Player, TournamentChart, Matchup
-from ..models.tournament_types import KingOfTheCourt8Players
+from ..models.tournament_types import MonarchOfTheCourt8
 from django.core.exceptions import ValidationError
 
 class RankingBasedMatchupTests(TestCase):
@@ -26,7 +26,7 @@ class RankingBasedMatchupTests(TestCase):
             self.players.append(player)
 
         # Create tournament archetype
-        self.archetype = KingOfTheCourt8Players.objects.create(
+        self.archetype = MonarchOfTheCourt8.objects.create(
             name="Test KoC",
             description="Test tournament type"
         )

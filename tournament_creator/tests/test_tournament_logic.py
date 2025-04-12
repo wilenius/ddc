@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.db import models
 from ..models import Player, TournamentChart, TournamentArchetype, Matchup
-from ..models.tournament_types import KingOfTheCourt8Players
+from ..models.tournament_types import MonarchOfTheCourt8
 
 class TournamentLogicTests(TestCase):
     def setUp(self):
@@ -16,7 +16,7 @@ class TournamentLogicTests(TestCase):
             self.players.append(player)
 
         # Create tournament archetype
-        self.archetype = KingOfTheCourt8Players.objects.create(
+        self.archetype = MonarchOfTheCourt8.objects.create(
             name="Cade Loving's 8-player KoC",
             description='Test tournament type'
         )

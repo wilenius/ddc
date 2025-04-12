@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.db import models
 from django.contrib.auth.decorators import login_required
 from ..models.base_models import TournamentChart, TournamentArchetype, Player, Matchup
-from ..models.tournament_types import KingOfTheCourt8Players
+from ..models.tournament_types import MonarchOfTheCourt8
 from ..models.scoring import MatchScore, PlayerScore
 from ..models.logging import MatchResultLog
 from ..views.auth import AdminRequiredMixin, PlayerOrAdminRequiredMixin, SpectatorAccessMixin
@@ -54,7 +54,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
 
             # If it's the 8-player KoC format, use its specific logic
             if archetype.name == "Cade Loving's 8-player KoC":
-                koc_format = KingOfTheCourt8Players.objects.get(id=archetype_id)
+                koc_format = MonarchOfTheCourt8.objects.get(id=archetype_id)
                 koc_format.generate_matchups(tournament, players)
             else:
                 # For other formats, use base archetype

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models.base_models import Player, TournamentChart, TournamentPlayer, Matchup, TournamentArchetype
-from .models.tournament_types import KingOfTheCourt8Players
+from .models.tournament_types import MonarchOfTheCourt8, FourPairsSwedishFormat, EightPairsSwedishFormat
 from .models.scoring import MatchScore, PlayerScore
 from .models.auth import User
 from .models.logging import MatchResultLog
@@ -53,5 +53,7 @@ class MatchResultLogAdmin(admin.ModelAdmin):
     ordering = ('-recorded_at',)
     readonly_fields = ('recorded_at', 'details')
 
-# Register the proxy model
-admin.site.register(KingOfTheCourt8Players)
+# Register additional concrete archetypes if needed
+admin.site.register(MonarchOfTheCourt8)
+admin.site.register(FourPairsSwedishFormat)
+admin.site.register(EightPairsSwedishFormat)

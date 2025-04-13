@@ -32,6 +32,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         if archetype_id:
             archetype = TournamentArchetype.objects.get(id=archetype_id)
             context['archetype'] = archetype
+            # Determine the tournament type (for only two allowed overall types)
             if hasattr(archetype, 'tournament_category') and archetype.tournament_category == 'MOC':
                 context['moc_player_form'] = MoCPlayerSelectForm(self.request.POST or None)
             else:
@@ -45,14 +46,10 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         self.object = None
         archetype_id = request.POST.get('archetype')
         archetype = TournamentArchetype.objects.get(id=archetype_id)
-        pairs_archetype = None
-        try:
-            pairs_archetype = archetype.get_real_instance()
-        except AttributeError:
-            pass
-        is_pairs = isinstance(pairs_archetype, PairsTournamentArchetype)
         # ----- PAIRS -----
-        if is_pairs:
+        if archetype.tournament_category == 'PAIRS':
+            # get number of pairs from archetype name, e.g. "2 pairs Swedish format"
+            num_pairs = int(archetype.name.split()[0]) if archetype.name.split()[0].isdigit() else 2
             num_pairs = pairs_archetype.number_of_pairs
             pair_formset = PairFormSet(request.POST, prefix="pairs", extra=num_pairs)
             if pair_formset.is_valid():
@@ -77,7 +74,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                     number_of_courts=pairs_archetype.number_of_fields
                 )
                 tournament.pairs.set(pairs)
-                pairs_archetype.generate_matchups(tournament, pairs)
+                # pairs_archetype.generate_matchups(tournament, pairs)
                 messages.success(request, "Tournament created successfully!")
                 return redirect('tournament_detail', pk=tournament.pk)
             else:

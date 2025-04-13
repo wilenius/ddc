@@ -40,6 +40,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         return context
 
     def post(self, request, *args, **kwargs):
+        self.object = None  # Ensure compatibility with form_invalid and get_context_data
         archetype_id = request.POST.get('archetype')
         archetype = TournamentArchetype.objects.get(id=archetype_id)
         pairs_archetype = None

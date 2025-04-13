@@ -50,7 +50,6 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         if archetype.tournament_category == 'PAIRS':
             # get number of pairs from archetype name, e.g. "2 pairs Swedish format"
             num_pairs = int(archetype.name.split()[0]) if archetype.name.split()[0].isdigit() else 2
-            num_pairs = pairs_archetype.number_of_pairs
             pair_formset = PairFormSet(request.POST, prefix="pairs", extra=num_pairs)
             if pair_formset.is_valid():
                 seen_players = set()
@@ -70,8 +69,8 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                 tournament = TournamentChart.objects.create(
                     name=request.POST['name'],
                     date=request.POST['date'],
-                    number_of_rounds=pairs_archetype.calculate_rounds(num_pairs),
-                    number_of_courts=pairs_archetype.number_of_fields
+                    number_of_rounds=num_pairs+1,  # fallback, update to your real logic
+                    number_of_courts=min(num_pairs, 4), # fallback, update to your real logic
                 )
                 tournament.pairs.set(pairs)
                 # pairs_archetype.generate_matchups(tournament, pairs)
@@ -121,20 +120,14 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         archetype_id = request.GET.get('archetype')
         if archetype_id:
             archetype = TournamentArchetype.objects.get(id=archetype_id)
-            pairs_archetype = None
-            try:
-                pairs_archetype = archetype.get_real_instance()
-            except AttributeError:
-                pass
-            is_pairs = isinstance(pairs_archetype, PairsTournamentArchetype)
-            if is_pairs:
-                num_pairs = pairs_archetype.number_of_pairs
+            if archetype.tournament_category == 'PAIRS':
+                num_pairs = int(archetype.name.split()[0]) if archetype.name.split()[0].isdigit() else 2
                 pair_formset = PairFormSet(prefix="pairs", initial=[{} for _ in range(num_pairs)])
                 return render(request, 'tournament_creator/tournament_create_pairs.html', {
                     'archetype': archetype,
                     'pair_formset': pair_formset
                 })
-            if hasattr(archetype, 'tournament_category') and archetype.tournament_category == 'MOC':
+            if archetype.tournament_category == 'MOC':
                 moc_player_form = MoCPlayerSelectForm()
                 context = self.get_context_data()
                 context['archetype'] = archetype

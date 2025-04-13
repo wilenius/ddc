@@ -11,7 +11,7 @@ from ..models.tournament_types import PairsTournamentArchetype
 from ..models.scoring import MatchScore, PlayerScore
 from ..models.logging import MatchResultLog
 from ..views.auth import SpectatorAccessMixin, PlayerOrAdminRequiredMixin
-from ..forms import PairFormSet
+from ..forms import PairFormSet, MoCPlayerSelectForm
 
 class TournamentListView(SpectatorAccessMixin, ListView):
     model = TournamentChart
@@ -28,6 +28,15 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context['players'] = Player.objects.all().order_by('ranking')
         context['archetypes'] = TournamentArchetype.objects.all()
+        archetype_id = self.request.GET.get('archetype') or self.request.POST.get('archetype')
+        if archetype_id:
+            archetype = TournamentArchetype.objects.get(id=archetype_id)
+            if hasattr(archetype, 'tournament_category') and archetype.tournament_category == 'MOC':
+                context['moc_player_form'] = MoCPlayerSelectForm(self.request.POST or None)
+            else:
+                context['moc_player_form'] = None
+        else:
+            context['moc_player_form'] = None
         return context
 
     def post(self, request, *args, **kwargs):
@@ -72,6 +81,26 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                     'archetype': archetype,
                     'pair_formset': pair_formset
                 })
+        # MOC logic
+        if hasattr(archetype, 'tournament_category') and archetype.tournament_category == 'MOC':
+            moc_player_form = MoCPlayerSelectForm(request.POST)
+            if moc_player_form.is_valid():
+                players = moc_player_form.cleaned_data['players']
+                tournament = self.get_form().save(commit=False)
+                tournament.number_of_rounds = archetype.calculate_rounds(len(players))
+                tournament.number_of_courts = archetype.calculate_courts(len(players))
+                tournament.save()
+                tournament.players.set(players)
+                archetype.generate_matchups(tournament, players)
+                messages.success(self.request, "Tournament created successfully!")
+                return redirect('tournament_detail', pk=tournament.pk)
+            else:
+                # Re-render with errors
+                context = self.get_context_data()
+                context['archetype'] = archetype
+                context['moc_player_form'] = moc_player_form
+                return render(request, 'tournament_creator/tournament_create.html', context)
+
         player_ids = self.request.POST.getlist('players')
         if not player_ids:
             messages.error(self.request, "Please select players for the tournament")
@@ -103,6 +132,12 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                     'archetype': archetype,
                     'pair_formset': pair_formset
                 })
+            if hasattr(archetype, 'tournament_category') and archetype.tournament_category == 'MOC':
+                moc_player_form = MoCPlayerSelectForm()
+                context = self.get_context_data()
+                context['archetype'] = archetype
+                context['moc_player_form'] = moc_player_form
+                return render(request, 'tournament_creator/tournament_create.html', context)
         return super().get(request, *args, **kwargs)
 
 class TournamentDetailView(SpectatorAccessMixin, DetailView):

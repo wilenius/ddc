@@ -20,3 +20,10 @@ class PairForm(forms.Form):
         return cleaned
 
 PairFormSet = forms.formset_factory(PairForm, extra=0)
+
+class MoCPlayerSelectForm(forms.Form):
+    players = forms.ModelMultipleChoiceField(
+        queryset=Player.objects.all(),
+        widget=autocomplete.ModelSelect2Multiple(url='player-autocomplete'),
+        label="Players"
+    )

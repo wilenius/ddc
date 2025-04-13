@@ -8,7 +8,6 @@
         <h2>Create New Tournament</h2>
         <form method="post">
             {% csrf_token %}
-            
             <div class="card mb-4">
                 <div class="card-header">
                     Tournament Settings
@@ -18,56 +17,42 @@
                         <label class="form-label">Tournament Name</label>
                         <input type="text" name="name" class="form-control" required>
                     </div>
-
                     <div class="mb-3">
                         <label class="form-label">Tournament Date</label>
                         <input type="date" name="date" class="form-control" required>
                     </div>
-
                     <div class="mb-3">
                         <label class="form-label">Tournament Type</label>
                         <select name="archetype" id="archetype-select" class="form-select" required>
-    <option value="">Select a tournament type</option>
-    {% for archetype in archetypes %}
-        <option value="{{ archetype.id }}" {% if archetype.id|stringformat:'s' == request.GET.archetype %}selected{% endif %}>{{ archetype.name }}</option>
-    {% endfor %}
-</select>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    var select = document.getElementById('archetype-select');
-    select.addEventListener('change', function() {
-        if (this.value) {
-            window.location = "{% url 'tournament_create' %}?archetype=" + this.value;
-        }
-    });
-});
-</script>
+                            <option value="">Select a tournament type</option>
+                            {% for archetype in archetypes %}
+                                <option value="{{ archetype.id }}" {% if archetype.id|stringformat:'s' == request.GET.archetype %}selected{% endif %}>{{ archetype.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                            var select = document.getElementById('archetype-select');
+                            select.addEventListener('change', function() {
+                                if (this.value) {
+                                    window.location = "{% url 'tournament_create' %}?archetype=" + this.value;
+                                }
+                            });
+                        });
+                        </script>
                     </div>
                 </div>
             </div>
 
-            <div class="card mb-4">
-                <div class="card-header">
-                    Select Players
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        {% for player in players %}
-                            <div class="col-md-6">
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="checkbox" name="players" 
-                                           value="{{ player.id }}" id="player{{ player.id }}">
-                                    <label class="form-check-label" for="player{{ player.id }}">
-                                        {{ player.first_name }} {{ player.last_name }} 
-                                        (Ranking: {{ player.ranking }})
-                                    </label>
-                                </div>
-                            </div>
-                        {% endfor %}
+            {% if archetype and archetype.tournament_category == "MOC" %}
+                <div class="card mb-4">
+                    <div class="card-header">Select Players</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            {{ moc_player_form.players }}
+                        </div>
                     </div>
                 </div>
-            </div>
-
+            {% endif %}
             <div class="text-center">
                 <button type="submit" class="btn btn-primary">Create Tournament</button>
                 <a href="{% url 'tournament_list' %}" class="btn btn-secondary">Cancel</a>

@@ -117,6 +117,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         return redirect('tournament_detail', pk=tournament.pk)
 
     def get(self, request, *args, **kwargs):
+        self.object = None  # required for CreateView context
         archetype_id = request.GET.get('archetype')
         if archetype_id:
             archetype = TournamentArchetype.objects.get(id=archetype_id)

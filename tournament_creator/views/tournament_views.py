@@ -31,16 +31,18 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         archetype_id = self.request.GET.get('archetype') or self.request.POST.get('archetype')
         if archetype_id:
             archetype = TournamentArchetype.objects.get(id=archetype_id)
+            context['archetype'] = archetype
             if hasattr(archetype, 'tournament_category') and archetype.tournament_category == 'MOC':
                 context['moc_player_form'] = MoCPlayerSelectForm(self.request.POST or None)
             else:
                 context['moc_player_form'] = None
         else:
+            context['archetype'] = None
             context['moc_player_form'] = None
         return context
 
     def post(self, request, *args, **kwargs):
-        self.object = None  # Ensure compatibility with form_invalid and get_context_data
+        self.object = None
         archetype_id = request.POST.get('archetype')
         archetype = TournamentArchetype.objects.get(id=archetype_id)
         pairs_archetype = None
@@ -49,6 +51,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         except AttributeError:
             pass
         is_pairs = isinstance(pairs_archetype, PairsTournamentArchetype)
+        # ----- PAIRS -----
         if is_pairs:
             num_pairs = pairs_archetype.number_of_pairs
             pair_formset = PairFormSet(request.POST, prefix="pairs", extra=num_pairs)
@@ -82,7 +85,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                     'archetype': archetype,
                     'pair_formset': pair_formset
                 })
-        # MOC logic
+        # ----- MOC -----
         if hasattr(archetype, 'tournament_category') and archetype.tournament_category == 'MOC':
             moc_player_form = MoCPlayerSelectForm(request.POST)
             if moc_player_form.is_valid():
@@ -96,12 +99,11 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                 messages.success(self.request, "Tournament created successfully!")
                 return redirect('tournament_detail', pk=tournament.pk)
             else:
-                # Re-render with errors
                 context = self.get_context_data(object=None)
                 context['archetype'] = archetype
                 context['moc_player_form'] = moc_player_form
                 return render(request, 'tournament_creator/tournament_create.html', context)
-
+        # ----- GENERIC (should not happen for current archetypes, fallback) -----
         player_ids = self.request.POST.getlist('players')
         if not player_ids:
             messages.error(self.request, "Please select players for the tournament")

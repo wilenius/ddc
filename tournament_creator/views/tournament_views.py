@@ -105,7 +105,9 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         player_ids = self.request.POST.getlist('players')
         if not player_ids:
             messages.error(self.request, "Please select players for the tournament")
-            return self.form_invalid(self.get_form())
+            context = self.get_context_data(object=None)
+            context['archetype'] = archetype
+            return render(request, self.template_name, context)
         players = list(Player.objects.filter(id__in=player_ids).order_by('ranking'))
         tournament = self.get_form().save(commit=False)
         tournament.number_of_rounds = archetype.calculate_rounds(len(players))

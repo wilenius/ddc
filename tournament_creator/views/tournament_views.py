@@ -150,7 +150,18 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         player_scores = list(PlayerScore.objects.filter(tournament=tournament))
         
         # Apply advanced tiebreak sorting
-        context['player_scores'] = self.apply_tiebreaks(tournament, player_scores)
+        player_scores = self.apply_tiebreaks(tournament, player_scores)
+        
+        # Make sure all scores have tiebreak attributes (even if not in a tie)
+        for score in player_scores:
+            if not hasattr(score, 'h2h_wins'):
+                score.h2h_wins = 0
+                score.h2h_point_diff = 0
+            if not hasattr(score, 'above_wins'):
+                score.above_wins = 0
+                score.above_pd = 0
+                
+        context['player_scores'] = player_scores
         
         context['match_logs'] = MatchResultLog.objects.filter(
             matchup__tournament_chart=tournament
@@ -187,6 +198,9 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         1. Overall wins
         2. Head-to-head record between tied players
         3. Point differential in games between tied players
+        4. Record against teams that placed above the initial set of tied teams
+        5. Point differential in games against teams that placed above the initial set of tied teams
+        6. Point differential in games against all teams in the pool
         """
         # First sort by wins and total point differential (basic sort)
         sorted_scores = sorted(player_scores, key=lambda x: (-x.wins, -x.total_point_difference))
@@ -213,76 +227,121 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         # No ties, return the basic sort
         if not groups_of_tied_players:
             return sorted_scores
+            
+        # Get all matchups in this tournament with scores
+        all_matchups = Matchup.objects.filter(
+            tournament_chart=tournament,
+            scores__isnull=False
+        ).prefetch_related('scores').distinct()
+        
+        # Get players who placed above our tied groups (for tiebreak steps 4-5)
+        above_player_ids = set()
+        current_win_level = None
+        for score in sorted_scores:
+            if current_win_level is None:
+                current_win_level = score.wins
+            elif score.wins < current_win_level:
+                # We've moved to a new, lower win level
+                break
+            
+            # Add players at the current (highest) win level 
+            above_player_ids.add(score.player.id)
         
         # Process each group of tied players
         for group in groups_of_tied_players:
             # Get all matchups involving these players
             tied_player_ids = [score.player.id for score in group]
             
-            # Create a record of head-to-head results
-            h2h_results = {player_id: {'wins': 0, 'point_diff': 0} for player_id in tied_player_ids}
+            # Create a record structure to hold all tiebreak criteria
+            tiebreak_records = {player_id: {
+                'h2h_wins': 0,                 # Head-to-head wins (criterion 2)
+                'h2h_point_diff': 0,           # Head-to-head point diff (criterion 3)
+                'above_team_wins': 0,          # Wins against higher-placed teams (criterion 4)
+                'above_team_point_diff': 0,    # Point diff against higher-placed teams (criterion 5)
+                'total_point_diff': 0          # Point diff against all teams (criterion 6, already in score object)
+            } for player_id in tied_player_ids}
             
-            # Find all matchups between tied players
-            tied_matchups = Matchup.objects.filter(
-                tournament_chart=tournament,
-                scores__isnull=False
-            ).filter(
-                models.Q(pair1_player1__in=tied_player_ids) | 
-                models.Q(pair1_player2__in=tied_player_ids) | 
-                models.Q(pair2_player1__in=tied_player_ids) | 
-                models.Q(pair2_player2__in=tied_player_ids)
-            ).distinct()
-            
-            # Count head-to-head wins and point differentials
-            for matchup in tied_matchups:
-                # Check if this matchup is between tied players
-                matchup_player_ids = set()
-                if matchup.pair1_player1_id and matchup.pair1_player1_id in tied_player_ids:
-                    matchup_player_ids.add(matchup.pair1_player1_id)
-                if matchup.pair1_player2_id and matchup.pair1_player2_id in tied_player_ids:
-                    matchup_player_ids.add(matchup.pair1_player2_id)
-                if matchup.pair2_player1_id and matchup.pair2_player1_id in tied_player_ids:
-                    matchup_player_ids.add(matchup.pair2_player1_id)
-                if matchup.pair2_player2_id and matchup.pair2_player2_id in tied_player_ids:
-                    matchup_player_ids.add(matchup.pair2_player2_id)
+            # Check each matchup to see if it applies to our tiebreak criteria
+            for matchup in all_matchups:
+                # Identify players in team 1 and team 2
+                team1_players = set()
+                team2_players = set()
+                if matchup.pair1_player1_id: team1_players.add(matchup.pair1_player1_id)
+                if matchup.pair1_player2_id: team1_players.add(matchup.pair1_player2_id)
+                if matchup.pair2_player1_id: team2_players.add(matchup.pair2_player1_id)
+                if matchup.pair2_player2_id: team2_players.add(matchup.pair2_player2_id)
                 
-                # Skip if not all players are in the tied group
-                if len(matchup_player_ids) < 2:
-                    continue
+                # Find tied players in this matchup
+                tied_in_team1 = team1_players.intersection(tied_player_ids)
+                tied_in_team2 = team2_players.intersection(tied_player_ids)
+                
+                # To count for head-to-head criteria, the match must involve players from the tied group
+                # on both sides of the match (as opponents, not just as partners)
+                is_h2h_match = len(tied_in_team1) > 0 and len(tied_in_team2) > 0
+                
+                # Identify players from higher-placed teams
+                above_in_team1 = team1_players.intersection(above_player_ids)
+                above_in_team2 = team2_players.intersection(above_player_ids)
                 
                 # Process all sets in this matchup
                 for set_score in matchup.scores.all():
-                    # Check each player's team and update their head-to-head results
+                    team1_won = set_score.winning_team == 1
+                    
+                    # Process each tied player's results
                     for player_id in tied_player_ids:
-                        team1 = player_id in (matchup.pair1_player1_id, matchup.pair1_player2_id)
-                        team2 = player_id in (matchup.pair2_player1_id, matchup.pair2_player2_id)
+                        on_team1 = player_id in team1_players
+                        on_team2 = player_id in team2_players
                         
-                        if team1 and set_score.winning_team == 1:
-                            h2h_results[player_id]['wins'] += 1
-                            h2h_results[player_id]['point_diff'] += set_score.point_difference
-                        elif team2 and set_score.winning_team == 2:
-                            h2h_results[player_id]['wins'] += 1
-                            h2h_results[player_id]['point_diff'] += set_score.point_difference
-                        elif team1 and set_score.winning_team == 2:
-                            h2h_results[player_id]['point_diff'] -= set_score.point_difference
-                        elif team2 and set_score.winning_team == 1:
-                            h2h_results[player_id]['point_diff'] -= set_score.point_difference
+                        if not (on_team1 or on_team2):
+                            continue  # This player wasn't in this match
+                        
+                        # Calculate point differential from this player's perspective
+                        pd = set_score.point_difference
+                        if (on_team1 and not team1_won) or (on_team2 and team1_won):
+                            pd = -pd  # This player's team lost, so negate the PD
+                            
+                        # Update head-to-head records (criterion 2-3)
+                        if is_h2h_match:
+                            if (on_team1 and team1_won) or (on_team2 and not team1_won):
+                                tiebreak_records[player_id]['h2h_wins'] += 1
+                            tiebreak_records[player_id]['h2h_point_diff'] += pd
+                            
+                        # Wins against higher-placed teams (criterion 4-5)
+                        # If this player played against higher-placed teams, count it
+                        opponent_has_above = False
+                        if on_team1 and above_in_team2:
+                            opponent_has_above = True
+                        elif on_team2 and above_in_team1:
+                            opponent_has_above = True
+                            
+                        if opponent_has_above:
+                            if (on_team1 and team1_won) or (on_team2 and not team1_won):
+                                tiebreak_records[player_id]['above_team_wins'] += 1
+                            tiebreak_records[player_id]['above_team_point_diff'] += pd
             
-            # Sort the tied players by their head-to-head results
+            # Apply total point differential from all games
+            for score in group:
+                tiebreak_records[score.player.id]['total_point_diff'] = score.total_point_difference
+            
+            # Sort the tied players using all tiebreak criteria
             group.sort(key=lambda score: (
-                -h2h_results[score.player.id]['wins'],  # Head-to-head wins
-                -h2h_results[score.player.id]['point_diff']  # Head-to-head point differential
+                -tiebreak_records[score.player.id]['h2h_wins'],           # Criterion 2: H2H wins
+                -tiebreak_records[score.player.id]['h2h_point_diff'],     # Criterion 3: H2H point diff
+                -tiebreak_records[score.player.id]['above_team_wins'],    # Criterion 4: Wins vs above teams
+                -tiebreak_records[score.player.id]['above_team_point_diff'], # Criterion 5: PD vs above teams
+                -tiebreak_records[score.player.id]['total_point_diff']    # Criterion 6: Total PD
             ))
             
             # Store the tiebreak info for display
             for score in group:
                 player_id = score.player.id
-                score.h2h_wins = h2h_results[player_id]['wins']
-                score.h2h_point_diff = h2h_results[player_id]['point_diff']
+                score.h2h_wins = tiebreak_records[player_id]['h2h_wins']
+                score.h2h_point_diff = tiebreak_records[player_id]['h2h_point_diff']
+                score.above_wins = tiebreak_records[player_id]['above_team_wins']
+                score.above_pd = tiebreak_records[player_id]['above_team_point_diff']
         
         # Rebuild the complete standings with tiebreak-sorted groups
         final_standings = []
-        current_index = 0
         
         # Map of wins to groups of tied players
         tied_groups_by_wins = {

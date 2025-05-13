@@ -11,10 +11,14 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# ajax stuff needs this
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -25,7 +29,7 @@ SECRET_KEY = 'django-insecure-zk$2yw!!n#qk2eyf18fuu4#qthf3dz51%%+k#la$e9l9g+y7px
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['0.0.0.0', '127.0.0.1']
+ALLOWED_HOSTS = ['0.0.0.0', '127.0.0.1', 'localhost']
 
 
 # Application definition
@@ -38,6 +42,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'tournament_creator.apps.TournamentCreatorConfig',
+    'dal',
+    'dal_select2',
 ]
 
 AUTH_USER_MODEL = 'tournament_creator.User'
@@ -128,3 +134,52 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Cookie settings to ensure proper authentication in AJAX requests
+SESSION_COOKIE_SAMESITE = 'Lax'  # Allow cookies on same-site navigation (including AJAX)
+CSRF_COOKIE_SAMESITE = 'Lax'     # Allow CSRF token on same-site navigation
+SESSION_COOKIE_HTTPONLY = True   # Prevent JavaScript access to session cookie
+CSRF_COOKIE_HTTPONLY = False     # Allow JavaScript access to CSRF cookie
+
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s',
+            'datefmt': '%d/%b/%Y %H:%M:%S'
+        },
+        'simple': {
+            'format': '%(levelname)s %(message)s'
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose'
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'django_debug.log',
+            'formatter': 'verbose'
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'tournament_creator': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        'dal': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}

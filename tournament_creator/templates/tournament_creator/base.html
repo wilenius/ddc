@@ -4,6 +4,73 @@
     {% load static %}
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>window.jQuery = window.$ = jQuery;</script>
+    {% csrf_token %}
+    <script>
+        // Set CSRF token for AJAX requests
+        document.csrftoken = "{{ csrf_token }}";
+        
+        // Make sure Select2 and other scripts use the token
+        $(document).ready(function() {
+            console.log("Document ready - setting up AJAX and Select2");
+            
+            // Setup AJAX defaults with detailed logging
+            $.ajaxSetup({
+                headers: {
+                    'X-CSRFToken': "{{ csrf_token }}",
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                xhrFields: {
+                    withCredentials: true
+                },
+                beforeSend: function(xhr, settings) {
+                    console.log("AJAX Request being sent to: " + settings.url);
+                    console.log("Request headers:", this.headers);
+                    console.log("Request data:", settings.data);
+                    return true;
+                },
+                success: function(data, status, xhr) {
+                    console.log("AJAX Success:", status);
+                    console.log("Response data:", data);
+                },
+                error: function(xhr, status, error) {
+                    console.error("AJAX Error:", status, error);
+                    console.error("Response text:", xhr.responseText);
+                    console.error("Status code:", xhr.status);
+                }
+            });
+
+            // Debug Select2 initialization
+            if ($.fn.select2) {
+                console.log("Select2 library loaded successfully");
+                
+                // Store original select2 initialization
+                var originalSelect2 = $.fn.select2;
+                
+                // Override select2 to add logging
+                $.fn.select2 = function(options) {
+                    console.log("Select2 initialized for:", this);
+                    console.log("Select2 options:", options);
+                    
+                    // Additional debug options
+                    if (options && options.ajax) {
+                        var originalProcessResults = options.ajax.processResults;
+                        options.ajax.processResults = function(data, params) {
+                            console.log("Processing results:", data);
+                            if (originalProcessResults) {
+                                return originalProcessResults(data, params);
+                            }
+                            return { results: data.results };
+                        };
+                    }
+                    
+                    // Call original initialization
+                    return originalSelect2.apply(this, arguments);
+                };
+            } else {
+                console.error("Select2 library NOT loaded!");
+            }
+        });
+    </script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/css/select2.min.css">
     <script src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js"></script>
     <script src="{% static 'autocomplete_light/autocomplete_light.js' %}"></script>

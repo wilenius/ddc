@@ -53,7 +53,6 @@ class MatchResultLogAdmin(admin.ModelAdmin):
     ordering = ('-recorded_at',)
     readonly_fields = ('recorded_at', 'details')
 
-# Register additional concrete archetypes if needed
-admin.site.register(MonarchOfTheCourt8)
-admin.site.register(FourPairsSwedishFormat)
-admin.site.register(EightPairsSwedishFormat)
+# Note: Abstract models can't be registered directly in admin
+# The concrete TournamentArchetype objects from the database
+# are already registered via TournamentArchetypeAdmin above

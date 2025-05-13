@@ -25,13 +25,21 @@ class MatchScore(models.Model):
 
     def save(self, *args, **kwargs) -> None:
         """
-        Save method override to automatically set the point_difference
-        based on the current score and the winning team.
+        Save method override to automatically set the winning_team and point_difference
+        based on the current scores.
         """
-        if self.winning_team == 1:
+        # Automatically determine winning team from scores
+        if self.team1_score > self.team2_score:
+            self.winning_team = 1
             self.point_difference = self.team1_score - self.team2_score
-        else:
+        elif self.team2_score > self.team1_score:
+            self.winning_team = 2
             self.point_difference = self.team2_score - self.team1_score
+        else:
+            # In case of a tie (should be rare in DDC), default to team 1
+            # This is just a fallback; ties should be handled at the UI level
+            self.winning_team = 1
+            self.point_difference = 0
         super().save(*args, **kwargs)
 
 class PlayerScore(models.Model):

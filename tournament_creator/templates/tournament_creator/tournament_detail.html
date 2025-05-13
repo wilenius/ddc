@@ -35,8 +35,8 @@
                                                     {% with scores=matchup.scores.all %}
                                                         <div class="mb-2">
                                                             <strong {% if scores.exists and scores.first.winning_team == 1 %}class="text-primary"{% endif %}>
-                                                                {{ matchup.pair1_player1.first_name }} &<br>
-                                                                {{ matchup.pair1_player2.first_name }}
+                                                                {{ matchup.pair1_player1.display_name }} &<br>
+                                                                {{ matchup.pair1_player2.display_name }}
                                                             </strong>
                                                         </div>
                                                     {% endwith %}
@@ -48,8 +48,8 @@
                                                     {% with scores=matchup.scores.all %}
                                                         <div class="mb-2">
                                                             <strong {% if scores.exists and scores.first.winning_team == 2 %}class="text-primary"{% endif %}>
-                                                                {{ matchup.pair2_player1.first_name }} &<br>
-                                                                {{ matchup.pair2_player2.first_name }}
+                                                                {{ matchup.pair2_player1.display_name }} &<br>
+                                                                {{ matchup.pair2_player2.display_name }}
                                                             </strong>
                                                         </div>
                                                     {% endwith %}
@@ -125,15 +125,25 @@
                                 <th>Played</th>
                                 <th>Wins</th>
                                 <th>Point Diff</th>
+                                <th>Tiebreak</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for score in player_scores %}
                                 <tr>
-                                    <td>{{ score.player.first_name }}</td>
+                                    <td>{{ score.player.display_name }}</td>
                                     <td>{{ score.matches_played }}</td>
                                     <td>{{ score.wins }}</td>
                                     <td>{{ score.total_point_difference }}</td>
+                                    <td>
+                                        {% if hasattr(score, 'h2h_wins') %}
+                                            <span title="Head-to-head record against tied players: {{ score.h2h_wins }} wins, {{ score.h2h_point_diff }} point differential">
+                                                {{ score.h2h_wins }}W/{{ score.h2h_point_diff }}PD
+                                            </span>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -219,13 +229,7 @@
                         <small class="text-muted ms-2">(Maximum 3 sets)</small>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Winning Team</label>
-                        <select class="form-select" name="winning_team" required>
-                            <option value="1" id="winningTeam1Option">Team 1</option>
-                            <option value="2" id="winningTeam2Option">Team 2</option>
-                        </select>
-                    </div>
+                    <!-- Winning team is now calculated automatically from set scores -->
                 </form>
             </div>
             <div class="modal-footer">
@@ -286,8 +290,6 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update labels with player names
             document.getElementById('team1Label').value = team1Players;
             document.getElementById('team2Label').value = team2Players;
-            document.getElementById('winningTeam1Option').textContent = team1Players;
-            document.getElementById('winningTeam2Option').textContent = team2Players;
 
             // Reset the form
             document.getElementById('setScores').innerHTML = '';
@@ -310,12 +312,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     team1Scores.push(team1Score);
                     team2Scores.push(team2Score);
                     
-                    // Determine winning team if not already found
-                    if (!foundWinningTeam) {
-                        const team1Won = scoreElements[i].querySelector('strong') !== null;
-                        document.querySelector('[name="winning_team"]').value = team1Won ? '1' : '2';
-                        foundWinningTeam = true;
-                    }
+                    // No need to determine winning team as it's calculated from scores now
+                    foundWinningTeam = true;
                 }
                 
                 // Create set inputs and populate with scores
@@ -352,8 +350,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add matchup ID
         formData.append('matchup_id', document.getElementById('matchupId').value);
         
-        // Add winning team
-        formData.append('winning_team', form.querySelector('[name="winning_team"]').value);
+        // Winning team is calculated on the server based on set scores
         
         // Add all set scores
         const team1Scores = Array.from(form.querySelectorAll('[name="team1_scores[]"]')).map(input => input.value);

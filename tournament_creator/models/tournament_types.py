@@ -1,6 +1,20 @@
 from django.db import models
 from .base_models import TournamentArchetype, Matchup, Pair
-from typing import List, Dict
+from typing import List, Dict, Optional, Any
+
+# Function to map TournamentArchetype database objects to their code implementations
+def get_implementation(archetype: TournamentArchetype) -> Optional[Any]:
+    """
+    Maps a TournamentArchetype database object to its code implementation.
+    """
+    # For now we use a simple name-based mapping
+    implementations = {
+        "Cade Loving's 8-player KoC": MonarchOfTheCourt8(),
+        "4 pairs Swedish format": FourPairsSwedishFormat(),
+        "8 pairs Swedish format": EightPairsSwedishFormat(),
+    }
+    
+    return implementations.get(archetype.name)
 
 # Base for Swedish pairs tournaments
 class PairsTournamentArchetype(TournamentArchetype):
@@ -66,9 +80,8 @@ class MoCTournamentArchetype(TournamentArchetype):
 
 # Existing Cade Loving's (now Monarch of the Court) format:
 class MonarchOfTheCourt8(MoCTournamentArchetype):
-    class Meta:
-        pass  # No proxy, this is a concrete model subclass
-    name = "Cade Loving's 8-player Monarch of the Court"
+    # Remove abstract=True to allow instantiation
+    name = "Cade Loving's 8-player KoC"  # Exact match to migration
     description = "MoC: 8-player specific schedule."
     def calculate_rounds(self, num_players):
         if num_players != 8:
@@ -76,6 +89,6 @@ class MonarchOfTheCourt8(MoCTournamentArchetype):
         return 7
     def calculate_courts(self, num_players):
         return 2
-    def generate_matchups(self, tournament_chart, players):
-        # Retain previous logic here, for brevity not repeated. Same as old KingOfTheCourt8Players.
-        pass
+    # Use the base implementation's generate_matchups method instead of this incomplete one
+    # The base implementation handles Cade Loving's 8-player tournament specifically
+    # and is more complete than this implementation

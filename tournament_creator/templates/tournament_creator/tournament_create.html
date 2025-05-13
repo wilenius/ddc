@@ -56,6 +56,67 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     </div>
                 </div>
+                <script>
+                    $(document).ready(function() {
+                        console.log("Tournament create page ready");
+                        console.log("Player select field:", $("#id_players"));
+                        
+                        // Ensure Select2 is initialized on the players field
+                        try {
+                            $("#id_players").select2({
+                                width: '100%',
+                                ajax: {
+                                    url: "{% url 'player-autocomplete' %}",
+                                    dataType: 'json',
+                                    delay: 250,
+                                    data: function (params) {
+                                        return {
+                                            q: params.term, // search term
+                                            page: params.page
+                                        };
+                                    },
+                                    processResults: function (data, params) {
+                                        console.log("Custom processResults:", data);
+                                        params.page = params.page || 1;
+                                        return {
+                                            results: data.results,
+                                            pagination: data.pagination
+                                        };
+                                    },
+                                    cache: true
+                                },
+                                minimumInputLength: 1,
+                                templateResult: function(item) {
+                                    return item.text;
+                                },
+                                templateSelection: function(item) {
+                                    return item.text;
+                                }
+                            });
+                            
+                            // Force empty initial request to load default values
+                            $.ajax({
+                                url: "{% url 'player-autocomplete' %}",
+                                data: {},
+                                dataType: 'json',
+                                headers: {
+                                    'X-CSRFToken': "{{ csrf_token }}",
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                },
+                                success: function(data) {
+                                    console.log("Initial player load:", data);
+                                },
+                                error: function(xhr, status, error) {
+                                    console.error("Initial player load error:", error);
+                                }
+                            });
+                            
+                            console.log("Select2 player selector successfully initialized");
+                        } catch (e) {
+                            console.error("Error initializing Select2:", e);
+                        }
+                    });
+                </script>
             {% endif %}
             <div class="text-center">
                 <button type="submit" class="btn btn-primary">Create Tournament</button>

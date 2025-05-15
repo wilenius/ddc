@@ -8,6 +8,9 @@ from .views.player_views import (
     PlayerListView, PlayerCreateView, PlayerUpdateView, PlayerDeleteView
 )
 from .views.autocomplete import PlayerAutocomplete
+from .views.rankings_views import (
+    RankingsListView, update_rankings, check_update_status
+)
 
 urlpatterns = [
     path('', RedirectView.as_view(pattern_name='tournament_list', permanent=False)),
@@ -21,4 +24,9 @@ urlpatterns = [
     path('players/<int:pk>/update/', PlayerUpdateView.as_view(), name='player_update'),
     path('players/<int:pk>/delete/', PlayerDeleteView.as_view(), name='player_delete'),
     path('player-autocomplete/', PlayerAutocomplete.as_view(), name='player-autocomplete'),
+    
+    # Rankings URLs
+    path('rankings/', RankingsListView.as_view(), name='rankings_list'),
+    path('rankings/update/', update_rankings, name='update_rankings'),
+    path('rankings/status/', check_update_status, name='check_rankings_status'),
 ]

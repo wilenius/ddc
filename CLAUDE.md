@@ -13,7 +13,7 @@ DDC Tournament Manager is a Django-based application for managing Double Disc Co
 ```bash
 # Create and activate virtual environment
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -31,13 +31,7 @@ source venv/bin/activate && python manage.py runserver 0.0.0.0:8000
 
 ### Development
 
-```bash
-# Start development server
-python manage.py runserver
-
-# Make server accessible on network
-python manage.py runserver 0.0.0.0:8000
-```
+When adding features, don't start the development server – let the user test features by themselves. Just prompt the user to test when ready.
 
 ### Testing
 
@@ -55,7 +49,9 @@ python manage.py test tournament_creator.tests.test_rankings
 
 ## Architecture
 
-The application is built on Django 5.1 and follows a modular design:
+The application is built on Django 5.1. Check exact requirements from requirements.txt, and use the context7 MCP server to check syntax and documentation, if necessary.
+
+The application follows a modular design:
 
 ### Core Data Model
 

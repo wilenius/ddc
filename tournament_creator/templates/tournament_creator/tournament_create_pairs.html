@@ -20,4 +20,96 @@
   {% endif %}
   <button type="submit" class="btn btn-primary">Create tournament</button>
 </form>
+
+<script>
+  $(document).ready(function() {
+    // Array to track selected player IDs
+    var selectedPlayers = [];
+
+    // Function to update the selected players array
+    function updateSelectedPlayers() {
+      selectedPlayers = [];
+      $('select[id$="player1"], select[id$="player2"]').each(function() {
+        var playerId = $(this).val();
+        if (playerId && playerId !== '') {
+          selectedPlayers.push(playerId);
+        }
+      });
+      console.log("Currently selected players:", selectedPlayers);
+    }
+
+    // Function to reinitialize all select2 fields with current selected players
+    function initializeSelects() {
+      $('select[id$="player1"], select[id$="player2"]').each(function() {
+        var currentValue = $(this).val();
+        var selectId = $(this).attr('id');
+        
+        $(this).select2({
+          width: '100%',
+          ajax: {
+            url: "{% url 'player-autocomplete' %}",
+            dataType: 'json',
+            delay: 250,
+            data: function(params) {
+              // Filter out the current selections except for this field's value
+              var filteredSelected = selectedPlayers.filter(function(id) {
+                return id !== currentValue;
+              });
+              
+              console.log("Filtered selected players for", selectId, ":", filteredSelected);
+              
+              return {
+                q: params.term,
+                page: params.page,
+                selected: filteredSelected
+              };
+            },
+            processResults: function(data, params) {
+              params.page = params.page || 1;
+              
+              // Get current selected values excluding this field's value
+              var currentValue = $(this).val();
+              var filteredSelected = selectedPlayers.filter(function(id) {
+                return id !== currentValue;
+              });
+              
+              // Additional client-side filtering to remove any already selected players
+              if (filteredSelected.length > 0) {
+                data.results = data.results.filter(function(player) {
+                  return !filteredSelected.includes(player.id);
+                });
+              }
+              
+              return {
+                results: data.results,
+                pagination: data.pagination
+              };
+            },
+            cache: false // Disable caching to ensure fresh results each time
+          },
+          minimumInputLength: 1
+        });
+        
+        // Update when selection changes
+        $(this).on("change", function() {
+          // This will force select2 to reevaluate the results with the new selection
+          $(this).select2("close");
+        });
+      });
+    }
+
+    // Initialize select2 fields
+    initializeSelects();
+
+    // Update selected players when any select2 field changes
+    $(document).on('change', 'select[id$="player1"], select[id$="player2"]', function() {
+      updateSelectedPlayers();
+      // Reinitialize all selects to update the excluded players
+      initializeSelects();
+    });
+
+    // Initial update of selected players
+    updateSelectedPlayers();
+  });
+</script>
 {% endblock %}

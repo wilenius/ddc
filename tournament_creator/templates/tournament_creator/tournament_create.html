@@ -70,20 +70,36 @@ document.addEventListener('DOMContentLoaded', function() {
                                     dataType: 'json',
                                     delay: 250,
                                     data: function (params) {
+                                        // Get current selected values to exclude from results
+                                        var selectedValues = $("#id_players").val() || [];
+                                        console.log("Selected values in data function:", selectedValues);
+                                        
                                         return {
                                             q: params.term, // search term
-                                            page: params.page
+                                            page: params.page,
+                                            selected: selectedValues // pass currently selected players
                                         };
                                     },
                                     processResults: function (data, params) {
                                         console.log("Custom processResults:", data);
                                         params.page = params.page || 1;
+                                        
+                                        // Get current selected values
+                                        var selectedValues = $("#id_players").val() || [];
+                                        
+                                        // Additional client-side filtering to remove any already selected players
+                                        if (selectedValues.length > 0) {
+                                            data.results = data.results.filter(function(player) {
+                                                return !selectedValues.includes(player.id);
+                                            });
+                                        }
+                                        
                                         return {
                                             results: data.results,
                                             pagination: data.pagination
                                         };
                                     },
-                                    cache: true
+                                    cache: false // Disable caching to ensure fresh results each time
                                 },
                                 minimumInputLength: 1,
                                 templateResult: function(item) {
@@ -94,10 +110,18 @@ document.addEventListener('DOMContentLoaded', function() {
                                 }
                             });
                             
+                            // Update dropdown when selection changes
+                            $("#id_players").on("change", function() {
+                                // This will force select2 to reevaluate the results with the new selection
+                                $(this).select2("close");
+                            });
+                            
                             // Force empty initial request to load default values
                             $.ajax({
                                 url: "{% url 'player-autocomplete' %}",
-                                data: {},
+                                data: {
+                                    selected: $("#id_players").val() || []
+                                },
                                 dataType: 'json',
                                 headers: {
                                     'X-CSRFToken': "{{ csrf_token }}",

@@ -20,6 +20,12 @@ class PlayerAutocomplete(autocomplete.Select2QuerySetView):
         qs = Player.objects.all()
         logger.info("Total players in database: %d", qs.count())
         
+        # Filter out already selected players
+        selected_player_ids = self.request.GET.getlist('selected')
+        if selected_player_ids:
+            logger.info("Excluding %d already selected players", len(selected_player_ids))
+            qs = qs.exclude(id__in=selected_player_ids)
+            
         if self.q:
             logger.info("Search query: %s", self.q)
             qs = qs.filter(Q(first_name__icontains=self.q) | Q(last_name__icontains=self.q))

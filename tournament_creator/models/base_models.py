@@ -132,11 +132,68 @@ class TournamentArchetype(models.Model):
         if self.tournament_category == 'PAIRS':
             return num_entrants - 1
         
-        # Special case for 8-player Monarch of the Court
-        if self.tournament_category == 'MOC' and "8-player" in self.name:
-            if num_entrants != 8:
-                raise ValueError("This tournament type requires exactly 8 players")
-            return 7
+        # MoC Tournament formats
+        if self.tournament_category == 'MOC':
+            # Check player count for each format
+            if "5-player" in self.name:
+                if num_entrants != 5:
+                    raise ValueError("This tournament type requires exactly 5 players")
+                return 5
+                
+            elif "6-player" in self.name:
+                if num_entrants != 6:
+                    raise ValueError("This tournament type requires exactly 6 players")
+                return 7
+                
+            elif "7-player" in self.name:
+                if num_entrants != 7:
+                    raise ValueError("This tournament type requires exactly 7 players")
+                return 10
+                
+            elif "8-player" in self.name:
+                if num_entrants != 8:
+                    raise ValueError("This tournament type requires exactly 8 players")
+                return 7
+                
+            elif "9-player" in self.name:
+                if num_entrants != 9:
+                    raise ValueError("This tournament type requires exactly 9 players")
+                return 10
+                
+            elif "10-player" in self.name:
+                if num_entrants != 10:
+                    raise ValueError("This tournament type requires exactly 10 players")
+                return 11
+                
+            elif "11-player" in self.name:
+                if num_entrants != 11:
+                    raise ValueError("This tournament type requires exactly 11 players")
+                return 14
+                
+            elif "12-player" in self.name:
+                if num_entrants != 12:
+                    raise ValueError("This tournament type requires exactly 12 players")
+                return 12
+                
+            elif "13-player" in self.name:
+                if num_entrants != 13:
+                    raise ValueError("This tournament type requires exactly 13 players")
+                return 13
+                
+            elif "14-player" in self.name:
+                if num_entrants != 14:
+                    raise ValueError("This tournament type requires exactly 14 players")
+                return 15
+                
+            elif "15-player" in self.name:
+                if num_entrants != 15:
+                    raise ValueError("This tournament type requires exactly 15 players")
+                return 18
+                
+            elif "16-player" in self.name:
+                if num_entrants != 16:
+                    raise ValueError("This tournament type requires exactly 16 players")
+                return 17
             
         # Default fallback - should not reach here for known tournament types
         raise NotImplementedError(f"calculate_rounds not implemented for {self.name}")
@@ -147,187 +204,200 @@ class TournamentArchetype(models.Model):
         if self.tournament_category == 'PAIRS':
             return min(num_entrants, 4)
             
-        # For 8-player Monarch of the Court
-        if self.tournament_category == 'MOC' and "8-player" in self.name:
-            return 2
+        # For MoC tournaments
+        if self.tournament_category == 'MOC':
+            if "5-player" in self.name or "6-player" in self.name or "7-player" in self.name:
+                return 1
+            elif "8-player" in self.name or "9-player" in self.name or "10-player" in self.name or "11-player" in self.name:
+                return 2
+            elif "12-player" in self.name or "13-player" in self.name or "14-player" in self.name or "15-player" in self.name:
+                return 3
+            elif "16-player" in self.name:
+                return 4
             
         # Default fallback
         raise NotImplementedError(f"calculate_courts not implemented for {self.name}")
         
     def generate_matchups(self, tournament_chart, players_or_pairs):
         """Generate matchups for the tournament."""
-        # For Monarch of the Court tournament
-        if self.tournament_category == 'MOC' and "8-player" in self.name:
-            players = players_or_pairs
-            if len(players) != 8:
-                raise ValueError("This tournament type requires exactly 8 players")
+        # For Monarch of the Court tournaments
+        if self.tournament_category == 'MOC':
+            # Redirect to appropriate implementation in tournament_types.py
+            from .tournament_types import get_implementation
+            implementation = get_implementation(self)
+            if implementation:
+                return implementation.generate_matchups(tournament_chart, players_or_pairs)
                 
-            # Sort players by ranking
-            sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-            if len(sorted_players) < 8:
-                raise ValueError(f"This tournament type requires exactly 8 players, got {len(sorted_players)}")
-            
-            # Use the sorted players directly instead of mapping by ranking number
-            
-            # Create all matchups for Cade Loving's 8-player tournament
-            # The format has 7 rounds with 2 courts per round
-            # Each matchup has 2 players vs 2 players
-            # We'll use the players array sorted by ranking (index 0 = rank 1)
-            
-            # Round 1
-            # Court 1: 1&3 vs 6&8 (Power Rank: 4 v 14)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[0],  # Player 1
-                pair1_player2=sorted_players[2],  # Player 3
-                pair2_player1=sorted_players[5],  # Player 6
-                pair2_player2=sorted_players[7],  # Player 8
-                round_number=1,
-                court_number=1
-            )
-            # Court 2: 2&4 vs 5&7 (Power Rank: 6 v 12)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[1],  # Player 2
-                pair1_player2=sorted_players[3],  # Player 4
-                pair2_player1=sorted_players[4],  # Player 5
-                pair2_player2=sorted_players[6],  # Player 7
-                round_number=1,
-                court_number=2
-            )
-            
-            # Round 2
-            # Court 1: 1&6 vs 4&7 (Power Rank: 7 v 11)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[0],  # Player 1
-                pair1_player2=sorted_players[5],  # Player 6
-                pair2_player1=sorted_players[3],  # Player 4
-                pair2_player2=sorted_players[6],  # Player 7
-                round_number=2,
-                court_number=1
-            )
-            # Court 2: 3&8 vs 2&5 (Power Rank: 11 v 7)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[2],  # Player 3
-                pair1_player2=sorted_players[7],  # Player 8
-                pair2_player1=sorted_players[1],  # Player 2
-                pair2_player2=sorted_players[4],  # Player 5
-                round_number=2,
-                court_number=2
-            )
-            
-            # Round 3
-            # Court 1: 1&2 vs 7&8 (Power Rank: 3 v 15)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[0],  # Player 1
-                pair1_player2=sorted_players[1],  # Player 2
-                pair2_player1=sorted_players[6],  # Player 7
-                pair2_player2=sorted_players[7],  # Player 8
-                round_number=3,
-                court_number=1
-            )
-            # Court 2: 3&4 vs 5&6 (Power Rank: 7 v 11)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[2],  # Player 3
-                pair1_player2=sorted_players[3],  # Player 4
-                pair2_player1=sorted_players[4],  # Player 5
-                pair2_player2=sorted_players[5],  # Player 6
-                round_number=3,
-                court_number=2
-            )
-            
-            # Round 4
-            # Court 1: 1&5 vs 2&6 (Power Rank: 6 v 8)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[0],  # Player 1
-                pair1_player2=sorted_players[4],  # Player 5
-                pair2_player1=sorted_players[1],  # Player 2
-                pair2_player2=sorted_players[5],  # Player 6
-                round_number=4,
-                court_number=1
-            )
-            # Court 2: 4&8 vs 3&7 (Power Rank: 12 v 10)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[3],  # Player 4
-                pair1_player2=sorted_players[7],  # Player 8
-                pair2_player1=sorted_players[2],  # Player 3
-                pair2_player2=sorted_players[6],  # Player 7
-                round_number=4,
-                court_number=2
-            )
-            
-            # Round 5
-            # Court 1: 1&8 vs 4&5 (Power Rank: 9 v 9)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[0],  # Player 1
-                pair1_player2=sorted_players[7],  # Player 8
-                pair2_player1=sorted_players[3],  # Player 4
-                pair2_player2=sorted_players[4],  # Player 5
-                round_number=5,
-                court_number=1
-            )
-            # Court 2: 2&7 vs 3&6 (Power Rank: 9 v 9)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[1],  # Player 2
-                pair1_player2=sorted_players[6],  # Player 7
-                pair2_player1=sorted_players[2],  # Player 3
-                pair2_player2=sorted_players[5],  # Player 6
-                round_number=5,
-                court_number=2
-            )
-            
-            # Round 6
-            # Court 1: 1&7 vs 3&5 (Power Rank: 8 v 8)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[0],  # Player 1
-                pair1_player2=sorted_players[6],  # Player 7
-                pair2_player1=sorted_players[2],  # Player 3
-                pair2_player2=sorted_players[4],  # Player 5
-                round_number=6,
-                court_number=1
-            )
-            # Court 2: 4&6 vs 2&8 (Power Rank: 10 v 10)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[3],  # Player 4
-                pair1_player2=sorted_players[5],  # Player 6
-                pair2_player1=sorted_players[1],  # Player 2
-                pair2_player2=sorted_players[7],  # Player 8
-                round_number=6,
-                court_number=2
-            )
-            
-            # Round 7
-            # Court 1: 1&4 vs 2&3 (Power Rank: 5 v 5)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[0],  # Player 1
-                pair1_player2=sorted_players[3],  # Player 4
-                pair2_player1=sorted_players[1],  # Player 2
-                pair2_player2=sorted_players[2],  # Player 3
-                round_number=7,
-                court_number=1
-            )
-            # Court 2: 6&7 vs 5&8 (Power Rank: 13 v 13)
-            Matchup.objects.create(
-                tournament_chart=tournament_chart,
-                pair1_player1=sorted_players[5],  # Player 6
-                pair1_player2=sorted_players[6],  # Player 7
-                pair2_player1=sorted_players[4],  # Player 5
-                pair2_player2=sorted_players[7],  # Player 8
-                round_number=7,
-                court_number=2
-            )
-            return
+            # Fallback for 8-player format (for backward compatibility)
+            if "8-player" in self.name:
+                players = players_or_pairs
+                if len(players) != 8:
+                    raise ValueError("This tournament type requires exactly 8 players")
+                    
+                # Sort players by ranking
+                sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
+                if len(sorted_players) < 8:
+                    raise ValueError(f"This tournament type requires exactly 8 players, got {len(sorted_players)}")
+                
+                # Create all matchups for Cade Loving's 8-player tournament
+                # The format has 7 rounds with 2 courts per round
+                # Each matchup has 2 players vs 2 players
+                # We'll use the players array sorted by ranking (index 0 = rank 1)
+                
+                # Round 1
+                # Court 1: 1&3 vs 6&8 (Power Rank: 4 v 14)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[0],  # Player 1
+                    pair1_player2=sorted_players[2],  # Player 3
+                    pair2_player1=sorted_players[5],  # Player 6
+                    pair2_player2=sorted_players[7],  # Player 8
+                    round_number=1,
+                    court_number=1
+                )
+                # Court 2: 2&4 vs 5&7 (Power Rank: 6 v 12)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[1],  # Player 2
+                    pair1_player2=sorted_players[3],  # Player 4
+                    pair2_player1=sorted_players[4],  # Player 5
+                    pair2_player2=sorted_players[6],  # Player 7
+                    round_number=1,
+                    court_number=2
+                )
+                
+                # Round 2
+                # Court 1: 1&6 vs 4&7 (Power Rank: 7 v 11)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[0],  # Player 1
+                    pair1_player2=sorted_players[5],  # Player 6
+                    pair2_player1=sorted_players[3],  # Player 4
+                    pair2_player2=sorted_players[6],  # Player 7
+                    round_number=2,
+                    court_number=1
+                )
+                # Court 2: 3&8 vs 2&5 (Power Rank: 11 v 7)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[2],  # Player 3
+                    pair1_player2=sorted_players[7],  # Player 8
+                    pair2_player1=sorted_players[1],  # Player 2
+                    pair2_player2=sorted_players[4],  # Player 5
+                    round_number=2,
+                    court_number=2
+                )
+                
+                # Round 3
+                # Court 1: 1&2 vs 7&8 (Power Rank: 3 v 15)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[0],  # Player 1
+                    pair1_player2=sorted_players[1],  # Player 2
+                    pair2_player1=sorted_players[6],  # Player 7
+                    pair2_player2=sorted_players[7],  # Player 8
+                    round_number=3,
+                    court_number=1
+                )
+                # Court 2: 3&4 vs 5&6 (Power Rank: 7 v 11)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[2],  # Player 3
+                    pair1_player2=sorted_players[3],  # Player 4
+                    pair2_player1=sorted_players[4],  # Player 5
+                    pair2_player2=sorted_players[5],  # Player 6
+                    round_number=3,
+                    court_number=2
+                )
+                
+                # Round 4
+                # Court 1: 1&5 vs 2&6 (Power Rank: 6 v 8)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[0],  # Player 1
+                    pair1_player2=sorted_players[4],  # Player 5
+                    pair2_player1=sorted_players[1],  # Player 2
+                    pair2_player2=sorted_players[5],  # Player 6
+                    round_number=4,
+                    court_number=1
+                )
+                # Court 2: 4&8 vs 3&7 (Power Rank: 12 v 10)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[3],  # Player 4
+                    pair1_player2=sorted_players[7],  # Player 8
+                    pair2_player1=sorted_players[2],  # Player 3
+                    pair2_player2=sorted_players[6],  # Player 7
+                    round_number=4,
+                    court_number=2
+                )
+                
+                # Round 5
+                # Court 1: 1&8 vs 4&5 (Power Rank: 9 v 9)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[0],  # Player 1
+                    pair1_player2=sorted_players[7],  # Player 8
+                    pair2_player1=sorted_players[3],  # Player 4
+                    pair2_player2=sorted_players[4],  # Player 5
+                    round_number=5,
+                    court_number=1
+                )
+                # Court 2: 2&7 vs 3&6 (Power Rank: 9 v 9)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[1],  # Player 2
+                    pair1_player2=sorted_players[6],  # Player 7
+                    pair2_player1=sorted_players[2],  # Player 3
+                    pair2_player2=sorted_players[5],  # Player 6
+                    round_number=5,
+                    court_number=2
+                )
+                
+                # Round 6
+                # Court 1: 1&7 vs 3&5 (Power Rank: 8 v 8)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[0],  # Player 1
+                    pair1_player2=sorted_players[6],  # Player 7
+                    pair2_player1=sorted_players[2],  # Player 3
+                    pair2_player2=sorted_players[4],  # Player 5
+                    round_number=6,
+                    court_number=1
+                )
+                # Court 2: 4&6 vs 2&8 (Power Rank: 10 v 10)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[3],  # Player 4
+                    pair1_player2=sorted_players[5],  # Player 6
+                    pair2_player1=sorted_players[1],  # Player 2
+                    pair2_player2=sorted_players[7],  # Player 8
+                    round_number=6,
+                    court_number=2
+                )
+                
+                # Round 7
+                # Court 1: 1&4 vs 2&3 (Power Rank: 5 v 5)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[0],  # Player 1
+                    pair1_player2=sorted_players[3],  # Player 4
+                    pair2_player1=sorted_players[1],  # Player 2
+                    pair2_player2=sorted_players[2],  # Player 3
+                    round_number=7,
+                    court_number=1
+                )
+                # Court 2: 6&7 vs 5&8 (Power Rank: 13 v 13)
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[5],  # Player 6
+                    pair1_player2=sorted_players[6],  # Player 7
+                    pair2_player1=sorted_players[4],  # Player 5
+                    pair2_player2=sorted_players[7],  # Player 8
+                    round_number=7,
+                    court_number=2
+                )
+                return
         
         # For pairs tournaments
         if self.tournament_category == 'PAIRS':

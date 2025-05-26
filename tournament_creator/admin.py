@@ -6,7 +6,7 @@ from .models.scoring import MatchScore, PlayerScore
 from .models.auth import User
 from .models.logging import MatchResultLog
 from .models.notifications import NotificationBackendSetting, NotificationLog
-from .forms import EmailBackendConfigForm
+from .forms import EmailBackendConfigForm, SignalBackendConfigForm
 from django.utils.text import Truncator
 # import functools # Removed import
 
@@ -69,7 +69,9 @@ class NotificationBackendSettingAdmin(admin.ModelAdmin):
 
     def get_form(self, request, obj=None, change=False, **kwargs):
         if obj and obj.backend_name == 'email':
-            kwargs['form'] = EmailBackendConfigForm  # EmailBackendConfigForm is now a ModelForm
+            kwargs['form'] = EmailBackendConfigForm
+        elif obj and obj.backend_name == 'signal':
+            kwargs['form'] = SignalBackendConfigForm
         # functools.partial is no longer needed here as the form's __init__ handles initial data.
         return super().get_form(request, obj, change=change, **kwargs)
 
@@ -82,13 +84,19 @@ class NotificationBackendSettingAdmin(admin.ModelAdmin):
                 (None, {'fields': ('backend_name', 'is_active')}), 
                 ('Email Configuration', {'fields': email_specific_fields})
             ]
+        elif obj and obj.backend_name == 'signal':
+            signal_specific_fields = ['signal_cli_rest_api_url', 'signal_sender_phone_number', 'recipient_usernames', 'recipient_group_ids']
+            return [
+                (None, {'fields': ('backend_name', 'is_active')}),
+                ('Signal Configuration', {'fields': signal_specific_fields})
+            ]
         # Default for add view or non-email backends (uses default ModelAdmin fieldsets)
         return super().get_fieldsets(request, obj) 
 
     def save_model(self, request, obj, form, change):
-        # The ModelForm (EmailBackendConfigForm or default) will have cleaned data for its fields.
+        # The ModelForm (EmailBackendConfigForm, SignalBackendConfigForm or default) will have cleaned data for its fields.
         # backend_name and is_active are handled by the ModelForm part.
-        # We need to populate obj.config for the custom fields if it's an email backend.
+        # We need to populate obj.config for the custom fields based on the backend type.
 
         if obj.backend_name == 'email' and isinstance(form, EmailBackendConfigForm):
             new_config = {}
@@ -104,19 +112,27 @@ class NotificationBackendSettingAdmin(admin.ModelAdmin):
                 new_config[field_name] = form.cleaned_data.get(field_name)
             
             # Password handling:
-            # If the password field in the form is empty/None:
-            if not new_config.get('password'):
+            if not new_config.get('password'): # If the password field in the form is empty/None
                 if current_password: # And an old password exists
                     new_config['password'] = current_password # Preserve it
-                else: # No new password and no old password, so remove key
+                else: # No new password and no old password, so remove key if it exists
                     if 'password' in new_config:
                         del new_config['password']
             # If a new password IS provided in the form, it will be used from form.cleaned_data.get('password')
-
+            obj.config = new_config
+        
+        elif obj.backend_name == 'signal' and isinstance(form, SignalBackendConfigForm):
+            new_config = {}
+            custom_field_keys = ['signal_cli_rest_api_url', 'signal_sender_phone_number', 'recipient_usernames', 'recipient_group_ids']
+            for field_name in custom_field_keys:
+                # Get the value from the form's cleaned_data
+                # For optional fields (recipient_usernames, recipient_group_ids), if they are empty,
+                # form.cleaned_data.get(field_name) will return an empty string, which is fine for storing in JSON.
+                new_config[field_name] = form.cleaned_data.get(field_name)
             obj.config = new_config
         
         # Call super().save_model() to save the NotificationBackendSetting instance.
-        # This handles saving fields defined in EmailBackendConfigForm.Meta.fields (backend_name, is_active)
+        # This handles saving fields defined in ModelForm.Meta.fields (backend_name, is_active)
         # and any other standard ModelForm save procedures.
         super().save_model(request, obj, form, change)
 

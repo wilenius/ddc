@@ -93,3 +93,48 @@ class EmailBackendConfigForm(forms.ModelForm): # Changed base class
                         self.fields[field_name].initial = None
                     else:
                         self.fields[field_name].initial = config.get(field_name)
+
+
+class SignalBackendConfigForm(forms.ModelForm):
+    signal_cli_rest_api_url = forms.URLField(
+        label="Signal CLI REST API URL",
+        help_text="The base URL of the signal-cli-rest-api service (e.g., http://localhost:8080)."
+    )
+    signal_sender_phone_number = forms.CharField(
+        label="Signal Sender Phone Number",
+        help_text="The phone number registered with Signal to send messages from (e.g., +1234567890)."
+    )
+    recipient_usernames = forms.CharField(
+        label="Recipient Usernames (Phone Numbers)",
+        widget=forms.Textarea(attrs={'rows': 3}),
+        required=False,
+        help_text="Comma-separated list of recipient phone numbers (e.g., +1987654321,+1555123456)."
+    )
+    recipient_group_ids = forms.CharField(
+        label="Recipient Group IDs",
+        widget=forms.Textarea(attrs={'rows': 3}),
+        required=False,
+        help_text="Comma-separated list of Signal group IDs. Ensure the sender bot is a member of these groups."
+    )
+
+    class Meta:
+        model = NotificationBackendSetting
+        fields = ['backend_name', 'is_active'] # Fields from the model
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Populate custom form fields from instance.config for 'signal' backend
+        if self.instance and self.instance.pk and self.instance.backend_name == 'signal':
+            config = self.instance.config or {}
+            
+            custom_field_keys = [
+                'signal_cli_rest_api_url', 
+                'signal_sender_phone_number', 
+                'recipient_usernames', 
+                'recipient_group_ids'
+            ]
+            
+            for field_name in custom_field_keys:
+                if field_name in self.fields: # Check field exists on form
+                    self.fields[field_name].initial = config.get(field_name)

@@ -1,4 +1,4 @@
-from django.views.generic import ListView, CreateView, DetailView
+from django.views.generic import ListView, CreateView, DetailView, DeleteView
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
 from django.contrib import messages
@@ -11,7 +11,7 @@ from ..models.base_models import TournamentChart, Matchup, TournamentArchetype, 
 from ..models.tournament_types import PairsTournamentArchetype
 from ..models.scoring import MatchScore, PlayerScore
 from ..models.logging import MatchResultLog
-from ..views.auth import SpectatorAccessMixin, PlayerOrAdminRequiredMixin
+from ..views.auth import SpectatorAccessMixin, PlayerOrAdminRequiredMixin, AdminRequiredMixin
 from ..forms import PairFormSet, MoCPlayerSelectForm
 
 class TournamentListView(SpectatorAccessMixin, ListView):
@@ -360,6 +360,16 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
                 final_standings.append(score)
         
         return final_standings
+
+class TournamentDeleteView(AdminRequiredMixin, DeleteView):
+    model = TournamentChart
+    template_name = 'tournament_creator/tournamentchart_confirm_delete.html'
+    success_url = reverse_lazy('tournament_list')
+    
+    def delete(self, request, *args, **kwargs):
+        tournament = self.get_object()
+        messages.success(request, f'Tournament "{tournament.name}" has been deleted successfully.')
+        return super().delete(request, *args, **kwargs)
 
 @login_required
 @require_POST

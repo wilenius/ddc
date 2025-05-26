@@ -126,3 +126,29 @@ class ViewTests(TestCase):
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['status'], 'success')
+
+    def test_tournament_delete_permissions(self):
+        """Test tournament deletion permissions"""
+        url = reverse('tournament_delete', kwargs={'pk': self.tournament.pk})
+        
+        # Unauthenticated user should be redirected to login
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+        
+        # Spectator should not have access
+        self.client.login(username='spectator_test', password='test123')
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 403)
+        
+        # Player should not have access
+        self.client.login(username='player_test', password='test123')
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 403)
+        
+        # Admin should have access
+        self.client.login(username='admin_test', password='test123')
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)  # Redirect after successful deletion
+        
+        # Verify tournament was deleted
+        self.assertFalse(TournamentChart.objects.filter(pk=self.tournament.pk).exists())

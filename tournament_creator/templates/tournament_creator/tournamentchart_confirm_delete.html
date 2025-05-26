@@ -1,0 +1,47 @@
+{% extends 'tournament_creator/base.html' %}
+
+{% block title %}Delete Tournament - DDC Tournament Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h4 class="mb-0">Confirm Tournament Deletion</h4>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This action cannot be undone!
+                </div>
+                
+                <p>Are you sure you want to delete the following tournament?</p>
+                
+                <div class="mb-3">
+                    <strong>Tournament Name:</strong> {{ object.name }}<br>
+                    <strong>Date:</strong> {{ object.date }}<br>
+                    <strong>Players:</strong> {{ object.players.count }}<br>
+                    <strong>Matches:</strong> {{ object.matchups.count }}
+                </div>
+                
+                <p class="text-muted">
+                    Deleting this tournament will permanently remove all associated match results, 
+                    player scores, and activity logs.
+                </p>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger">
+                            Yes, Delete Tournament
+                        </button>
+                        <a href="{% url 'tournament_detail' object.pk %}" class="btn btn-secondary">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

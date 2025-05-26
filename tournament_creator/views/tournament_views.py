@@ -28,7 +28,10 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['players'] = Player.objects.all().order_by('ranking')
-        context['archetypes'] = TournamentArchetype.objects.all()
+        # Custom sorting: category first, then by player count
+        archetypes = list(TournamentArchetype.objects.all())
+        archetypes.sort(key=lambda x: (x.tournament_category, x.player_count, x.name))
+        context['archetypes'] = archetypes
         archetype_id = self.request.GET.get('archetype') or self.request.POST.get('archetype')
         if archetype_id:
             archetype = TournamentArchetype.objects.get(id=archetype_id)

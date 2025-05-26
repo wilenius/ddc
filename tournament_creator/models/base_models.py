@@ -118,6 +118,19 @@ class TournamentArchetype(models.Model):
     
     def __str__(self):
         return self.name
+    
+    @property
+    def player_count(self):
+        """Extract the number of players/pairs from the tournament name for sorting."""
+        import re
+        # Look for numbers at the start of the name (e.g., "5-player", "4 pairs")
+        match = re.search(r'^(\d+)', self.name)
+        if match:
+            return int(match.group(1))
+        return 999  # Put tournaments without numbers at the end
+    
+    class Meta:
+        ordering = ['tournament_category', 'name']
         
     def create_tournament(self, players_or_pairs):
         """Create a tournament with the given players or pairs."""

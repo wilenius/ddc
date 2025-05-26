@@ -3,10 +3,17 @@ from django.db import migrations
 def update_tournament_names(apps, schema_editor):
     TournamentArchetype = apps.get_model('tournament_creator', 'TournamentArchetype')
     
-    # Update Swedish format names to doubles tournament names
+    # Update all Swedish format names to doubles tournament names
     name_mappings = {
+        "2 pairs Swedish format": "2 pairs doubles tournament",
+        "3 pairs Swedish format": "3 pairs doubles tournament", 
         "4 pairs Swedish format": "4 pairs doubles tournament",
+        "5 pairs Swedish format": "5 pairs doubles tournament",
+        "6 pairs Swedish format": "6 pairs doubles tournament",
+        "7 pairs Swedish format": "7 pairs doubles tournament",
         "8 pairs Swedish format": "8 pairs doubles tournament",
+        "9 pairs Swedish format": "9 pairs doubles tournament",
+        "10 pairs Swedish format": "10 pairs doubles tournament",
         "Cade Loving's 8-player KoC": "8-player Monarch of the Court"
     }
     
@@ -30,8 +37,15 @@ def reverse_tournament_names(apps, schema_editor):
     
     # Reverse the name mappings
     name_mappings = {
+        "2 pairs doubles tournament": "2 pairs Swedish format",
+        "3 pairs doubles tournament": "3 pairs Swedish format",
         "4 pairs doubles tournament": "4 pairs Swedish format",
-        "8 pairs doubles tournament": "8 pairs Swedish format", 
+        "5 pairs doubles tournament": "5 pairs Swedish format",
+        "6 pairs doubles tournament": "6 pairs Swedish format",
+        "7 pairs doubles tournament": "7 pairs Swedish format",
+        "8 pairs doubles tournament": "8 pairs Swedish format",
+        "9 pairs doubles tournament": "9 pairs Swedish format",
+        "10 pairs doubles tournament": "10 pairs Swedish format",
         "8-player Monarch of the Court": "Cade Loving's 8-player KoC"
     }
     

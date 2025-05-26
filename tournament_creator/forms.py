@@ -27,3 +27,39 @@ class MoCPlayerSelectForm(forms.Form):
         widget=autocomplete.ModelSelect2Multiple(url='player-autocomplete'),
         label="Players"
     )
+
+class EmailBackendConfigForm(forms.Form):
+    recipient_list = forms.CharField(
+        label="Recipient List",
+        help_text="Comma-separated email addresses"
+    )
+    from_email = forms.EmailField(
+        label="From Email"
+    )
+    host = forms.CharField(
+        label="SMTP Host"
+    )
+    port = forms.IntegerField(
+        label="SMTP Port",
+        initial=587
+    )
+    username = forms.CharField(
+        label="SMTP Username",
+        required=False
+    )
+    password = forms.CharField(
+        label="SMTP Password",
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Leave blank to keep existing password. Enter a new password to change it."
+    )
+    use_tls = forms.BooleanField(
+        label="Use TLS",
+        required=False,
+        initial=True
+    )
+    use_ssl = forms.BooleanField(
+        label="Use SSL",
+        required=False,
+        initial=False
+    )

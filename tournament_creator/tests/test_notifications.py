@@ -8,6 +8,7 @@ from tournament_creator.models.auth import User
 from tournament_creator.models.logging import MatchResultLog
 from tournament_creator.models.notifications import NotificationBackendSetting, NotificationLog
 from tournament_creator.models.base_models import Matchup, TournamentChart, Player, Pair
+from tournament_creator.forms import EmailBackendConfigForm # Added import
 
 from tournament_creator.notifications import send_email_notification # The function to test
 
@@ -227,6 +228,193 @@ class TestNotificationAdminViews(TestCase):
         url = reverse('admin:tournament_creator_notificationbackendsetting_changelist')
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
+
+    # New tests for admin customization
+    def test_notificationbackendsetting_add_view_shows_raw_config(self):
+        url = reverse('admin:tournament_creator_notificationbackendsetting_add')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="config"', msg_prefix="Add view should contain raw config textarea")
+        # Check that email form specific fields are NOT present
+        self.assertNotContains(response, 'name="recipient_list"', msg_prefix="Add view should not contain email form fields")
+
+    def test_notificationbackendsetting_change_view_non_email_shows_raw_config(self):
+        setting = NotificationBackendSetting.objects.create(
+            backend_name='matrix', 
+            is_active=True, 
+            config={'server_url': 'https://matrix.example.com'}
+        )
+        url = reverse('admin:tournament_creator_notificationbackendsetting_change', args=[setting.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="config"', msg_prefix="Non-email change view should contain raw config textarea")
+        self.assertContains(response, 'https://matrix.example.com', msg_prefix="Non-email change view should show existing config data")
+        self.assertNotContains(response, 'name="recipient_list"', msg_prefix="Non-email change view should not contain email form fields")
+
+    def test_notificationbackendsetting_change_view_email_shows_custom_form(self):
+        initial_email_config = {
+            'recipient_list': 'admin@example.com,staff@example.com',
+            'from_email': 'system@example.org',
+            'host': 'smtp.example.org',
+            'port': 587,
+            'username': 'emailuser',
+            'password': 'securepassword123',
+            'use_tls': True,
+            'use_ssl': False
+        }
+        setting = NotificationBackendSetting.objects.create(
+            backend_name='email', 
+            is_active=True, 
+            config=initial_email_config
+        )
+        url = reverse('admin:tournament_creator_notificationbackendsetting_change', args=[setting.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        
+        # Raw config textarea should NOT be directly visible (it's replaced by the form fields)
+        # Depending on Django admin internals, it might be a hidden field if still part of the underlying ModelForm.
+        # A more reliable check is that the custom form fields ARE present.
+        # self.assertNotContains(response, '<textarea name="config"') # This might be too strict
+
+        for field_name in EmailBackendConfigForm.base_fields.keys():
+            self.assertContains(response, f'name="{field_name}"', msg_prefix=f"Email change view should contain field {field_name}")
+
+        self.assertContains(response, initial_email_config['recipient_list'])
+        self.assertContains(response, initial_email_config['host'])
+        self.assertContains(response, str(initial_email_config['port']))
+        self.assertContains(response, initial_email_config['username'])
+        # Password should not be displayed directly, but its input field should be there
+        self.assertContains(response, 'name="password"')
+        self.assertNotContains(response, initial_email_config['password'], msg_prefix="Password should not be rendered in plain text")
+
+        if initial_email_config['use_tls']:
+            self.assertContains(response, 'name="use_tls" checked')
+        else:
+            self.assertContains(response, 'name="use_tls" ') # Check it exists, but not checked
+            self.assertNotContains(response, 'name="use_tls" checked')
+        
+        if initial_email_config['use_ssl']: # Which is false in this test case
+            self.assertContains(response, 'name="use_ssl" checked')
+        else:
+            self.assertContains(response, 'name="use_ssl" ')
+            self.assertNotContains(response, 'name="use_ssl" checked')
+
+
+    def test_notificationbackendsetting_change_view_email_submit_custom_form(self):
+        initial_password = "old_secure_password"
+        setting = NotificationBackendSetting.objects.create(
+            backend_name='email', 
+            is_active=True, 
+            config={'host': 'old.host.com', 'port': 123, 'password': initial_password}
+        )
+        change_url = reverse('admin:tournament_creator_notificationbackendsetting_change', args=[setting.id])
+        
+        # 1. Test updating with new data, including a new password
+        new_data = {
+            'backend_name': 'email', # This field is usually readonly or not part of this form
+            'is_active': 'on',
+            'recipient_list': 'new_admin@example.com',
+            'from_email': 'new_system@example.org',
+            'host': 'new.smtp.example.org',
+            'port': '588', # Django forms handle string conversion for IntegerField
+            'username': 'new_emailuser',
+            'password': 'new_password123',
+            'use_tls': 'on', # Checkbox data
+            'use_ssl': ''    # Checkbox data (not checked)
+        }
+        response = self.client.post(change_url, data=new_data)
+        self.assertEqual(response.status_code, 302) # Successful save redirects
+        
+        setting.refresh_from_db()
+        self.assertTrue(setting.is_active)
+        self.assertEqual(setting.config['recipient_list'], new_data['recipient_list'])
+        self.assertEqual(setting.config['host'], new_data['host'])
+        self.assertEqual(setting.config['port'], 588) # Ensure conversion to int
+        self.assertEqual(setting.config['password'], new_data['password'])
+        self.assertTrue(setting.config['use_tls'])
+        self.assertFalse(setting.config['use_ssl'])
+
+        # 2. Test submitting empty password - should retain old password
+        update_no_new_password = new_data.copy()
+        update_no_new_password['password'] = '' # Empty password field
+        update_no_new_password['host'] = 'another.host.com'
+
+        response = self.client.post(change_url, data=update_no_new_password)
+        self.assertEqual(response.status_code, 302)
+        setting.refresh_from_db()
+        self.assertEqual(setting.config['host'], 'another.host.com')
+        self.assertEqual(setting.config['password'], new_data['password'], "Password should be retained if new one is empty")
+
+        # 3. Test submitting empty password when no old password existed
+        setting.config = {'host': 'host.without.password.com', 'port': 123} # Remove password from config
+        setting.save()
+        
+        update_empty_password_no_old = new_data.copy()
+        update_empty_password_no_old['password'] = ''
+        update_empty_password_no_old['host'] = 'final.host.com'
+
+        response = self.client.post(change_url, data=update_empty_password_no_old)
+        self.assertEqual(response.status_code, 302)
+        setting.refresh_from_db()
+        self.assertEqual(setting.config['host'], 'final.host.com')
+        self.assertNotIn('password', setting.config, "Password should not be in config if submitted empty and no old one existed")
+
+
+    def test_save_new_email_backend_two_step_process(self):
+        add_url = reverse('admin:tournament_creator_notificationbackendsetting_add')
+        
+        # Step 1: Add view - POST initial data (raw config)
+        initial_add_data = {
+            'backend_name': 'email',
+            'is_active': 'on',
+            'config': json.dumps({'info': 'initial setup, to be replaced'}) 
+        }
+        response = self.client.post(add_url, data=initial_add_data, follow=False) # Don't follow redirect yet
+        
+        # Check if a new setting was created
+        self.assertEqual(NotificationBackendSetting.objects.count(), 1)
+        new_setting = NotificationBackendSetting.objects.first()
+        self.assertEqual(new_setting.backend_name, 'email')
+        self.assertEqual(new_setting.config.get('info'), 'initial setup, to be replaced')
+        
+        # Admin redirects to change view after add. Assert this.
+        self.assertEqual(response.status_code, 302)
+        change_url = response['Location'] # Get the redirect URL (change view)
+        expected_change_url = reverse('admin:tournament_creator_notificationbackendsetting_change', args=[new_setting.id])
+        self.assertTrue(change_url.endswith(expected_change_url)) #endswith because of host/port
+
+        # Step 2: Change view - GET and verify custom form, then POST updated email config
+        response_change_view_get = self.client.get(change_url)
+        self.assertEqual(response_change_view_get.status_code, 200)
+        for field_name in EmailBackendConfigForm.base_fields.keys():
+            self.assertContains(response_change_view_get, f'name="{field_name}"', 
+                                msg_prefix=f"Change view for new email backend should show field {field_name}")
+        self.assertContains(response_change_view_get, 'initial setup, to be replaced', 
+                            msg_prefix="Initial config (if any) should be reflected if form fields match")
+
+        # Now POST detailed email configuration using the custom form
+        detailed_email_data = {
+            'backend_name': 'email', # Usually readonly on change view
+            'is_active': 'on',
+            'recipient_list': 'final_admin@example.com',
+            'from_email': 'final_system@example.org',
+            'host': 'final.smtp.example.org',
+            'port': '589',
+            'username': 'final_emailuser',
+            'password': 'final_password123',
+            'use_tls': '',    # Uncheck TLS
+            'use_ssl': 'on'   # Check SSL
+        }
+        response_post_change = self.client.post(change_url, data=detailed_email_data)
+        self.assertEqual(response_post_change.status_code, 302) # Successful save
+
+        new_setting.refresh_from_db()
+        self.assertEqual(new_setting.config['host'], detailed_email_data['host'])
+        self.assertEqual(new_setting.config['port'], 589)
+        self.assertEqual(new_setting.config['password'], detailed_email_data['password'])
+        self.assertFalse(new_setting.config['use_tls'])
+        self.assertTrue(new_setting.config['use_ssl'])
+        self.assertNotIn('info', new_setting.config, "Initial raw config should be overwritten by form data")
 
     def test_notificationlog_list_view_accessible(self):
         url = reverse('admin:tournament_creator_notificationlog_changelist')

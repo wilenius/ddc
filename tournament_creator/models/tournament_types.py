@@ -9,9 +9,9 @@ def get_implementation(archetype: TournamentArchetype) -> Optional[Any]:
     """
     # For now we use a simple name-based mapping
     implementations = {
-        "Cade Loving's 8-player KoC": MonarchOfTheCourt8(),
-        "4 pairs Swedish format": FourPairsSwedishFormat(),
-        "8 pairs Swedish format": EightPairsSwedishFormat(),
+        "8-player Monarch of the Court": MonarchOfTheCourt8(),
+        "4 pairs doubles tournament": FourPairsSwedishFormat(),
+        "8 pairs doubles tournament": EightPairsSwedishFormat(),
         "5-player Monarch of the Court": MonarchOfTheCourt5(),
         "6-player Monarch of the Court": MonarchOfTheCourt6(),
         "7-player Monarch of the Court": MonarchOfTheCourt7(),
@@ -65,7 +65,7 @@ class FourPairsSwedishFormat(PairsTournamentArchetype):
         [(1, 4), (2, 3)],
         [(1, 2), (3, 4)],
     ]
-    name = "4 pairs Swedish format"
+    name = "4 pairs doubles tournament"
     description = "Round robin: 3 rounds on 2 fields with 4 pairs."
 
 class EightPairsSwedishFormat(PairsTournamentArchetype):
@@ -80,7 +80,7 @@ class EightPairsSwedishFormat(PairsTournamentArchetype):
         [(1,4), (2,3), (5,8), (6,7)],
         [(1,2), (3,4), (5,6), (7,8)],
     ]
-    name = "8 pairs Swedish format"
+    name = "8 pairs doubles tournament"
     description = "Round robin: 7 rounds on 4 fields with 8 pairs."
 
 # -- Monarch of the Court base --
@@ -92,7 +92,7 @@ class MoCTournamentArchetype(TournamentArchetype):
 # Existing Cade Loving's (now Monarch of the Court) format:
 class MonarchOfTheCourt8(MoCTournamentArchetype):
     # Remove abstract=True to allow instantiation
-    name = "Cade Loving's 8-player KoC"  # Exact match to migration
+    name = "8-player Monarch of the Court"  # Exact match to migration
     description = "MoC: 8-player specific schedule."
     def calculate_rounds(self, num_players):
         if num_players != 8:

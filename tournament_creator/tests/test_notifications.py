@@ -39,7 +39,7 @@ class TestSendEmailNotification(TestCase):
             details={'team1_scores': [21, 15], 'team2_scores': [19, 10], 'winning_team': 'team1'}
         )
         self.email_config = {
-            'recipient_list': ['test@example.com'],
+            'recipient_list': "test1@example.com, test2@example.com", # Changed to string
             'from_email': 'noreply@example.com',
             'host': 'smtp.example.com',
             'port': 587,
@@ -80,13 +80,21 @@ class TestSendEmailNotification(TestCase):
         # We check if the backend's send_messages method was called.
         self.assertTrue(mock_backend_instance.send_messages.called)
         self.assertEqual(mock_backend_instance.send_messages.call_count, 1)
+
+        # Check that the recipient list passed to the email backend was correctly parsed
+        # send_messages is called with a list of EmailMessage objects
+        sent_messages = mock_backend_instance.send_messages.call_args[0][0]
+        self.assertEqual(len(sent_messages), 1) # Assuming one message object
+        email_message = sent_messages[0]
+        self.assertEqual(email_message.to, ['test1@example.com', 'test2@example.com'])
         
         # Assert NotificationLog entry
         log_entry = NotificationLog.objects.first()
         self.assertIsNotNone(log_entry)
         self.assertTrue(log_entry.success)
         self.assertEqual(NotificationLog.objects.count(), 1)
-        self.assertIn(self.email_config['recipient_list'][0], log_entry.details)
+        # The details log should contain the string representation of the parsed list
+        self.assertIn('test1@example.com, test2@example.com', log_entry.details)
 
     @patch('tournament_creator.notifications.SMTPEmailBackend')
     def test_email_sending_fails_smtp_error(self, mock_smtp_backend_class):
@@ -132,7 +140,7 @@ class TestSendEmailNotification(TestCase):
     @patch('tournament_creator.notifications.SMTPEmailBackend')
     def test_email_backend_misconfigured(self, mock_smtp_backend_class):
         incomplete_config = self.email_config.copy()
-        del incomplete_config['recipient_list'] # Missing recipient_list
+        del incomplete_config['recipient_list'] # Missing recipient_list (None value)
         
         NotificationBackendSetting.objects.create(
             backend_name='email',
@@ -146,10 +154,100 @@ class TestSendEmailNotification(TestCase):
         self.assertIsNotNone(log_entry)
         self.assertFalse(log_entry.success)
         self.assertEqual(NotificationLog.objects.count(), 1)
-        self.assertIn("Email backend 'email' configuration is missing 'recipient_list'.", log_entry.details)
+        # Updated expected message based on new logic in send_email_notification
+        self.assertIn("Failed to send email: No recipients found in configuration after parsing or recipient_list is empty.", log_entry.details)
 
         # Assert SMTPEmailBackend was NOT called
         mock_smtp_backend_class.assert_not_called()
+
+    @patch('tournament_creator.notifications.SMTPEmailBackend')
+    def test_email_sending_fails_no_valid_recipients(self, mock_smtp_backend_class):
+        mock_backend_instance = MagicMock()
+        mock_smtp_backend_class.return_value = mock_backend_instance
+
+        invalid_recipient_lists = [
+            "",          # Empty string
+            ", , ",      # String with only commas/whitespace
+            "   ",       # String with only whitespace
+            None,        # None value for recipient_list (though config.get would handle this)
+            [],          # Explicitly an empty list if robust parsing handles it
+        ]
+
+        for i, invalid_list_val in enumerate(invalid_recipient_lists):
+            with self.subTest(invalid_list_val=invalid_list_val, test_run=i):
+                NotificationLog.objects.all().delete() # Clean up logs from previous subtest runs
+                
+                current_config = self.email_config.copy()
+                current_config['recipient_list'] = invalid_list_val
+                
+                # Ensure there's only one setting for this test run
+                NotificationBackendSetting.objects.all().delete()
+                NotificationBackendSetting.objects.create(
+                    backend_name='email',
+                    is_active=True,
+                    config=current_config
+                )
+
+                send_email_notification(self.user, self.match_log)
+
+                log_entry = NotificationLog.objects.first()
+                self.assertIsNotNone(log_entry)
+                self.assertFalse(log_entry.success)
+                self.assertEqual(NotificationLog.objects.count(), 1)
+                self.assertIn("Failed to send email: No recipients found in configuration after parsing or recipient_list is empty.", log_entry.details)
+                
+                # Assert SMTPEmailBackend was NOT called
+                mock_backend_instance.send_messages.assert_not_called()
+                # Reset mock for next subtest if needed, though it's re-patched per test method
+                mock_backend_instance.reset_mock() 
+                mock_smtp_backend_class.reset_mock()
+
+
+    @patch('tournament_creator.notifications.SMTPEmailBackend')
+    def test_recipient_list_parsing_edge_cases(self, mock_smtp_backend_class):
+        mock_backend_instance = MagicMock()
+        mock_backend_instance.send_messages.return_value = 1
+        mock_smtp_backend_class.return_value = mock_backend_instance
+
+        test_cases = {
+            "trailing_comma": ("test1@example.com,", ['test1@example.com']),
+            "leading_comma": (",test1@example.com", ['test1@example.com']),
+            "multiple_commas": ("test1@example.com, ,, test2@example.com", ['test1@example.com', 'test2@example.com']),
+            "mixed_spacing": ("  test1@example.com  ,test2@example.com,  test3@example.com ", ['test1@example.com', 'test2@example.com', 'test3@example.com']),
+            "already_list_robustness": ([" test1@example.com ", "test2@example.com"], ['test1@example.com', 'test2@example.com'])
+        }
+
+        for test_name, (recipient_str, expected_list) in test_cases.items():
+            with self.subTest(test_name=test_name):
+                NotificationLog.objects.all().delete()
+                NotificationBackendSetting.objects.all().delete()
+                
+                current_config = self.email_config.copy()
+                current_config['recipient_list'] = recipient_str
+                
+                NotificationBackendSetting.objects.create(
+                    backend_name='email',
+                    is_active=True,
+                    config=current_config
+                )
+
+                send_email_notification(self.user, self.match_log)
+
+                self.assertTrue(mock_backend_instance.send_messages.called)
+                sent_messages = mock_backend_instance.send_messages.call_args[0][0]
+                self.assertEqual(len(sent_messages), 1)
+                email_message = sent_messages[0]
+                self.assertEqual(email_message.to, expected_list)
+                
+                log_entry = NotificationLog.objects.first()
+                self.assertIsNotNone(log_entry)
+                self.assertTrue(log_entry.success)
+                # The details log should contain the string representation of the parsed list
+                self.assertIn(', '.join(expected_list), log_entry.details)
+
+                mock_backend_instance.reset_mock()
+                mock_smtp_backend_class.reset_mock()
+
 
 # Tests for Notification Trigger in record_match_result View
 class TestNotificationTriggerInView(TestCase):

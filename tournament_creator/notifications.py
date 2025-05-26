@@ -44,14 +44,20 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance):
         )
         return
 
-    recipient_list = config.get('recipient_list')
+    recipient_list_str = config.get('recipient_list')
     from_email = config.get('from_email', settings.DEFAULT_FROM_EMAIL) # Use Django's default if not in config
     
-    if not recipient_list: # from_email can rely on settings.DEFAULT_FROM_EMAIL
+    actual_recipient_list = []
+    if isinstance(recipient_list_str, str) and recipient_list_str.strip():
+        actual_recipient_list = [email.strip() for email in recipient_list_str.split(',') if email.strip()]
+    elif isinstance(recipient_list_str, list): # Robustness for unexpected format
+        actual_recipient_list = [str(email).strip() for email in recipient_list_str if str(email).strip()]
+
+    if not actual_recipient_list:
         NotificationLog.objects.create(
             backend_setting=email_backend_setting,
             success=False,
-            details="Email backend 'email' configuration is missing 'recipient_list'.",
+            details="Failed to send email: No recipients found in configuration after parsing or recipient_list is empty.",
             match_result_log=match_result_log_instance
         )
         return
@@ -132,7 +138,7 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance):
             subject=subject,
             message=message_body,
             from_email=from_email,
-            recipient_list=recipient_list,
+            recipient_list=actual_recipient_list, # Use parsed list
             auth_user=username, # Redundant if using custom_email_backend properly
             auth_password=password, # Redundant if using custom_email_backend properly
             connection=custom_email_backend
@@ -142,7 +148,7 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance):
             NotificationLog.objects.create(
                 backend_setting=email_backend_setting,
                 success=True,
-                details=f"Email successfully sent to: {', '.join(recipient_list)}",
+                details=f"Email successfully sent to: {', '.join(actual_recipient_list)}", # Use parsed list
                 match_result_log=match_result_log_instance
             )
         else: # Should not happen if fail_silently=False and no exception

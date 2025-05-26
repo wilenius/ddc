@@ -8,7 +8,7 @@ from .models.logging import MatchResultLog
 from .models.notifications import NotificationBackendSetting, NotificationLog
 from .forms import EmailBackendConfigForm
 from django.utils.text import Truncator
-import functools # Added import
+# import functools # Removed import
 
 class CustomUserAdmin(UserAdmin):
     model = User
@@ -68,51 +68,56 @@ class NotificationBackendSettingAdmin(admin.ModelAdmin):
     search_fields = ('backend_name',)
 
     def get_form(self, request, obj=None, change=False, **kwargs):
-        # Check if we are editing an existing object and its backend_name is 'email'
         if obj and obj.backend_name == 'email':
-            initial_data = obj.config or {}
-            # Return a functools.partial that, when called, will produce an
-            # instance of EmailBackendConfigForm, pre-filled with initial_data.
-            # This form instance will then be used by the admin.
-            return functools.partial(EmailBackendConfigForm, initial=initial_data)
-        
-        # If it's not an 'email' backend being edited, or if it's an add view (obj is None),
-        # proceed with the default behavior.
-        # Crucially, remove 'initial' from kwargs if it was added, as the default
-        # modelform_factory path might not expect it.
-        kwargs.pop('initial', None) 
+            kwargs['form'] = EmailBackendConfigForm  # EmailBackendConfigForm is now a ModelForm
+        # functools.partial is no longer needed here as the form's __init__ handles initial data.
         return super().get_form(request, obj, change=change, **kwargs)
 
     def get_fieldsets(self, request, obj=None):
         if obj and obj.backend_name == 'email':
-            # Define fieldsets for the EmailBackendConfigForm fields
-            # These field names must match the keys in EmailBackendConfigForm.base_fields
-            email_form_fields = list(EmailBackendConfigForm.base_fields.keys())
-            return (
-                (None, {'fields': ('backend_name', 'is_active')}),
-                ('Email Configuration', {'fields': email_form_fields}),
-            )
-        # Default fieldsets for add view or non-email backends
-        return super().get_fieldsets(request, obj)
+            # These are the custom fields explicitly defined on EmailBackendConfigForm
+            email_specific_fields = ['recipient_list', 'from_email', 'host', 'port', 'username', 'password', 'use_tls', 'use_ssl']
+            return [
+                # backend_name and is_active are from EmailBackendConfigForm.Meta.fields
+                (None, {'fields': ('backend_name', 'is_active')}), 
+                ('Email Configuration', {'fields': email_specific_fields})
+            ]
+        # Default for add view or non-email backends (uses default ModelAdmin fieldsets)
+        return super().get_fieldsets(request, obj) 
 
     def save_model(self, request, obj, form, change):
+        # The ModelForm (EmailBackendConfigForm or default) will have cleaned data for its fields.
+        # backend_name and is_active are handled by the ModelForm part.
+        # We need to populate obj.config for the custom fields if it's an email backend.
+
         if obj.backend_name == 'email' and isinstance(form, EmailBackendConfigForm):
-            # For email backends, save cleaned_data from EmailBackendConfigForm into obj.config
-            new_config = form.cleaned_data.copy()
+            new_config = {}
+            current_password = None
+
+            # If editing an existing object with a password in its config
+            if obj.pk and obj.config and obj.config.get('password'):
+                current_password = obj.config.get('password')
+
+            custom_field_keys = ['recipient_list', 'from_email', 'host', 'port', 'username', 'password', 'use_tls', 'use_ssl']
+            for field_name in custom_field_keys:
+                # Get the value from the form's cleaned_data
+                new_config[field_name] = form.cleaned_data.get(field_name)
             
-            # Preserve password if it's blank in the form and obj already exists (is being changed)
-            if change and obj.pk and 'password' in new_config and not new_config.get('password'):
-                if obj.config and isinstance(obj.config, dict) and obj.config.get('password'):
-                    new_config['password'] = obj.config.get('password')
-                elif 'password' in new_config: # If password was optional and not provided, remove from config
-                    del new_config['password']
+            # Password handling:
+            # If the password field in the form is empty/None:
+            if not new_config.get('password'):
+                if current_password: # And an old password exists
+                    new_config['password'] = current_password # Preserve it
+                else: # No new password and no old password, so remove key
+                    if 'password' in new_config:
+                        del new_config['password']
+            # If a new password IS provided in the form, it will be used from form.cleaned_data.get('password')
 
             obj.config = new_config
         
-        # For non-email backends or if the form is not EmailBackendConfigForm (e.g. add view),
-        # the default save_model will handle saving obj.config if it's part of the form.
-        # If it's an add view for an email backend, obj.config will be saved directly
-        # if 'config' was in the ModelForm.
+        # Call super().save_model() to save the NotificationBackendSetting instance.
+        # This handles saving fields defined in EmailBackendConfigForm.Meta.fields (backend_name, is_active)
+        # and any other standard ModelForm save procedures.
         super().save_model(request, obj, form, change)
 
 @admin.register(NotificationLog)

@@ -93,6 +93,15 @@ DATABASES = {
     }
 }
 
+# Email Configuration (placeholders - actual notification sending uses model-based config)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.example.com'  # Placeholder
+EMAIL_PORT = 587                   # Placeholder (standard for TLS)
+EMAIL_USE_TLS = True               # Placeholder
+EMAIL_HOST_USER = 'user@example.com'  # Placeholder
+EMAIL_HOST_PASSWORD = 'password'       # Placeholder
+DEFAULT_FROM_EMAIL = 'webmaster@localhost' # Placeholder
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

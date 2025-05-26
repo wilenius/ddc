@@ -5,6 +5,8 @@ from .models.tournament_types import MonarchOfTheCourt8, FourPairsSwedishFormat,
 from .models.scoring import MatchScore, PlayerScore
 from .models.auth import User
 from .models.logging import MatchResultLog
+from .models.notifications import NotificationBackendSetting, NotificationLog
+from django.utils.text import Truncator
 
 class CustomUserAdmin(UserAdmin):
     model = User
@@ -56,3 +58,20 @@ class MatchResultLogAdmin(admin.ModelAdmin):
 # Note: Abstract models can't be registered directly in admin
 # The concrete TournamentArchetype objects from the database
 # are already registered via TournamentArchetypeAdmin above
+
+@admin.register(NotificationBackendSetting)
+class NotificationBackendSettingAdmin(admin.ModelAdmin):
+    list_display = ('backend_name', 'is_active', 'config')
+    list_editable = ('is_active',) # backend_name is unique, not ideal for list_editable
+    search_fields = ('backend_name',) # Searching JSON 'config' can be complex
+
+@admin.register(NotificationLog)
+class NotificationLogAdmin(admin.ModelAdmin):
+    list_display = ('timestamp', 'backend_setting', 'success', 'match_result_log', 'short_details_display')
+    list_filter = ('backend_setting__backend_name', 'success')
+    search_fields = ('details', 'match_result_log__matchup__tournament_chart__name', 'backend_setting__backend_name')
+    readonly_fields = ('timestamp', 'backend_setting', 'success', 'details', 'match_result_log')
+
+    def short_details_display(self, obj):
+        return Truncator(obj.details).chars(50)
+    short_details_display.short_description = 'Details Snippet'

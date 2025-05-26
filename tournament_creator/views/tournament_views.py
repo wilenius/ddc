@@ -13,6 +13,7 @@ from ..models.scoring import MatchScore, PlayerScore
 from ..models.logging import MatchResultLog
 from ..views.auth import SpectatorAccessMixin, PlayerOrAdminRequiredMixin, AdminRequiredMixin
 from ..forms import PairFormSet, MoCPlayerSelectForm
+from ..notifications import send_email_notification
 
 class TournamentListView(SpectatorAccessMixin, ListView):
     model = TournamentChart
@@ -436,10 +437,10 @@ def record_match_result(request, tournament_id, matchup_id):
             )
         
         # Create log entry
-        MatchResultLog.objects.create(
+        match_log_entry = MatchResultLog.objects.create(
             matchup=matchup,
             recorded_by=request.user,
-            action='UPDATE',
+            action='UPDATE', # TODO: This should be dynamic (CREATE/UPDATE based on prior existence)
             details={
                 'team1_scores': team1_scores,
                 'team2_scores': team2_scores,
@@ -449,6 +450,17 @@ def record_match_result(request, tournament_id, matchup_id):
             }
         )
         
+        # Send email notification
+        try:
+            send_email_notification(user_who_recorded=request.user, match_result_log_instance=match_log_entry)
+        except Exception as e_notify:
+            # Log notification error specifically, but don't let it break the main flow
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error sending email notification: {str(e_notify)}")
+            # Optionally, add a message to the user or specific handling if notifications are critical
+            # For now, just log and continue.
+
         # Update player scores
         for player in players:
             player_score, _ = PlayerScore.objects.get_or_create(

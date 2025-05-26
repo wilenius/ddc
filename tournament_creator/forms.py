@@ -63,3 +63,9 @@ class EmailBackendConfigForm(forms.Form):
         required=False,
         initial=False
     )
+
+    def __init__(self, *args, **kwargs):
+        # Pop 'instance' kwarg if present, as forms.Form doesn't expect it.
+        # This makes the form compatible with admin views that might pass it.
+        kwargs.pop('instance', None) 
+        super().__init__(*args, **kwargs)

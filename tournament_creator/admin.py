@@ -6,8 +6,9 @@ from .models.scoring import MatchScore, PlayerScore
 from .models.auth import User
 from .models.logging import MatchResultLog
 from .models.notifications import NotificationBackendSetting, NotificationLog
-from .forms import EmailBackendConfigForm # Added import
+from .forms import EmailBackendConfigForm
 from django.utils.text import Truncator
+import functools # Added import
 
 class CustomUserAdmin(UserAdmin):
     model = User
@@ -67,13 +68,19 @@ class NotificationBackendSettingAdmin(admin.ModelAdmin):
     search_fields = ('backend_name',)
 
     def get_form(self, request, obj=None, change=False, **kwargs):
+        # Check if we are editing an existing object and its backend_name is 'email'
         if obj and obj.backend_name == 'email':
-            kwargs['form'] = EmailBackendConfigForm
-            # Populate initial data for the form from obj.config
-            if obj.config and isinstance(obj.config, dict):
-                kwargs['initial'] = obj.config.copy() # Use a copy
-            else:
-                kwargs['initial'] = {}
+            initial_data = obj.config or {}
+            # Return a functools.partial that, when called, will produce an
+            # instance of EmailBackendConfigForm, pre-filled with initial_data.
+            # This form instance will then be used by the admin.
+            return functools.partial(EmailBackendConfigForm, initial=initial_data)
+        
+        # If it's not an 'email' backend being edited, or if it's an add view (obj is None),
+        # proceed with the default behavior.
+        # Crucially, remove 'initial' from kwargs if it was added, as the default
+        # modelform_factory path might not expect it.
+        kwargs.pop('initial', None) 
         return super().get_form(request, obj, change=change, **kwargs)
 
     def get_fieldsets(self, request, obj=None):

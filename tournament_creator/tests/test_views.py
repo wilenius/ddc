@@ -217,3 +217,45 @@ class ViewTests(TestCase):
         self.assertTrue(new_tournament.notify_by_email)
         self.assertFalse(new_tournament.notify_by_signal) # Was not in POST data
         self.assertTrue(new_tournament.notify_by_matrix)
+
+    def test_tournament_creation_preserves_name_date_after_archetype_selection(self):
+        self.client.login(username='player_test', password='test123')
+
+        # Step 1: Initial GET (optional, but good for completeness)
+        response_initial = self.client.get(reverse('tournament_create'))
+        self.assertEqual(response_initial.status_code, 200)
+
+        # Step 2: Simulate selecting an archetype with initial name and date
+        test_name = "My Preserved Tournament"
+        test_date_str = "2024-08-15" # Use ISO format string
+        
+        # Ensure self.archetype is the one created in setUp
+        self.assertIsNotNone(self.archetype, "Archetype not created in setUp")
+
+        archetype_selection_url = f"{reverse('tournament_create')}?archetype={self.archetype.id}&name={test_name}&date={test_date_str}"
+        response = self.client.get(archetype_selection_url)
+        self.assertEqual(response.status_code, 200)
+
+        # Assertions for form initial values
+        form = response.context.get('form')
+        self.assertIsNotNone(form, "Form not found in context")
+        self.assertIsInstance(form, TournamentCreationForm)
+        self.assertEqual(form.initial.get('name'), test_name)
+        self.assertEqual(form.initial.get('date'), test_date_str)
+
+        # Assertions for archetype in context
+        selected_archetype_in_context = response.context.get('archetype')
+        self.assertIsNotNone(selected_archetype_in_context, "Archetype not found in context")
+        self.assertEqual(selected_archetype_in_context.id, self.archetype.id)
+
+        # Assertions for HTML content (as a cross-check)
+        # Ensure the name and date input fields are correctly populated.
+        # The exact HTML structure depends on how {{ form.name }} and {{ form.date }} render.
+        # Django's default widgets for CharField and DateField will have `value="..."`.
+        self.assertContains(response, f'value="{test_name}"')
+        self.assertContains(response, f'value="{test_date_str}"')
+        
+        # Check if the correct archetype option is selected in the dropdown
+        # The select element's name is 'archetype' and id is 'archetype-select'
+        # The options are populated from context['archetypes']
+        self.assertContains(response, f'<option value="{self.archetype.id}" selected')

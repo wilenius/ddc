@@ -27,6 +27,19 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
     template_name = 'tournament_creator/tournament_create.html'
     success_url = reverse_lazy('tournament_list')
 
+    def get_initial(self):
+        initial = super().get_initial()
+        # Preserve name and date from GET parameters if available
+        if 'name' in self.request.GET:
+            initial['name'] = self.request.GET.get('name')
+        if 'date' in self.request.GET:
+            initial['date'] = self.request.GET.get('date')
+        # The form also includes notify_by_email, notify_by_signal, notify_by_matrix.
+        # If their state needs to be preserved across archetype changes via GET,
+        # they would need to be added to the JS that constructs the URL and handled here.
+        # For now, only name and date are explicitly preserved.
+        return initial
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['players'] = Player.objects.all().order_by('ranking')

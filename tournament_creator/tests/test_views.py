@@ -1,6 +1,8 @@
 from django.test import TestCase, Client
 from django.urls import reverse
 from ..models import Player, TournamentChart, TournamentArchetype, User, Matchup
+from ..models.notifications import NotificationBackendSetting # Added
+from ..forms import TournamentCreationForm # Added
 from django.utils import timezone
 
 class ViewTests(TestCase):
@@ -35,9 +37,11 @@ class ViewTests(TestCase):
             self.players.append(player)
 
         self.archetype = TournamentArchetype.objects.create(
-            name="Cade Loving's 8-player KoC",
-            description='Test tournament type'
+            name="5-player MOC Test", # Changed for MOC 5 player logic
+            description='Test MOC tournament type for 5 players',
+            tournament_category='MOC' # Added category
         )
+        self.moc_players = self.players[:5] # Select 5 players for MOC
 
         self.tournament = TournamentChart.objects.create(
             name='Test Tournament',
@@ -152,3 +156,106 @@ class ViewTests(TestCase):
         
         # Verify tournament was deleted
         self.assertFalse(TournamentChart.objects.filter(pk=self.tournament.pk).exists())
+
+    # Tests for TournamentCreateView GET
+    def test_get_tournament_create_view_no_notification_settings(self):
+        self.client.login(username='player_test', password='test123')
+        response = self.client.get(reverse('tournament_create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response.context['form'], TournamentCreationForm)
+        self.assertIn('notify_by_email', response.context['form'].fields)
+        self.assertIn('notify_by_signal', response.context['form'].fields)
+        self.assertIn('notify_by_matrix', response.context['form'].fields)
+        
+        self.assertIn('notification_backend_settings', response.context)
+        # Assuming default_if_none:False in template, or view initializes all to False if not found
+        self.assertFalse(response.context['notification_backend_settings'].get('email'))
+        self.assertFalse(response.context['notification_backend_settings'].get('signal'))
+        self.assertFalse(response.context['notification_backend_settings'].get('matrix'))
+
+    def test_get_tournament_create_view_with_notification_settings(self):
+        self.client.login(username='player_test', password='test123')
+        NotificationBackendSetting.objects.create(backend_name='email', is_active=True, config={'host': 'test.com'})
+        NotificationBackendSetting.objects.create(backend_name='signal', is_active=False, config={'url': 'http://signal.test'})
+        # Matrix backend not created, should default to False
+
+        response = self.client.get(reverse('tournament_create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response.context['form'], TournamentCreationForm)
+        self.assertIn('notification_backend_settings', response.context)
+        self.assertTrue(response.context['notification_backend_settings']['email'])
+        self.assertFalse(response.context['notification_backend_settings']['signal'])
+        self.assertFalse(response.context['notification_backend_settings'].get('matrix')) # Should be False as it's not active
+
+    # Test for TournamentCreateView POST
+    def test_post_tournament_create_view_success_with_notifications(self):
+        self.client.login(username='player_test', password='test123')
+        initial_tournament_count = TournamentChart.objects.count()
+
+        post_data = {
+            'name': 'Notify Test Tournament',
+            'date': timezone.now().date().isoformat(),
+            'archetype': self.archetype.id, # MOC archetype
+            'players': [p.id for p in self.moc_players], # For MOC player selection
+            'notify_by_email': 'on', # Checkbox value for True
+            # notify_by_signal is not sent, so it should be False
+            'notify_by_matrix': 'on', # Checkbox value for True
+        }
+        
+        # Ensure the selected archetype is MOC for the view's logic
+        self.assertEqual(self.archetype.tournament_category, 'MOC')
+
+        response = self.client.post(reverse('tournament_create'), data=post_data)
+        
+        # Check for redirect, url depends on success_url of CreateView, or if it's overridden
+        # Typically to tournament_detail or tournament_list
+        self.assertEqual(response.status_code, 302, f"POST failed with errors: {response.context.get('form').errors if response.context else 'No form in context'}") 
+        
+        self.assertEqual(TournamentChart.objects.count(), initial_tournament_count + 1)
+        new_tournament = TournamentChart.objects.latest('id')
+        self.assertEqual(new_tournament.name, 'Notify Test Tournament')
+        self.assertTrue(new_tournament.notify_by_email)
+        self.assertFalse(new_tournament.notify_by_signal) # Was not in POST data
+        self.assertTrue(new_tournament.notify_by_matrix)
+
+    def test_tournament_creation_preserves_name_date_after_archetype_selection(self):
+        self.client.login(username='player_test', password='test123')
+
+        # Step 1: Initial GET (optional, but good for completeness)
+        response_initial = self.client.get(reverse('tournament_create'))
+        self.assertEqual(response_initial.status_code, 200)
+
+        # Step 2: Simulate selecting an archetype with initial name and date
+        test_name = "My Preserved Tournament"
+        test_date_str = "2024-08-15" # Use ISO format string
+        
+        # Ensure self.archetype is the one created in setUp
+        self.assertIsNotNone(self.archetype, "Archetype not created in setUp")
+
+        archetype_selection_url = f"{reverse('tournament_create')}?archetype={self.archetype.id}&name={test_name}&date={test_date_str}"
+        response = self.client.get(archetype_selection_url)
+        self.assertEqual(response.status_code, 200)
+
+        # Assertions for form initial values
+        form = response.context.get('form')
+        self.assertIsNotNone(form, "Form not found in context")
+        self.assertIsInstance(form, TournamentCreationForm)
+        self.assertEqual(form.initial.get('name'), test_name)
+        self.assertEqual(form.initial.get('date'), test_date_str)
+
+        # Assertions for archetype in context
+        selected_archetype_in_context = response.context.get('archetype')
+        self.assertIsNotNone(selected_archetype_in_context, "Archetype not found in context")
+        self.assertEqual(selected_archetype_in_context.id, self.archetype.id)
+
+        # Assertions for HTML content (as a cross-check)
+        # Ensure the name and date input fields are correctly populated.
+        # The exact HTML structure depends on how {{ form.name }} and {{ form.date }} render.
+        # Django's default widgets for CharField and DateField will have `value="..."`.
+        self.assertContains(response, f'value="{test_name}"')
+        self.assertContains(response, f'value="{test_date_str}"')
+        
+        # Check if the correct archetype option is selected in the dropdown
+        # The select element's name is 'archetype' and id is 'archetype-select'
+        # The options are populated from context['archetypes']
+        self.assertContains(response, f'<option value="{self.archetype.id}" selected')

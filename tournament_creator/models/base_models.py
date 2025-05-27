@@ -62,6 +62,9 @@ class TournamentChart(models.Model):
     # Consider relation by pairs or by players based on tournament type
     players = models.ManyToManyField(Player, through='TournamentPlayer', blank=True)
     pairs = models.ManyToManyField(Pair, through='TournamentPair', blank=True)
+    notify_by_email = models.BooleanField(default=False)
+    notify_by_signal = models.BooleanField(default=False)
+    notify_by_matrix = models.BooleanField(default=False)
     def __str__(self):
         return self.name
     class Meta:

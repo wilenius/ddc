@@ -13,16 +13,65 @@
                     Tournament Settings
                 </div>
                 <div class="card-body">
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in form.non_field_errors %}
+                                <p>{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
                     <div class="mb-3">
-                        <label class="form-label">Tournament Name</label>
-                        <input type="text" name="name" class="form-control" required value="{{ request.GET.name|default:'' }}">
+                        {{ form.name.label_tag }}
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="invalid-feedback d-block">{{ form.name.errors|join:", " }}</div>{% endif %}
+                        {% if form.name.help_text %}<small class="form-text text-muted">{{ form.name.help_text }}</small>{% endif %}
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Tournament Date</label>
-                        <input type="date" name="date" class="form-control" required value="{{ request.GET.date|default:'' }}">
+                        {{ form.date.label_tag }}
+                        {{ form.date }}
+                        {% if form.date.errors %}<div class="invalid-feedback d-block">{{ form.date.errors|join:", " }}</div>{% endif %}
+                        {% if form.date.help_text %}<small class="form-text text-muted">{{ form.date.help_text }}</small>{% endif %}
                     </div>
+
+                    <div class="mb-3 form-check">
+                        {{ form.notify_by_email }}
+                        <label class="form-check-label" for="{{ form.notify_by_email.id_for_label }}">
+                            {{ form.notify_by_email.label }}
+                        </label>
+                        <div id="warning_notify_by_email" class="alert alert-warning mt-1" style="display: none;">
+                            The 'email' notification backend is not active globally. No emails will be sent until an admin activates it.
+                        </div>
+                        {% if form.notify_by_email.help_text %}<small class="form-text text-muted d-block">{{ form.notify_by_email.help_text }}</small>{% endif %}
+                        {% if form.notify_by_email.errors %}<div class="invalid-feedback d-block">{{ form.notify_by_email.errors|join:", " }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        {{ form.notify_by_signal }}
+                        <label class="form-check-label" for="{{ form.notify_by_signal.id_for_label }}">
+                            {{ form.notify_by_signal.label }}
+                        </label>
+                        <div id="warning_notify_by_signal" class="alert alert-warning mt-1" style="display: none;">
+                            The 'Signal' notification backend is not active globally. No Signal messages will be sent until an admin activates it.
+                        </div>
+                        {% if form.notify_by_signal.help_text %}<small class="form-text text-muted d-block">{{ form.notify_by_signal.help_text }}</small>{% endif %}
+                        {% if form.notify_by_signal.errors %}<div class="invalid-feedback d-block">{{ form.notify_by_signal.errors|join:", " }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        {{ form.notify_by_matrix }}
+                        <label class="form-check-label" for="{{ form.notify_by_matrix.id_for_label }}">
+                            {{ form.notify_by_matrix.label }}
+                        </label>
+                        <div id="warning_notify_by_matrix" class="alert alert-warning mt-1" style="display: none;">
+                            The 'Matrix' notification backend is not active globally. No Matrix messages will be sent until an admin activates it.
+                        </div>
+                        {% if form.notify_by_matrix.help_text %}<small class="form-text text-muted d-block">{{ form.notify_by_matrix.help_text }}</small>{% endif %}
+                        {% if form.notify_by_matrix.errors %}<div class="invalid-feedback d-block">{{ form.notify_by_matrix.errors|join:", " }}</div>{% endif %}
+                    </div>
+                    
                     <div class="mb-3">
-                        <label class="form-label">Tournament Type</label>
+                        <label class="form-label" for="archetype-select">Tournament Type</label>
                         <select name="archetype" id="archetype-select" class="form-select" required>
                             <option value="">Select a tournament type</option>
                             {% for archetype in archetypes %}
@@ -36,9 +85,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // Collect form values
         var name = document.querySelector('input[name="name"]').value;
         var date = document.querySelector('input[name="date"]').value;
+        var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
+        var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
+        var notifyByMatrix = document.querySelector('input[name="notify_by_matrix"]').checked;
         var url = "{% url 'tournament_create' %}?archetype=" + this.value +
                   "&name=" + encodeURIComponent(name) +
-                  "&date=" + encodeURIComponent(date);
+                  "&date=" + encodeURIComponent(date) +
+                  "&notify_by_email=" + notifyByEmail +
+                  "&notify_by_signal=" + notifyBySignal +
+                  "&notify_by_matrix=" + notifyByMatrix;
         window.location = url;
     });
 });
@@ -149,4 +204,102 @@ document.addEventListener('DOMContentLoaded', function() {
         </form>
     </div>
 </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const notificationBackendSettings = {
+        email: {{ notification_backend_settings.email|default_if_none:False|yesno:"true,false,false" }},
+        signal: {{ notification_backend_settings.signal|default_if_none:False|yesno:"true,false,false" }},
+        matrix: {{ notification_backend_settings.matrix|default_if_none:False|yesno:"true,false,false" }}
+    };
+
+    function checkNotificationWarning(checkboxId, warningId, backendName) {
+        const checkbox = document.getElementById(checkboxId);
+        const warningDiv = document.getElementById(warningId);
+        if (!checkbox || !warningDiv) {
+            // console.warn('Could not find checkbox or warning div for:', checkboxId, warningId);
+            return;
+        }
+
+        if (checkbox.checked && !notificationBackendSettings[backendName]) {
+            warningDiv.style.display = 'block';
+        } else {
+            warningDiv.style.display = 'none';
+        }
+    }
+
+    const notificationFields = [
+        { checkboxId: '{{ form.notify_by_email.id_for_label }}', warningId: 'warning_notify_by_email', backendName: 'email' },
+        { checkboxId: '{{ form.notify_by_signal.id_for_label }}', warningId: 'warning_notify_by_signal', backendName: 'signal' },
+        { checkboxId: '{{ form.notify_by_matrix.id_for_label }}', warningId: 'warning_notify_by_matrix', backendName: 'matrix' }
+    ];
+
+    notificationFields.forEach(field => {
+        const checkboxElement = document.getElementById(field.checkboxId);
+        if (checkboxElement) {
+            // Initial check on page load
+            checkNotificationWarning(field.checkboxId, field.warningId, field.backendName);
+            // Listener for changes
+            checkboxElement.addEventListener('change', function() {
+                checkNotificationWarning(field.checkboxId, field.warningId, field.backendName);
+            });
+        } else {
+            // console.warn('Could not find checkbox element for listener:', field.checkboxId);
+        }
+    });
+
+    // Updated archetype selection script to work with Django form fields
+    var select = document.getElementById('archetype-select');
+    if (select) {
+        select.addEventListener('change', function() {
+            // Try to get values from Django form fields if they exist
+            var nameValue = '';
+            var dateValue = '';
+
+            var nameField = document.getElementById('{{ form.name.id_for_label }}');
+            var dateField = document.getElementById('{{ form.date.id_for_label }}');
+
+            if (nameField) {
+                nameValue = nameField.value;
+            }
+            if (dateField) {
+                dateValue = dateField.value;
+            }
+            
+            // Fallback to request.GET if form fields not found or empty (e.g. initial load without POST data)
+            if (!nameValue && '{{ request.GET.name|default:"" }}') {
+                 nameValue = '{{ request.GET.name|escapejs }}';
+            }
+            if (!dateValue && '{{ request.GET.date|default:"" }}') {
+                 dateValue = '{{ request.GET.date|escapejs }}';
+            }
+
+
+            // Collect notification checkbox values
+            var notifyByEmail = false;
+            var notifyBySignal = false;
+            var notifyByMatrix = false;
+            
+            var emailField = document.getElementById('{{ form.notify_by_email.id_for_label }}');
+            var signalField = document.getElementById('{{ form.notify_by_signal.id_for_label }}');
+            var matrixField = document.getElementById('{{ form.notify_by_matrix.id_for_label }}');
+            
+            if (emailField) notifyByEmail = emailField.checked;
+            if (signalField) notifyBySignal = signalField.checked;
+            if (matrixField) notifyByMatrix = matrixField.checked;
+            
+            var url = "{% url 'tournament_create' %}?archetype=" + this.value +
+                      "&name=" + encodeURIComponent(nameValue) +
+                      "&date=" + encodeURIComponent(dateValue) +
+                      "&notify_by_email=" + notifyByEmail +
+                      "&notify_by_signal=" + notifyBySignal +
+                      "&notify_by_matrix=" + notifyByMatrix;
+            window.location = url;
+        });
+    }
+});
+</script>
 {% endblock %}

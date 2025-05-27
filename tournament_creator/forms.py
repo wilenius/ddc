@@ -1,7 +1,18 @@
 from django import forms
 from dal import autocomplete
-from .models.base_models import Player
+from .models.base_models import Player, TournamentChart
 from .models.notifications import NotificationBackendSetting # Added import
+
+class TournamentCreationForm(forms.ModelForm):
+    class Meta:
+        model = TournamentChart
+        fields = ['name', 'date', 'notify_by_email', 'notify_by_signal', 'notify_by_matrix']
+        widgets = {
+            'notify_by_email': forms.CheckboxInput,
+            'notify_by_signal': forms.CheckboxInput,
+            'notify_by_matrix': forms.CheckboxInput,
+            'date': forms.DateInput(attrs={'type': 'date'}),
+        }
 
 class PairForm(forms.Form):
     player1 = forms.ModelChoiceField(

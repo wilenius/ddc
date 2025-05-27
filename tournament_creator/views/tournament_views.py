@@ -76,6 +76,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                     date=request.POST['date'],
                     number_of_rounds=num_pairs+1,  # fallback, update to your real logic
                     number_of_courts=min(num_pairs, 4), # fallback, update to your real logic
+                    archetype=archetype,
                 )
                 tournament.pairs.set(pairs)
                 # pairs_archetype.generate_matchups(tournament, pairs)
@@ -92,6 +93,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             if moc_player_form.is_valid():
                 players = moc_player_form.cleaned_data['players']
                 tournament = self.get_form().save(commit=False)
+                tournament.archetype = archetype
                 tournament.number_of_rounds = archetype.calculate_rounds(len(players))
                 tournament.number_of_courts = archetype.calculate_courts(len(players))
                 tournament.save()
@@ -113,6 +115,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             return render(request, self.template_name, context)
         players = list(Player.objects.filter(id__in=player_ids).order_by('ranking'))
         tournament = self.get_form().save(commit=False)
+        tournament.archetype = archetype
         tournament.number_of_rounds = archetype.calculate_rounds(len(players))
         tournament.number_of_courts = archetype.calculate_courts(len(players))
         tournament.save()
@@ -192,6 +195,25 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
                 
         for score in context['player_scores']:
             score.player.display_name = score.player.get_display_name(all_players)
+
+        # --- BEGIN MODIFICATION ---
+        archetype = tournament.archetype
+        tournament_note = None
+        if archetype:
+            if archetype.name == "6-player Monarch of the Court":
+                tournament_note = "In this format, players ranked 4 and 6 will never play a game as partners."
+            elif archetype.name == "7-player Monarch of the Court":
+                tournament_note = "In this format, players ranked 1 and 2 never play a game as partners and are automatically assigned one win at the start."
+            elif archetype.name == "10-player Monarch of the Court":
+                tournament_note = "In this format, players ranked 1 and 2 never play a game as partners and are automatically assigned one win at the start."
+            elif archetype.name == "11-player Monarch of the Court":
+                tournament_note = "In this format, players ranked 1 and 2 never play a game as partners and are automatically assigned one win at the start."
+            elif archetype.name == "14-player Monarch of the Court":
+                tournament_note = "In this format, players ranked 1 and 2 never play a game as partners and are automatically assigned one win at the start."
+            elif archetype.name == "15-player Monarch of the Court":
+                tournament_note = "In this format, players ranked 1 and 2 never play a game as partners and are automatically assigned one win at the start."
+        context['tournament_note'] = tournament_note
+        # --- END MODIFICATION ---
             
         return context
         

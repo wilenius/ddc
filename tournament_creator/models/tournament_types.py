@@ -1,5 +1,6 @@
 from django.db import models
 from .base_models import TournamentArchetype, Matchup, Pair, Player
+from .scoring import PlayerScore
 from typing import List, Dict, Optional, Any
 
 # Function to map TournamentArchetype database objects to their code implementations
@@ -221,6 +222,20 @@ class MonarchOfTheCourt7(MoCTournamentArchetype):
             
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
+
+        # --- BEGIN MODIFICATION ---
+        player_rank_1 = sorted_players[0]
+        player_rank_2 = sorted_players[1]
+
+        for p in [player_rank_1, player_rank_2]:
+            score_record, created = PlayerScore.objects.get_or_create(
+                tournament=tournament_chart, 
+                player=p,
+                defaults={'wins': 0, 'matches_played': 0, 'total_point_difference': 0}
+            )
+            score_record.wins += 1
+            score_record.save()
+        # --- END MODIFICATION ---
         
         # Define schedule according to the 7-player format
         schedule = [
@@ -337,6 +352,20 @@ class MonarchOfTheCourt10(MoCTournamentArchetype):
             
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
+
+        # --- BEGIN MODIFICATION ---
+        player_rank_1 = sorted_players[0]
+        player_rank_2 = sorted_players[1]
+
+        for p in [player_rank_1, player_rank_2]:
+            score_record, created = PlayerScore.objects.get_or_create(
+                tournament=tournament_chart, 
+                player=p,
+                defaults={'wins': 0, 'matches_played': 0, 'total_point_difference': 0}
+            )
+            score_record.wins += 1
+            score_record.save()
+        # --- END MODIFICATION ---
         
         # Define schedule according to the 10-player format
         schedule = [
@@ -397,6 +426,20 @@ class MonarchOfTheCourt11(MoCTournamentArchetype):
             
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
+
+        # --- BEGIN MODIFICATION ---
+        player_rank_1 = sorted_players[0]
+        player_rank_2 = sorted_players[1]
+
+        for p in [player_rank_1, player_rank_2]:
+            score_record, created = PlayerScore.objects.get_or_create(
+                tournament=tournament_chart, 
+                player=p,
+                defaults={'wins': 0, 'matches_played': 0, 'total_point_difference': 0}
+            )
+            score_record.wins += 1
+            score_record.save()
+        # --- END MODIFICATION ---
         
         # Define schedule according to the 11-player format
         # Note: "X" in the markdown means no match on that court
@@ -591,6 +634,20 @@ class MonarchOfTheCourt14(MoCTournamentArchetype):
             
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
+
+        # --- BEGIN MODIFICATION ---
+        player_rank_1 = sorted_players[0]
+        player_rank_2 = sorted_players[1]
+
+        for p in [player_rank_1, player_rank_2]:
+            score_record, created = PlayerScore.objects.get_or_create(
+                tournament=tournament_chart, 
+                player=p,
+                defaults={'wins': 0, 'matches_played': 0, 'total_point_difference': 0}
+            )
+            score_record.wins += 1
+            score_record.save()
+        # --- END MODIFICATION ---
         
         # Define schedule according to the 14-player format
         # Note: "X" in the markdown means no match on that court
@@ -660,6 +717,20 @@ class MonarchOfTheCourt15(MoCTournamentArchetype):
             
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
+
+        # --- BEGIN MODIFICATION ---
+        player_rank_1 = sorted_players[0]
+        player_rank_2 = sorted_players[1]
+
+        for p in [player_rank_1, player_rank_2]:
+            score_record, created = PlayerScore.objects.get_or_create(
+                tournament=tournament_chart, 
+                player=p,
+                defaults={'wins': 0, 'matches_played': 0, 'total_point_difference': 0}
+            )
+            score_record.wins += 1
+            score_record.save()
+        # --- END MODIFICATION ---
         
         # Define schedule according to the 15-player format
         # Note: "X" in the markdown means no match on that court

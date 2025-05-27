@@ -167,6 +167,17 @@
             </div>
         </div>
 
+        {% if tournament_note %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Tournament Notes</h5>
+            </div>
+            <div class="card-body">
+                <p>{{ tournament_note }}</p>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Recent Activity -->
         <div class="card mb-4">
             <div class="card-header">

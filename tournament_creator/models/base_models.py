@@ -62,6 +62,7 @@ class TournamentChart(models.Model):
     # Consider relation by pairs or by players based on tournament type
     players = models.ManyToManyField(Player, through='TournamentPlayer', blank=True)
     pairs = models.ManyToManyField(Pair, through='TournamentPair', blank=True)
+    archetype = models.ForeignKey('TournamentArchetype', on_delete=models.SET_NULL, null=True, blank=True, related_name='tournaments')
     def __str__(self):
         return self.name
     class Meta:

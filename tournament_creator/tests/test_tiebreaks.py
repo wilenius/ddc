@@ -143,7 +143,7 @@ class TiebreakTests(TestCase):
         player_scores = list(PlayerScore.objects.filter(tournament=self.tournament))
         
         # Apply tiebreaks
-        sorted_scores = self.view.apply_tiebreaks(self.tournament, player_scores)
+        sorted_scores, _ = self.view.apply_tiebreaks(self.tournament, player_scores)
         
         # Verify results: The order should be determined by point differential in head-to-head
         # Player1: +6 PD (vs Player2) - 2 PD (vs Player3) = +4 PD
@@ -251,7 +251,7 @@ class TiebreakTests(TestCase):
         player_scores = list(PlayerScore.objects.filter(tournament=self.tournament))
         
         # Apply tiebreaks
-        sorted_scores = self.view.apply_tiebreaks(self.tournament, player_scores)
+        sorted_scores, _ = self.view.apply_tiebreaks(self.tournament, player_scores)
         
         # Verify results by head-to-head wins
         # Player1: 2 H2H wins
@@ -325,7 +325,7 @@ class TiebreakTests(TestCase):
         player_scores = list(PlayerScore.objects.filter(tournament=self.tournament))
         
         # Apply tiebreaks
-        sorted_scores = self.view.apply_tiebreaks(self.tournament, player_scores)
+        sorted_scores, _ = self.view.apply_tiebreaks(self.tournament, player_scores)
         
         # Find tied players in the sorted order (should be Player1, Player2)
         tied_players = sorted_scores[:2]
@@ -402,7 +402,7 @@ class TiebreakTests(TestCase):
         player_scores = list(PlayerScore.objects.filter(tournament=self.tournament))
         
         # Apply tiebreaks
-        sorted_scores = self.view.apply_tiebreaks(self.tournament, player_scores)
+        sorted_scores, _ = self.view.apply_tiebreaks(self.tournament, player_scores)
         
         # Verify that Player1 is ranked higher (should use overall PD as tiebreaker)
         self.assertEqual(sorted_scores[0].player.id, self.players[0].id,
@@ -578,7 +578,7 @@ class TiebreakTests(TestCase):
         player_scores = list(PlayerScore.objects.filter(tournament=self.tournament))
         
         # Apply tiebreaks
-        sorted_scores = self.view.apply_tiebreaks(self.tournament, player_scores)
+        sorted_scores, _ = self.view.apply_tiebreaks(self.tournament, player_scores)
         
         # Extract the tied players (should be Players 1, 2, 3)
         tied_players = [score for score in sorted_scores if score.player.id in 
@@ -696,7 +696,7 @@ class TiebreakTests(TestCase):
         player_scores = list(PlayerScore.objects.filter(tournament=self.tournament))
         
         # Apply tiebreaks
-        sorted_scores = self.view.apply_tiebreaks(self.tournament, player_scores)
+        sorted_scores, _ = self.view.apply_tiebreaks(self.tournament, player_scores)
         
         # Extract the tied players
         tied_players = [score for score in sorted_scores if score.player.id in 
@@ -799,7 +799,7 @@ class TiebreakTests(TestCase):
         player_scores = list(PlayerScore.objects.filter(tournament=self.tournament))
         
         # Apply tiebreaks
-        sorted_scores = self.view.apply_tiebreaks(self.tournament, player_scores)
+        sorted_scores, _ = self.view.apply_tiebreaks(self.tournament, player_scores)
         
         # Check that the results make sense (we don't know exact ordering without manual calculation,
         # but we can check that sorting was applied and all players are present)
@@ -911,7 +911,7 @@ class TiebreakTests(TestCase):
         player_scores = list(PlayerScore.objects.filter(tournament=self.tournament))
         
         # Apply tiebreaks
-        sorted_scores = self.view.apply_tiebreaks(self.tournament, player_scores)
+        sorted_scores, _ = self.view.apply_tiebreaks(self.tournament, player_scores)
         
         # Extract the tied players
         tied_players = [score for score in sorted_scores if score.player.id in 

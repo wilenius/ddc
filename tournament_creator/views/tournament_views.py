@@ -151,10 +151,13 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         context['matchups'] = Matchup.objects.filter(tournament_chart=tournament).order_by('round_number', 'court_number')
         
         # Get raw player scores - we'll sort with tiebreaks
-        player_scores = list(PlayerScore.objects.filter(tournament=tournament))
+        player_scores_qs = PlayerScore.objects.filter(tournament=tournament)
         
         # Apply advanced tiebreak sorting
-        player_scores = self.apply_tiebreaks(tournament, player_scores)
+        # sorted_player_scores, reasoning_log = self.apply_tiebreaks(tournament, list(player_scores_qs))
+        # For now, we'll call it and ignore the reasoning log in this view context
+        # The new test file will specifically check the reasoning_log
+        player_scores, _ = self.apply_tiebreaks(tournament, list(player_scores_qs))
         
         # Make sure all scores have tiebreak attributes (even if not in a tie)
         for score in player_scores:
@@ -198,6 +201,7 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
     def apply_tiebreaks(self, tournament, player_scores):
         """
         Apply proper tiebreak analysis to sort players with equal wins.
+        Returns a tuple: (sorted_player_scores, reasoning_log)
         Tiebreak order:
         1. Overall wins
         2. Head-to-head record between tied players
@@ -206,31 +210,42 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         5. Point differential in games against teams that placed above the initial set of tied teams
         6. Point differential in games against all teams in the pool
         """
+        reasoning_log = []
         # First sort by wins and total point differential (basic sort)
+        # This also serves as the final tiebreaker if all else is equal.
         sorted_scores = sorted(player_scores, key=lambda x: (-x.wins, -x.total_point_difference))
+        reasoning_log.append(f"Initial sort based on wins, then total point difference.")
         
         # Look for groups of players with the same number of wins
         groups_of_tied_players = []
         current_group = []
         current_wins = None
         
-        for score in sorted_scores:
+        # Use a temporary list for finding groups to avoid modifying sorted_scores directly yet
+        temp_sorted_for_grouping = list(sorted_scores)
+
+        for score in temp_sorted_for_grouping:
             if current_wins is None or score.wins == current_wins:
                 current_group.append(score)
                 current_wins = score.wins
             else:
                 if len(current_group) > 1:  # Only record groups with ties
                     groups_of_tied_players.append(list(current_group))
+                    player_names = ", ".join([ps.player.first_name for ps in current_group])
+                    reasoning_log.append(f"Group tied with {current_group[0].wins} wins: {player_names}.")
                 current_group = [score]
                 current_wins = score.wins
         
         # Add the last group if it has ties
         if len(current_group) > 1:
             groups_of_tied_players.append(list(current_group))
+            player_names = ", ".join([ps.player.first_name for ps in current_group])
+            reasoning_log.append(f"Group tied with {current_group[0].wins} wins: {player_names}.")
         
         # No ties, return the basic sort
         if not groups_of_tied_players:
-            return sorted_scores
+            reasoning_log.append("No ties found based on wins. Initial sort is final.")
+            return sorted_scores, reasoning_log
             
         # Get all matchups in this tournament with scores
         all_matchups = Matchup.objects.filter(
@@ -238,132 +253,274 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
             scores__isnull=False
         ).prefetch_related('scores').distinct()
         
-        # Get players who placed above our tied groups (for tiebreak steps 4-5)
-        above_player_ids = set()
-        current_win_level = None
-        for score in sorted_scores:
-            if current_win_level is None:
-                current_win_level = score.wins
-            elif score.wins < current_win_level:
-                # We've moved to a new, lower win level
-                break
-            
-            # Add players at the current (highest) win level 
-            above_player_ids.add(score.player.id)
-        
         # Process each group of tied players
-        for group in groups_of_tied_players:
-            # Get all matchups involving these players
+        for group_idx, group in enumerate(groups_of_tied_players):
+            group_player_names = ", ".join([ps.player.first_name for ps in group])
+            reasoning_log.append(f"\nProcessing tiebreak for group: {group_player_names} (all with {group[0].wins} wins).")
+
             tied_player_ids = [score.player.id for score in group]
             
+            # --- Determine players "above" this specific group for tiebreak steps 4-5 ---
+            # "Above" means players who have more wins than the current group,
+            # or players who had the same number of wins but were resolved higher in a previous tiebreak group.
+            above_player_ids_for_group = set()
+            processed_higher_player_ids = set()
+
+            # Collect IDs from groups processed earlier (these are definitively higher)
+            for i in range(group_idx):
+                for score in groups_of_tied_players[i]:
+                    processed_higher_player_ids.add(score.player.id)
+            
+            # Collect IDs from players with strictly more wins than the current group
+            for score in sorted_scores: # sorted_scores is already sorted by wins
+                if score.wins > group[0].wins:
+                    above_player_ids_for_group.add(score.player.id)
+                elif score.wins == group[0].wins:
+                    # If they have the same wins but are in `processed_higher_player_ids`
+                    # (meaning they were part of an earlier, now resolved, tie of the same win count)
+                    if score.player.id in processed_higher_player_ids:
+                         above_player_ids_for_group.add(score.player.id)
+                else: # score.wins < group[0].wins
+                    break # No need to check further down
+
+            if above_player_ids_for_group:
+                above_player_names_for_group = ", ".join([Player.objects.get(id=pid).first_name for pid in above_player_ids_for_group])
+                reasoning_log.append(f"Players considered 'above' this group for tiebreaks 4 & 5: {above_player_names_for_group}.")
+            else:
+                reasoning_log.append(f"No players are ranked 'above' this group for tiebreaks 4 & 5.")
+
             # Create a record structure to hold all tiebreak criteria
             tiebreak_records = {player_id: {
                 'h2h_wins': 0,                 # Head-to-head wins (criterion 2)
                 'h2h_point_diff': 0,           # Head-to-head point diff (criterion 3)
                 'above_team_wins': 0,          # Wins against higher-placed teams (criterion 4)
                 'above_team_point_diff': 0,    # Point diff against higher-placed teams (criterion 5)
-                'total_point_diff': 0          # Point diff against all teams (criterion 6, already in score object)
-            } for player_id in tied_player_ids}
+                'total_point_diff': group_player_score.total_point_difference # Criterion 6 (already in score object)
+            } for player_id in tied_player_ids for group_player_score in group if group_player_score.player.id == player_id}
             
+            reasoning_log.append("Tiebreak Criterion 2 & 3: Head-to-Head within the group.")
             # Check each matchup to see if it applies to our tiebreak criteria
             for matchup in all_matchups:
                 # Identify players in team 1 and team 2
+                match_players_involved_names = []
                 team1_players = set()
                 team2_players = set()
-                if matchup.pair1_player1_id: team1_players.add(matchup.pair1_player1_id)
-                if matchup.pair1_player2_id: team1_players.add(matchup.pair1_player2_id)
-                if matchup.pair2_player1_id: team2_players.add(matchup.pair2_player1_id)
-                if matchup.pair2_player2_id: team2_players.add(matchup.pair2_player2_id)
+
+                if matchup.pair1_player1: 
+                    team1_players.add(matchup.pair1_player1_id)
+                    match_players_involved_names.append(matchup.pair1_player1.first_name)
+                if matchup.pair1_player2: 
+                    team1_players.add(matchup.pair1_player2_id)
+                    match_players_involved_names.append(matchup.pair1_player2.first_name)
+                if matchup.pair2_player1: 
+                    team2_players.add(matchup.pair2_player1_id)
+                    match_players_involved_names.append(matchup.pair2_player1.first_name)
+                if matchup.pair2_player2: 
+                    team2_players.add(matchup.pair2_player2_id)
+                    match_players_involved_names.append(matchup.pair2_player2.first_name)
                 
+                match_info_str = f"Match: {' & '.join(match_players_involved_names[:len(team1_players)])} vs {' & '.join(match_players_involved_names[len(team1_players):])}."
+
                 # Find tied players in this matchup
                 tied_in_team1 = team1_players.intersection(tied_player_ids)
                 tied_in_team2 = team2_players.intersection(tied_player_ids)
                 
-                # To count for head-to-head criteria, the match must involve players from the tied group
-                # on both sides of the match (as opponents, not just as partners)
                 is_h2h_match = len(tied_in_team1) > 0 and len(tied_in_team2) > 0
                 
-                # Identify players from higher-placed teams
-                above_in_team1 = team1_players.intersection(above_player_ids)
-                above_in_team2 = team2_players.intersection(above_player_ids)
+                # Identify players from 'above_player_ids_for_group'
+                above_in_team1 = team1_players.intersection(above_player_ids_for_group)
+                above_in_team2 = team2_players.intersection(above_player_ids_for_group)
                 
-                # Process all sets in this matchup
                 for set_score in matchup.scores.all():
                     team1_won = set_score.winning_team == 1
-                    
-                    # Process each tied player's results
+                    set_pd = set_score.point_difference # Absolute PD for the set
+
                     for player_id in tied_player_ids:
                         on_team1 = player_id in team1_players
                         on_team2 = player_id in team2_players
                         
                         if not (on_team1 or on_team2):
                             continue  # This player wasn't in this match
-                        
-                        # Calculate point differential from this player's perspective
-                        pd = set_score.point_difference
-                        if (on_team1 and not team1_won) or (on_team2 and team1_won):
-                            pd = -pd  # This player's team lost, so negate the PD
+
+                        # Player's perspective point differential for this set
+                        player_set_pd = 0
+                        if on_team1: player_set_pd = set_pd if team1_won else -set_pd
+                        if on_team2: player_set_pd = -set_pd if team1_won else set_pd
                             
                         # Update head-to-head records (criterion 2-3)
                         if is_h2h_match:
+                            # Log only once per match for H2H consideration
+                            # reasoning_log.append(f"  {match_info_str} Considered for H2H.")
                             if (on_team1 and team1_won) or (on_team2 and not team1_won):
                                 tiebreak_records[player_id]['h2h_wins'] += 1
-                            tiebreak_records[player_id]['h2h_point_diff'] += pd
-                            
-                        # Wins against higher-placed teams (criterion 4-5)
-                        # If this player played against higher-placed teams, count it
-                        opponent_has_above = False
-                        if on_team1 and above_in_team2:
-                            opponent_has_above = True
-                        elif on_team2 and above_in_team1:
-                            opponent_has_above = True
-                            
+                            tiebreak_records[player_id]['h2h_point_diff'] += player_set_pd
+                        
+                        # Wins/PD against 'above' teams (criterion 4-5)
+                        # This player (from tied group) must be playing AGAINST an 'above' player
+                        opponent_has_above = (on_team1 and len(above_in_team2) > 0) or \
+                                             (on_team2 and len(above_in_team1) > 0)
+
                         if opponent_has_above:
+                            # Log only once per match for vs Above consideration
+                            # reasoning_log.append(f"  {match_info_str} Considered for 'vs Above'.")
                             if (on_team1 and team1_won) or (on_team2 and not team1_won):
                                 tiebreak_records[player_id]['above_team_wins'] += 1
-                            tiebreak_records[player_id]['above_team_point_diff'] += pd
-            
-            # Apply total point differential from all games
-            for score in group:
-                tiebreak_records[score.player.id]['total_point_diff'] = score.total_point_difference
-            
-            # Sort the tied players using all tiebreak criteria
+                            tiebreak_records[player_id]['above_team_point_diff'] += player_set_pd
+
+            for p_id in tied_player_ids:
+                p_name = Player.objects.get(id=p_id).first_name
+                reasoning_log.append(f"  {p_name} (H2H Wins: {tiebreak_records[p_id]['h2h_wins']}, H2H PD: {tiebreak_records[p_id]['h2h_point_diff']})")
+
+            reasoning_log.append("Tiebreak Criterion 4 & 5: Record against 'above' teams.")
+            for p_id in tied_player_ids:
+                p_name = Player.objects.get(id=p_id).first_name
+                reasoning_log.append(f"  {p_name} (vs Above Wins: {tiebreak_records[p_id]['above_team_wins']}, vs Above PD: {tiebreak_records[p_id]['above_team_point_diff']})")
+
+            reasoning_log.append("Tiebreak Criterion 6: Total point differential (already calculated in PlayerScore).")
+            for p_id in tied_player_ids:
+                 p_name = Player.objects.get(id=p_id).first_name
+                 reasoning_log.append(f"  {p_name} (Total PD: {tiebreak_records[p_id]['total_point_diff']})")
+
+            # Sort the players within this group using all tiebreak criteria
+            # The key function now directly uses the calculated tiebreak_records
             group.sort(key=lambda score: (
-                -tiebreak_records[score.player.id]['h2h_wins'],           # Criterion 2: H2H wins
-                -tiebreak_records[score.player.id]['h2h_point_diff'],     # Criterion 3: H2H point diff
-                -tiebreak_records[score.player.id]['above_team_wins'],    # Criterion 4: Wins vs above teams
-                -tiebreak_records[score.player.id]['above_team_point_diff'], # Criterion 5: PD vs above teams
-                -tiebreak_records[score.player.id]['total_point_diff']    # Criterion 6: Total PD
+                -tiebreak_records[score.player.id]['h2h_wins'],
+                -tiebreak_records[score.player.id]['h2h_point_diff'],
+                -tiebreak_records[score.player.id]['above_team_wins'],
+                -tiebreak_records[score.player.id]['above_team_point_diff'],
+                -tiebreak_records[score.player.id]['total_point_diff']
             ))
             
-            # Store the tiebreak info for display
-            for score in group:
-                player_id = score.player.id
-                score.h2h_wins = tiebreak_records[player_id]['h2h_wins']
-                score.h2h_point_diff = tiebreak_records[player_id]['h2h_point_diff']
-                score.above_wins = tiebreak_records[player_id]['above_team_wins']
-                score.above_pd = tiebreak_records[player_id]['above_team_point_diff']
+            sorted_group_names = ", ".join([ps.player.first_name for ps in group])
+            reasoning_log.append(f"Sorted order for this group: {sorted_group_names}.")
+
+            # Store the tiebreak info back into the score objects for display or further use
+            for score_item in group:
+                player_id = score_item.player.id
+                score_item.h2h_wins = tiebreak_records[player_id]['h2h_wins']
+                score_item.h2h_point_diff = tiebreak_records[player_id]['h2h_point_diff']
+                score_item.above_wins = tiebreak_records[player_id]['above_team_wins'] # Corrected attribute name
+                score_item.above_pd = tiebreak_records[player_id]['above_team_point_diff'] # Corrected attribute name
         
-        # Rebuild the complete standings with tiebreak-sorted groups
+        # Rebuild the complete standings list using the (potentially) reordered groups
         final_standings = []
         
-        # Map of wins to groups of tied players
-        tied_groups_by_wins = {
-            group[0].wins: group for group in groups_of_tied_players
-        }
         
-        # Rebuild the sorted list with tiebreak groups
-        for score in sorted_scores:
-            if score.wins in tied_groups_by_wins and len(tied_groups_by_wins[score.wins]) > 0:
-                # Add all players from this tied group
-                tied_group = tied_groups_by_wins[score.wins]
-                final_standings.extend(tied_group)
-                tied_groups_by_wins[score.wins] = []  # Mark as processed
-            elif score not in final_standings:
-                # Add individual player not in a tie group
-                final_standings.append(score)
+        # This reconstruction logic needs to be careful.
+        # `sorted_scores` is the initial overall sort.
+        # `groups_of_tied_players` contains sub-lists that have been internally re-sorted.
+        # We need to replace the segments in `sorted_scores` with these re-sorted groups.
+
+        # Create a dictionary from sorted_scores for easy lookup by ID
+        # This isn't strictly necessary if we iterate carefully, but can simplify reconstruction.
         
-        return final_standings
+        # A simpler way to reconstruct: Iterate through the original `sorted_scores` (which has the overall structure).
+        # If a player in `sorted_scores` is the first player of a group in `groups_of_tied_players`
+        # (matched by wins and then checking if they are part of that group),
+        # then extend `final_standings` with the re-sorted group and skip ahead in `sorted_scores`.
+        
+        # Create a map of player_id to its PlayerScore object for easy access
+        # This helps in rebuilding the final_standings list correctly.
+        player_score_map = {ps.player.id: ps for ps in player_scores}
+
+        # Flatten the groups_of_tied_players into a single list of player_ids in their new sorted order
+        resolved_tied_player_ids_in_order = []
+        for group in groups_of_tied_players:
+            for ps in group:
+                resolved_tied_player_ids_in_order.append(ps.player.id)
+
+        # Players not in any tie group
+        non_tied_player_ids = [ps.player.id for ps in sorted_scores if ps.player.id not in resolved_tied_player_ids_in_order]
+
+        # Reconstruct final_standings:
+        # Start with players who were never in a tie group, in their original sorted order.
+        # Then, insert the resolved tied groups in their correct win-based positions.
+        
+        # This is tricky. The `groups_of_tied_players` are already sorted by their win levels
+        # because they were derived from `sorted_scores`.
+        # The internal sort only reorders *within* those win levels.
+
+        # Let's try to build `final_standings` by iterating through `sorted_scores` (the initial sort)
+        # and replacing segments with the re-sorted groups from `groups_of_tied_players`.
+        
+        final_standings_player_ids = [ps.player.id for ps in sorted_scores] # Get IDs in initial sorted order
+        
+        for group in groups_of_tied_players:
+            if not group: continue
+            
+            # Find the starting index of this group in the `final_standings_player_ids`
+            # This assumes the first player of the `group` (before its internal tiebreak sort)
+            # can be found in `final_standings_player_ids`.
+            # This is not robust if the group itself was reordered significantly.
+
+            # A more robust way:
+            # Create the final list by processing `sorted_scores`.
+            # If a score from `sorted_scores` is part of a group in `groups_of_tied_players`,
+            # ensure that the entire re-sorted group is inserted, and skip already added players.
+            
+            # `groups_of_tied_players` contains lists of PlayerScore objects.
+            # These objects are the same instances as in `player_scores` and `sorted_scores`.
+            # The `group.sort(...)` operation sorts these lists *in place*.
+            
+            # So, `sorted_scores` itself is NOT what we should return if ties were broken.
+            # We need to construct `final_standings` by inserting the re-sorted `group` lists
+            # into the correct positions based on their win counts.
+
+        # The `sorted_scores` list already has players sorted by wins.
+        # The `groups_of_tied_players` list contains the sub-groups that were tied by wins.
+        # Each `group` in `groups_of_tied_players` has been sorted in place by the tiebreak criteria.
+
+        # We can iterate through the `sorted_scores` list.
+        # If a `PlayerScore` object is encountered that is the first element of one of the
+        # (now sorted) `group` lists, we append that entire group to `final_standings`
+        # and then mark that group as processed (e.g., by setting a flag or removing it).
+        # If the `PlayerScore` object is not part of any unprocessed tied group, append it individually.
+
+        processed_group_indices = [False] * len(groups_of_tied_players)
+        output_final_standings = []
+        
+        temp_scores_iter = iter(sorted_scores) # Initial overall sort
+        
+        try:
+            current_score_from_iter = next(temp_scores_iter)
+            while True:
+                added_group = False
+                for i, group in enumerate(groups_of_tied_players):
+                    if not processed_group_indices[i] and group and current_score_from_iter.player.id == group[0].player.id:
+                        # This `current_score_from_iter` is the start of a (re-sorted) tied group.
+                        # Add the entire re-sorted group.
+                        output_final_standings.extend(group)
+                        processed_group_indices[i] = True
+                        
+                        # Advance the iterator past the players we just added from the group.
+                        for _ in range(len(group)):
+                            current_score_from_iter = next(temp_scores_iter, None)
+                        if current_score_from_iter is None: break # End of all scores
+                        added_group = True
+                        break # Restart search for groups with the new current_score_from_iter
+                
+                if current_score_from_iter is None: break
+
+                if not added_group:
+                    # This player was not the start of any (remaining) tied group. Add individually.
+                    # This handles players not in ties, or players in a tied group already added.
+                    # To prevent duplicates, ensure this player isn't already in output_final_standings
+                    # (which can happen if they were part of an already added group but not the head).
+                    # This check is essential because `current_score_from_iter` might be a later element
+                    # of a group that was just added.
+                    
+                    # More simply: if a player is already added (via a group), just advance iterator.
+                    player_already_added = any(ps.player.id == current_score_from_iter.player.id for ps in output_final_standings)
+                    if not player_already_added:
+                         output_final_standings.append(current_score_from_iter)
+                    current_score_from_iter = next(temp_scores_iter, None) # Advance to next score
+                    if current_score_from_iter is None: break
+        except StopIteration:
+            pass
+
+        final_standings = output_final_standings
+        reasoning_log.append(f"\nFinal sorted order: {', '.join([ps.player.first_name for ps in final_standings])}")
+        return final_standings, reasoning_log
 
 class TournamentDeleteView(AdminRequiredMixin, DeleteView):
     model = TournamentChart

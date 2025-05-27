@@ -11,8 +11,9 @@ from ..models.base_models import TournamentChart, Matchup, TournamentArchetype, 
 from ..models.tournament_types import PairsTournamentArchetype
 from ..models.scoring import MatchScore, PlayerScore
 from ..models.logging import MatchResultLog
+from ..models.notifications import NotificationBackendSetting # Added import
 from ..views.auth import SpectatorAccessMixin, PlayerOrAdminRequiredMixin, AdminRequiredMixin
-from ..forms import PairFormSet, MoCPlayerSelectForm
+from ..forms import PairFormSet, MoCPlayerSelectForm, TournamentCreationForm # Added import
 from ..notifications import send_email_notification, send_signal_notification
 
 class TournamentListView(SpectatorAccessMixin, ListView):
@@ -22,13 +23,17 @@ class TournamentListView(SpectatorAccessMixin, ListView):
 
 class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
     model = TournamentChart
+    form_class = TournamentCreationForm # Changed from fields
     template_name = 'tournament_creator/tournament_create.html'
-    fields = ['name', 'date']
     success_url = reverse_lazy('tournament_list')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['players'] = Player.objects.all().order_by('ranking')
+        notification_settings = NotificationBackendSetting.objects.all()
+        context['notification_backend_settings'] = {
+            setting.backend_name: setting.is_active for setting in notification_settings
+        }
         # Custom sorting: category first, then by player count
         archetypes = list(TournamentArchetype.objects.all())
         archetypes.sort(key=lambda x: (x.tournament_category, x.player_count, x.name))
@@ -88,10 +93,11 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                 })
         # ----- MOC -----
         if hasattr(archetype, 'tournament_category') and archetype.tournament_category == 'MOC':
+            form = self.get_form_class()(request.POST)
             moc_player_form = MoCPlayerSelectForm(request.POST)
-            if moc_player_form.is_valid():
+            if form.is_valid() and moc_player_form.is_valid():
                 players = moc_player_form.cleaned_data['players']
-                tournament = self.get_form().save(commit=False)
+                tournament = form.save(commit=False)
                 tournament.number_of_rounds = archetype.calculate_rounds(len(players))
                 tournament.number_of_courts = archetype.calculate_courts(len(players))
                 tournament.save()
@@ -103,23 +109,40 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                 context = self.get_context_data(object=None)
                 context['archetype'] = archetype
                 context['moc_player_form'] = moc_player_form
+                # Add form to context if it's invalid
+                if not form.is_valid():
+                    context['form'] = form
                 return render(request, 'tournament_creator/tournament_create.html', context)
         # ----- GENERIC (should not happen for current archetypes, fallback) -----
-        player_ids = self.request.POST.getlist('players')
-        if not player_ids:
-            messages.error(self.request, "Please select players for the tournament")
+        form = self.get_form_class()(request.POST)
+        if form.is_valid():
+            player_ids = self.request.POST.getlist('players')
+            if not player_ids:
+                messages.error(self.request, "Please select players for the tournament")
+                context = self.get_context_data(object=None)
+                context['archetype'] = archetype
+                context['form'] = form # Add form to context
+                return render(request, self.template_name, context)
+            players = list(Player.objects.filter(id__in=player_ids).order_by('ranking'))
+            tournament = form.save(commit=False)
+            tournament.number_of_rounds = archetype.calculate_rounds(len(players))
+            tournament.number_of_courts = archetype.calculate_courts(len(players))
+            tournament.save()
+            tournament.players.set(players)
+            archetype.generate_matchups(tournament, players)
+            messages.success(self.request, "Tournament created successfully!")
+            return redirect('tournament_detail', pk=tournament.pk)
+        else:
+            # Form is invalid, re-render with errors
             context = self.get_context_data(object=None)
             context['archetype'] = archetype
+            context['form'] = form # Add form to context
+            # Need to handle MOC player form if applicable, similar to GET
+            if archetype_id:
+                moc_archetype = TournamentArchetype.objects.get(id=archetype_id)
+                if hasattr(moc_archetype, 'tournament_category') and moc_archetype.tournament_category == 'MOC':
+                    context['moc_player_form'] = MoCPlayerSelectForm(request.POST or None) # Keep submitted data
             return render(request, self.template_name, context)
-        players = list(Player.objects.filter(id__in=player_ids).order_by('ranking'))
-        tournament = self.get_form().save(commit=False)
-        tournament.number_of_rounds = archetype.calculate_rounds(len(players))
-        tournament.number_of_courts = archetype.calculate_courts(len(players))
-        tournament.save()
-        tournament.players.set(players)
-        archetype.generate_matchups(tournament, players)
-        messages.success(self.request, "Tournament created successfully!")
-        return redirect('tournament_detail', pk=tournament.pk)
 
     def get(self, request, *args, **kwargs):
         self.object = None  # required for CreateView context
@@ -452,7 +475,11 @@ def record_match_result(request, tournament_id, matchup_id):
         
         # Send email notification
         try:
-            send_email_notification(user_who_recorded=request.user, match_result_log_instance=match_log_entry)
+            send_email_notification(
+                user_who_recorded=request.user,
+                match_result_log_instance=match_log_entry,
+                tournament_chart_instance=tournament  # Pass the tournament instance
+            )
         except Exception as e_notify:
             # Log notification error specifically, but don't let it break the main flow
             import logging
@@ -463,7 +490,11 @@ def record_match_result(request, tournament_id, matchup_id):
 
         # Send Signal notification
         try:
-            send_signal_notification(user_who_recorded=request.user, match_result_log_instance=match_log_entry)
+            send_signal_notification(
+                user_who_recorded=request.user,
+                match_result_log_instance=match_log_entry,
+                tournament_chart_instance=tournament  # Pass the tournament instance
+            )
         except Exception as e_notify_signal:
             import logging # Ensure logger is available
             logger = logging.getLogger(__name__)

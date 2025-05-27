@@ -85,9 +85,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // Collect form values
         var name = document.querySelector('input[name="name"]').value;
         var date = document.querySelector('input[name="date"]').value;
+        var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
+        var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
+        var notifyByMatrix = document.querySelector('input[name="notify_by_matrix"]').checked;
         var url = "{% url 'tournament_create' %}?archetype=" + this.value +
                   "&name=" + encodeURIComponent(name) +
-                  "&date=" + encodeURIComponent(date);
+                  "&date=" + encodeURIComponent(date) +
+                  "&notify_by_email=" + notifyByEmail +
+                  "&notify_by_signal=" + notifyBySignal +
+                  "&notify_by_matrix=" + notifyByMatrix;
         window.location = url;
     });
 });
@@ -272,9 +278,25 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
 
+            // Collect notification checkbox values
+            var notifyByEmail = false;
+            var notifyBySignal = false;
+            var notifyByMatrix = false;
+            
+            var emailField = document.getElementById('{{ form.notify_by_email.id_for_label }}');
+            var signalField = document.getElementById('{{ form.notify_by_signal.id_for_label }}');
+            var matrixField = document.getElementById('{{ form.notify_by_matrix.id_for_label }}');
+            
+            if (emailField) notifyByEmail = emailField.checked;
+            if (signalField) notifyBySignal = signalField.checked;
+            if (matrixField) notifyByMatrix = matrixField.checked;
+            
             var url = "{% url 'tournament_create' %}?archetype=" + this.value +
                       "&name=" + encodeURIComponent(nameValue) +
-                      "&date=" + encodeURIComponent(dateValue);
+                      "&date=" + encodeURIComponent(dateValue) +
+                      "&notify_by_email=" + notifyByEmail +
+                      "&notify_by_signal=" + notifyBySignal +
+                      "&notify_by_matrix=" + notifyByMatrix;
             window.location = url;
         });
     }

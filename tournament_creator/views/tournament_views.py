@@ -34,10 +34,13 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             initial['name'] = self.request.GET.get('name')
         if 'date' in self.request.GET:
             initial['date'] = self.request.GET.get('date')
-        # The form also includes notify_by_email, notify_by_signal, notify_by_matrix.
-        # If their state needs to be preserved across archetype changes via GET,
-        # they would need to be added to the JS that constructs the URL and handled here.
-        # For now, only name and date are explicitly preserved.
+        # Preserve notification checkbox states from GET parameters if available
+        if 'notify_by_email' in self.request.GET:
+            initial['notify_by_email'] = self.request.GET.get('notify_by_email') == 'true'
+        if 'notify_by_signal' in self.request.GET:
+            initial['notify_by_signal'] = self.request.GET.get('notify_by_signal') == 'true'
+        if 'notify_by_matrix' in self.request.GET:
+            initial['notify_by_matrix'] = self.request.GET.get('notify_by_matrix') == 'true'
         return initial
 
     def get_context_data(self, **kwargs):

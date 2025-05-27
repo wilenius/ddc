@@ -13,7 +13,7 @@ from ..models.scoring import MatchScore, PlayerScore
 from ..models.logging import MatchResultLog
 from ..views.auth import SpectatorAccessMixin, PlayerOrAdminRequiredMixin, AdminRequiredMixin
 from ..forms import PairFormSet, MoCPlayerSelectForm
-from ..notifications import send_email_notification
+from ..notifications import send_email_notification, send_signal_notification
 
 class TournamentListView(SpectatorAccessMixin, ListView):
     model = TournamentChart
@@ -460,6 +460,15 @@ def record_match_result(request, tournament_id, matchup_id):
             logger.error(f"Error sending email notification: {str(e_notify)}")
             # Optionally, add a message to the user or specific handling if notifications are critical
             # For now, just log and continue.
+
+        # Send Signal notification
+        try:
+            send_signal_notification(user_who_recorded=request.user, match_result_log_instance=match_log_entry)
+        except Exception as e_notify_signal:
+            import logging # Ensure logger is available
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error sending Signal notification: {str(e_notify_signal)}")
+            # Log and continue, similar to email.
 
         # Update player scores
         for player in players:

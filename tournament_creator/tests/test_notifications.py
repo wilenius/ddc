@@ -9,8 +9,11 @@ from tournament_creator.models.logging import MatchResultLog
 from tournament_creator.models.notifications import NotificationBackendSetting, NotificationLog
 from tournament_creator.models.base_models import Matchup, TournamentChart, Player, Pair
 from tournament_creator.forms import EmailBackendConfigForm # Added import
+import requests # For requests.exceptions
 
-from tournament_creator.notifications import send_email_notification # The function to test
+# Functions to test
+from tournament_creator.notifications import send_email_notification, send_signal_notification
+
 
 class TestSendEmailNotification(TestCase):
     def setUp(self):
@@ -540,3 +543,631 @@ class TestNotificationAdminViews(TestCase):
         url = reverse('admin:tournament_creator_notificationlog_change', args=[log.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
+
+
+# Tests for send_signal_notification
+class TestSendSignalNotification(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='signaluser', password='password')
+        self.tournament = TournamentChart.objects.create(name='Signal Test Tournament', date='2024-03-01')
+        
+        self.player1 = Player.objects.create(first_name='SignalP1', last_name='UserA', ranking=10)
+        self.player2 = Player.objects.create(first_name='SignalP2', last_name='UserB', ranking=11)
+        self.player3 = Player.objects.create(first_name='SignalP3', last_name='UserC', ranking=12)
+        self.player4 = Player.objects.create(first_name='SignalP4', last_name='UserD', ranking=13)
+
+        # Using MoC style matchup as send_signal_notification formats this
+        self.matchup = Matchup.objects.create(
+            tournament_chart=self.tournament,
+            round_number=1,
+            court_number=1,
+            pair1_player1=self.player1,
+            pair1_player2=self.player2,
+            pair2_player1=self.player3,
+            pair2_player2=self.player4,
+        )
+        self.match_log = MatchResultLog.objects.create(
+            matchup=self.matchup,
+            recorded_by=self.user,
+            action='UPDATE', # Changed action for variety
+            details={'team1_scores': [25], 'team2_scores': [23], 'winning_team': 'team1'}
+        )
+        self.base_signal_config = {
+            'signal_cli_rest_api_url': 'http://localhost:8080',
+            'signal_sender_phone_number': '+10000000000', # Sender phone
+            'recipient_usernames': '', # Default to empty
+            'recipient_group_ids': ''  # Default to empty
+        }
+
+    def _create_signal_setting(self, is_active=True, config_override=None):
+        # Clean up any existing signal settings to avoid conflicts
+        NotificationBackendSetting.objects.filter(backend_name='signal').delete()
+        NotificationLog.objects.all().delete() # Also clear logs for cleaner assertions per test
+        
+        current_config = self.base_signal_config.copy()
+        if config_override:
+            current_config.update(config_override)
+            
+        return NotificationBackendSetting.objects.create(
+            backend_name='signal',
+            is_active=is_active,
+            config=current_config
+        )
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_successful_send_with_usernames(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.text = '{"message": "Accepted"}' 
+        mock_response.json.return_value = {"message": "Accepted"}
+        mock_post.return_value = mock_response
+
+        config_override = {'recipient_usernames': '+11111111111,+12222222222'}
+        self._create_signal_setting(config_override=config_override)
+
+        send_signal_notification(self.user, self.match_log)
+
+        expected_recipients = ['+11111111111', '+12222222222']
+        mock_post.assert_called_once()
+        called_args, called_kwargs = mock_post.call_args
+        self.assertEqual(called_args[0], f"{self.base_signal_config['signal_cli_rest_api_url']}/v2/send")
+        self.assertEqual(called_kwargs['json']['number'], self.base_signal_config['signal_sender_phone_number'])
+        self.assertEqual(called_kwargs['json']['recipients'], expected_recipients)
+        self.assertNotIn('group_recipients', called_kwargs['json'])
+        self.assertIn(self.tournament.name, called_kwargs['json']['message'])
+        self.assertIn(self.user.username, called_kwargs['json']['message'])
+        self.assertIn(str(self.player1), called_kwargs['json']['message']) 
+
+        log_entry = NotificationLog.objects.first()
+        self.assertIsNotNone(log_entry)
+        self.assertTrue(log_entry.success)
+        self.assertEqual(NotificationLog.objects.count(), 1)
+        self.assertIn(f"Usernames: {', '.join(expected_recipients)}", log_entry.details)
+        self.assertIn("API Response: 201", log_entry.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_successful_send_with_group_ids(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.text = 'Sent'
+        mock_post.return_value = mock_response
+
+        config_override = {'recipient_group_ids': 'group_id_1,group_id_2=='} 
+        self._create_signal_setting(config_override=config_override)
+
+        send_signal_notification(self.user, self.match_log)
+        
+        expected_groups = ['group_id_1', 'group_id_2==']
+        mock_post.assert_called_once()
+        called_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(called_kwargs['json']['group_recipients'], expected_groups)
+        self.assertNotIn('recipients', called_kwargs['json'])
+
+        log_entry = NotificationLog.objects.first()
+        self.assertTrue(log_entry.success)
+        self.assertIn(f"Group IDs: {', '.join(expected_groups)}", log_entry.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_successful_send_with_both_recipients(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.text = 'Sent'
+        mock_post.return_value = mock_response
+
+        config_override = {
+            'recipient_usernames': '+13333333333',
+            'recipient_group_ids': 'group_id_3'
+        }
+        self._create_signal_setting(config_override=config_override)
+
+        send_signal_notification(self.user, self.match_log)
+        
+        expected_recipients = ['+13333333333']
+        expected_groups = ['group_id_3']
+        mock_post.assert_called_once()
+        called_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(called_kwargs['json']['recipients'], expected_recipients)
+        self.assertEqual(called_kwargs['json']['group_recipients'], expected_groups)
+
+        log_entry = NotificationLog.objects.first()
+        self.assertTrue(log_entry.success)
+        self.assertIn(f"Usernames: {', '.join(expected_recipients)}", log_entry.details)
+        self.assertIn(f"Group IDs: {', '.join(expected_groups)}", log_entry.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_recipient_parsing_various_formats(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_post.return_value = mock_response
+
+        test_cases = {
+            "usernames_spaces": (" +1111, +2222 ", None, ['+1111', '+2222'], None),
+            "groups_spaces": (None, " group1 , group2 ", None, ['group1', 'group2']),
+            "usernames_empty_items": (",+1111,,+2222,", None, ['+1111', '+2222'], None),
+            "groups_empty_items": (None, ",group1,,group2,", None, ['group1', 'group2']),
+            "both_mixed": ("+1, +2", "g1 ,g2", ['+1', '+2'], ['g1', 'g2']),
+            "usernames_already_list": (["+1list", " +2list "], None, ['+1list', '+2list'], None),
+            "groups_already_list": (None, ["g1list", " g2list "], None, ['g1list', 'g2list']),
+        }
+
+        for name, (raw_users, raw_groups, expected_users, expected_groups) in test_cases.items():
+            with self.subTest(name=name):
+                mock_post.reset_mock() # Reset for each subtest
+
+                config_override = {}
+                if raw_users is not None: # Check for None specifically if empty string is a valid test
+                    config_override['recipient_usernames'] = raw_users
+                if raw_groups is not None:
+                    config_override['recipient_group_ids'] = raw_groups
+                
+                self._create_signal_setting(config_override=config_override) # This clears logs
+                send_signal_notification(self.user, self.match_log)
+
+                mock_post.assert_called_once()
+                called_json = mock_post.call_args.kwargs['json']
+                
+                if expected_users:
+                    self.assertEqual(called_json['recipients'], expected_users)
+                else:
+                    self.assertNotIn('recipients', called_json)
+                
+                if expected_groups:
+                    self.assertEqual(called_json['group_recipients'], expected_groups)
+                else:
+                    self.assertNotIn('group_recipients', called_json)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_signal_backend_not_found(self, mock_post):
+        NotificationBackendSetting.objects.filter(backend_name='signal').delete()
+        NotificationLog.objects.all().delete()
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertIsNotNone(log)
+        self.assertFalse(log.success)
+        self.assertIn("Signal backend 'signal' not found or is not active.", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_signal_backend_not_active(self, mock_post):
+        self._create_signal_setting(is_active=False, config_override={'recipient_usernames': '+111'})
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertIsNotNone(log)
+        self.assertFalse(log.success)
+        self.assertIn("Signal backend 'signal' not found or is not active.", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_signal_backend_no_config(self, mock_post):
+        setting = self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        setting.config = None 
+        setting.save()
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertIsNotNone(log)
+        self.assertFalse(log.success)
+        self.assertIn("Signal backend 'signal' is active but has no configuration.", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_signal_backend_missing_url(self, mock_post):
+        config_override = self.base_signal_config.copy()
+        del config_override['signal_cli_rest_api_url']
+        config_override['recipient_usernames'] = '+111' # Ensure it doesn't fail for lack of recipients
+        self._create_signal_setting(config_override=config_override)
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertIsNotNone(log)
+        self.assertFalse(log.success)
+        self.assertIn("configuration is missing 'signal_cli_rest_api_url' or 'signal_sender_phone_number'", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_signal_backend_missing_sender(self, mock_post):
+        config_override = self.base_signal_config.copy()
+        del config_override['signal_sender_phone_number']
+        config_override['recipient_usernames'] = '+111' # Ensure it doesn't fail for lack of recipients
+        self._create_signal_setting(config_override=config_override)
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertIsNotNone(log)
+        self.assertFalse(log.success)
+        self.assertIn("configuration is missing 'signal_cli_rest_api_url' or 'signal_sender_phone_number'", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_no_recipients_configured(self, mock_post):
+        self._create_signal_setting() 
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertIsNotNone(log)
+        self.assertFalse(log.success)
+        self.assertIn("No recipient usernames or group IDs found in configuration.", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_api_http_error_400_json_response(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.text = '{"error": "Bad request from API"}'
+        mock_response.json.return_value = {"error": "Bad request from API"}
+        # Create an HTTPError instance correctly
+        http_error = requests.exceptions.HTTPError(response=mock_response)
+        http_error.response = mock_response # Ensure response attribute is set
+        mock_post.side_effect = http_error
+        
+        self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        send_signal_notification(self.user, self.match_log)
+        
+        mock_post.assert_called_once()
+        log = NotificationLog.objects.first()
+        self.assertIsNotNone(log)
+        self.assertFalse(log.success)
+        self.assertIn("Signal API HTTP Error: 400", log.details)
+        self.assertIn("API Error Message: Bad request from API", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_api_http_error_500_text_response(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error from API"
+        mock_response.json.side_effect = ValueError # Simulate non-JSON response
+        http_error = requests.exceptions.HTTPError(response=mock_response)
+        http_error.response = mock_response
+        mock_post.side_effect = http_error
+
+        self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        send_signal_notification(self.user, self.match_log)
+
+        mock_post.assert_called_once()
+        log = NotificationLog.objects.first()
+        self.assertIsNotNone(log)
+        self.assertFalse(log.success)
+        self.assertIn("Signal API HTTP Error: 500 - Internal Server Error from API", log.details)
+        self.assertNotIn("API Error Message:", log.details)
+
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_requests_connection_error(self, mock_post):
+        mock_post.side_effect = requests.exceptions.ConnectionError("Failed to connect")
+        self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_called_once()
+        log = NotificationLog.objects.first()
+        self.assertIsNotNone(log)
+        self.assertFalse(log.success)
+        self.assertIn("Failed to send Signal message due to a request exception: Failed to connect", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_requests_timeout_error(self, mock_post):
+        mock_post.side_effect = requests.exceptions.Timeout("Request timed out")
+        self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_called_once()
+        log = NotificationLog.objects.first()
+        self.assertIsNotNone(log)
+        self.assertFalse(log.success)
+        self.assertIn("Failed to send Signal message due to a request exception: Request timed out", log.details)
+
+    @patch('tournament_creator.notifications.json.dumps') 
+    def test_unexpected_exception_during_send(self, mock_json_dumps):
+        mock_json_dumps.side_effect = Exception("Unexpected JSON error")
+
+        with patch('tournament_creator.notifications.requests.post') as mock_post_call:
+            self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+            send_signal_notification(self.user, self.match_log)
+            
+            mock_post_call.assert_not_called() 
+            log = NotificationLog.objects.first()
+            self.assertIsNotNone(log)
+            self.assertFalse(log.success)
+            self.assertIn("An unexpected error occurred while sending Signal message: Unexpected JSON error", log.details)
+
+
+# Tests for send_signal_notification
+class TestSendSignalNotification(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='signaluser', password='password')
+        self.tournament = TournamentChart.objects.create(name='Signal Test Tournament', date='2024-03-01')
+        
+        self.player1 = Player.objects.create(first_name='SignalP1', last_name='UserA', ranking=10)
+        self.player2 = Player.objects.create(first_name='SignalP2', last_name='UserB', ranking=11)
+        self.player3 = Player.objects.create(first_name='SignalP3', last_name='UserC', ranking=12)
+        self.player4 = Player.objects.create(first_name='SignalP4', last_name='UserD', ranking=13)
+
+        # Using MoC style matchup as send_signal_notification formats this
+        self.matchup = Matchup.objects.create(
+            tournament_chart=self.tournament,
+            round_number=1,
+            court_number=1,
+            pair1_player1=self.player1,
+            pair1_player2=self.player2,
+            pair2_player1=self.player3,
+            pair2_player2=self.player4,
+        )
+        self.match_log = MatchResultLog.objects.create(
+            matchup=self.matchup,
+            recorded_by=self.user,
+            action='UPDATE', # Changed action for variety
+            details={'team1_scores': [25], 'team2_scores': [23], 'winning_team': 'team1'}
+        )
+        self.base_signal_config = {
+            'signal_cli_rest_api_url': 'http://localhost:8080',
+            'signal_sender_phone_number': '+10000000000', # Sender phone
+            'recipient_usernames': '', # Default to empty
+            'recipient_group_ids': ''  # Default to empty
+        }
+
+    def _create_signal_setting(self, is_active=True, config_override=None):
+        # Clean up any existing signal settings to avoid conflicts
+        NotificationBackendSetting.objects.filter(backend_name='signal').delete()
+        
+        current_config = self.base_signal_config.copy()
+        if config_override:
+            current_config.update(config_override)
+            
+        return NotificationBackendSetting.objects.create(
+            backend_name='signal',
+            is_active=is_active,
+            config=current_config
+        )
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_successful_send_with_usernames(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.text = '{"message": "Accepted"}' # Some APIs return simple text/JSON
+        mock_response.json.return_value = {"message": "Accepted"} # If JSON is parsed
+        mock_post.return_value = mock_response
+
+        config_override = {'recipient_usernames': '+11111111111,+12222222222'}
+        self._create_signal_setting(config_override=config_override)
+
+        send_signal_notification(self.user, self.match_log)
+
+        expected_recipients = ['+11111111111', '+12222222222']
+        mock_post.assert_called_once()
+        called_args, called_kwargs = mock_post.call_args
+        self.assertEqual(called_args[0], f"{self.base_signal_config['signal_cli_rest_api_url']}/v2/send")
+        self.assertEqual(called_kwargs['json']['number'], self.base_signal_config['signal_sender_phone_number'])
+        self.assertEqual(called_kwargs['json']['recipients'], expected_recipients)
+        self.assertNotIn('group_recipients', called_kwargs['json'])
+        self.assertIn(self.tournament.name, called_kwargs['json']['message'])
+        self.assertIn(self.user.username, called_kwargs['json']['message'])
+        self.assertIn(str(self.player1), called_kwargs['json']['message']) # Check player name in message
+
+        log_entry = NotificationLog.objects.first()
+        self.assertIsNotNone(log_entry)
+        self.assertTrue(log_entry.success)
+        self.assertEqual(NotificationLog.objects.count(), 1)
+        self.assertIn(f"Usernames: {', '.join(expected_recipients)}", log_entry.details)
+        self.assertIn("API Response: 201", log_entry.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_successful_send_with_group_ids(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.text = 'Sent'
+        mock_post.return_value = mock_response
+
+        config_override = {'recipient_group_ids': 'group_id_1,group_id_2=='} # Example group ID format
+        self._create_signal_setting(config_override=config_override)
+
+        send_signal_notification(self.user, self.match_log)
+        
+        expected_groups = ['group_id_1', 'group_id_2==']
+        mock_post.assert_called_once()
+        called_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(called_kwargs['json']['group_recipients'], expected_groups)
+        self.assertNotIn('recipients', called_kwargs['json'])
+
+        log_entry = NotificationLog.objects.first()
+        self.assertTrue(log_entry.success)
+        self.assertIn(f"Group IDs: {', '.join(expected_groups)}", log_entry.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_successful_send_with_both_recipients(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.text = 'Sent'
+        mock_post.return_value = mock_response
+
+        config_override = {
+            'recipient_usernames': '+13333333333',
+            'recipient_group_ids': 'group_id_3'
+        }
+        self._create_signal_setting(config_override=config_override)
+
+        send_signal_notification(self.user, self.match_log)
+        
+        expected_recipients = ['+13333333333']
+        expected_groups = ['group_id_3']
+        mock_post.assert_called_once()
+        called_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(called_kwargs['json']['recipients'], expected_recipients)
+        self.assertEqual(called_kwargs['json']['group_recipients'], expected_groups)
+
+        log_entry = NotificationLog.objects.first()
+        self.assertTrue(log_entry.success)
+        self.assertIn(f"Usernames: {', '.join(expected_recipients)}", log_entry.details)
+        self.assertIn(f"Group IDs: {', '.join(expected_groups)}", log_entry.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_recipient_parsing_various_formats(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_post.return_value = mock_response
+
+        test_cases = {
+            "usernames_spaces": (" +1111, +2222 ", None, ['+1111', '+2222'], None),
+            "groups_spaces": (None, " group1 , group2 ", None, ['group1', 'group2']),
+            "usernames_empty_items": (",+1111,,+2222,", None, ['+1111', '+2222'], None),
+            "groups_empty_items": (None, ",group1,,group2,", None, ['group1', 'group2']),
+            "both_mixed": ("+1, +2", "g1 ,g2", ['+1', '+2'], ['g1', 'g2']),
+            "usernames_already_list": (["+1list", " +2list "], None, ['+1list', '+2list'], None), # Robustness
+            "groups_already_list": (None, ["g1list", " g2list "], None, ['g1list', 'g2list']), # Robustness
+        }
+
+        for name, (raw_users, raw_groups, expected_users, expected_groups) in test_cases.items():
+            with self.subTest(name=name):
+                NotificationLog.objects.all().delete() # Clear previous logs
+                mock_post.reset_mock()
+
+                config_override = {}
+                if raw_users is not None:
+                    config_override['recipient_usernames'] = raw_users
+                if raw_groups is not None:
+                    config_override['recipient_group_ids'] = raw_groups
+                
+                self._create_signal_setting(config_override=config_override)
+                send_signal_notification(self.user, self.match_log)
+
+                mock_post.assert_called_once()
+                called_json = mock_post.call_args.kwargs['json']
+                
+                if expected_users:
+                    self.assertEqual(called_json['recipients'], expected_users)
+                else:
+                    self.assertNotIn('recipients', called_json)
+                
+                if expected_groups:
+                    self.assertEqual(called_json['group_recipients'], expected_groups)
+                else:
+                    self.assertNotIn('group_recipients', called_json)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_signal_backend_not_found(self, mock_post):
+        NotificationBackendSetting.objects.filter(backend_name='signal').delete()
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("Signal backend 'signal' not found or is not active.", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_signal_backend_not_active(self, mock_post):
+        self._create_signal_setting(is_active=False, config_override={'recipient_usernames': '+111'})
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("Signal backend 'signal' not found or is not active.", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_signal_backend_no_config(self, mock_post):
+        setting = self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        setting.config = None # Manually set config to None
+        setting.save()
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("Signal backend 'signal' is active but has no configuration.", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_signal_backend_missing_url(self, mock_post):
+        config_override = self.base_signal_config.copy()
+        del config_override['signal_cli_rest_api_url']
+        config_override['recipient_usernames'] = '+111'
+        self._create_signal_setting(config_override=config_override)
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("configuration is missing 'signal_cli_rest_api_url' or 'signal_sender_phone_number'", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_signal_backend_missing_sender(self, mock_post):
+        config_override = self.base_signal_config.copy()
+        del config_override['signal_sender_phone_number']
+        config_override['recipient_usernames'] = '+111'
+        self._create_signal_setting(config_override=config_override)
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("configuration is missing 'signal_cli_rest_api_url' or 'signal_sender_phone_number'", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_no_recipients_configured(self, mock_post):
+        # base_signal_config already has empty recipient strings
+        self._create_signal_setting() # Uses default empty recipients
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_not_called()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("No recipient usernames or group IDs found in configuration.", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_api_http_error_400_json_response(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.text = '{"error": "Bad request from API"}'
+        mock_response.json.return_value = {"error": "Bad request from API"}
+        mock_post.side_effect = requests.exceptions.HTTPError(response=mock_response)
+        
+        self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        send_signal_notification(self.user, self.match_log)
+        
+        mock_post.assert_called_once()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("Signal API HTTP Error: 400", log.details)
+        self.assertIn("API Error Message: Bad request from API", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_api_http_error_500_text_response(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error from API"
+        # Make .json() raise ValueError to simulate non-JSON response
+        mock_response.json.side_effect = ValueError 
+        mock_post.side_effect = requests.exceptions.HTTPError(response=mock_response)
+
+        self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        send_signal_notification(self.user, self.match_log)
+
+        mock_post.assert_called_once()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("Signal API HTTP Error: 500 - Internal Server Error from API", log.details)
+        # Ensure it doesn't try to parse JSON error message part
+        self.assertNotIn("API Error Message:", log.details)
+
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_requests_connection_error(self, mock_post):
+        mock_post.side_effect = requests.exceptions.ConnectionError("Failed to connect")
+        self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_called_once()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("Failed to send Signal message due to a request exception: Failed to connect", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_requests_timeout_error(self, mock_post):
+        mock_post.side_effect = requests.exceptions.Timeout("Request timed out")
+        self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        send_signal_notification(self.user, self.match_log)
+        mock_post.assert_called_once()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("Failed to send Signal message due to a request exception: Request timed out", log.details)
+
+    @patch('tournament_creator.notifications.json.dumps') # Patching something inside the try block
+    def test_unexpected_exception_during_send(self, mock_json_dumps):
+        # This mock is for requests.post, but we are testing an error *before* requests.post
+        # by making json.dumps fail (which is used to prepare the payload)
+        mock_json_dumps.side_effect = Exception("Unexpected JSON error")
+
+        # We still need to patch requests.post as it's a decorator on the original function
+        # but it won't be called if json.dumps fails first.
+        with patch('tournament_creator.notifications.requests.post') as mock_post_call:
+            self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+            send_signal_notification(self.user, self.match_log)
+            
+            mock_post_call.assert_not_called() # requests.post itself should not be called
+            log = NotificationLog.objects.first()
+            self.assertFalse(log.success)
+            self.assertIn("An unexpected error occurred while sending Signal message: Unexpected JSON error", log.details)

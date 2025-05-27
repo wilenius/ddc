@@ -1,6 +1,8 @@
 import smtplib # Still useful for SMTPException
 from django.core.mail import send_mail
 from django.core.mail.backends.smtp import EmailBackend as SMTPEmailBackend
+import json # For parsing recipient lists if stored as JSON strings, though config.get should handle it.
+import requests
 from django.conf import settings
 from tournament_creator.models.notifications import NotificationBackendSetting, NotificationLog
 from tournament_creator.models.auth import User
@@ -171,5 +173,180 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance):
             backend_setting=email_backend_setting,
             success=False,
             details=f"Failed to send email: {str(e)}",
+            match_result_log=match_result_log_instance
+        )
+
+def send_signal_notification(user_who_recorded: User, match_result_log_instance):
+    """
+    Sends a Signal notification based on a match result log using settings
+    from NotificationBackendSetting.
+    """
+    signal_backend_setting = None
+    try:
+        signal_backend_setting = NotificationBackendSetting.objects.get(backend_name='signal', is_active=True)
+    except NotificationBackendSetting.DoesNotExist:
+        NotificationLog.objects.create(
+            backend_setting=None,
+            success=False,
+            details="Signal backend 'signal' not found or is not active.",
+            match_result_log=match_result_log_instance
+        )
+        return
+    except Exception as e:
+        NotificationLog.objects.create(
+            backend_setting=None,
+            success=False,
+            details=f"Error fetching Signal backend settings: {str(e)}",
+            match_result_log=match_result_log_instance
+        )
+        return
+
+    config = signal_backend_setting.config
+    if not config:
+        NotificationLog.objects.create(
+            backend_setting=signal_backend_setting,
+            success=False,
+            details="Signal backend 'signal' is active but has no configuration.",
+            match_result_log=match_result_log_instance
+        )
+        return
+
+    signal_cli_rest_api_url = config.get('signal_cli_rest_api_url')
+    signal_sender_phone_number = config.get('signal_sender_phone_number')
+    recipient_usernames_str = config.get('recipient_usernames', '') # Default to empty string
+    recipient_group_ids_str = config.get('recipient_group_ids', '') # Default to empty string
+
+    if not signal_cli_rest_api_url or not signal_sender_phone_number:
+        NotificationLog.objects.create(
+            backend_setting=signal_backend_setting,
+            success=False,
+            details="Signal backend 'signal' configuration is missing 'signal_cli_rest_api_url' or 'signal_sender_phone_number'.",
+            match_result_log=match_result_log_instance
+        )
+        return
+
+    # Parse recipient lists
+    actual_recipient_usernames = []
+    if isinstance(recipient_usernames_str, str) and recipient_usernames_str.strip():
+        actual_recipient_usernames = [name.strip() for name in recipient_usernames_str.split(',') if name.strip()]
+    elif isinstance(recipient_usernames_str, list): # Handle if already a list
+        actual_recipient_usernames = [str(name).strip() for name in recipient_usernames_str if str(name).strip()]
+        
+    actual_recipient_group_ids = []
+    if isinstance(recipient_group_ids_str, str) and recipient_group_ids_str.strip():
+        actual_recipient_group_ids = [gid.strip() for gid in recipient_group_ids_str.split(',') if gid.strip()]
+    elif isinstance(recipient_group_ids_str, list): # Handle if already a list
+        actual_recipient_group_ids = [str(gid).strip() for gid in recipient_group_ids_str if str(gid).strip()]
+
+    if not actual_recipient_usernames and not actual_recipient_group_ids:
+        NotificationLog.objects.create(
+            backend_setting=signal_backend_setting,
+            success=False,
+            details="Failed to send Signal message: No recipient usernames or group IDs found in configuration.",
+            match_result_log=match_result_log_instance
+        )
+        return
+
+    # Construct message content (similar to email)
+    tournament_name = match_result_log_instance.matchup.tournament_chart.name
+    
+    matchup = match_result_log_instance.matchup
+    team1_display = "Team 1"
+    team2_display = "Team 2"
+
+    if matchup.pair1: # Standard Pairs tournament
+        team1_display = str(matchup.pair1)
+        team2_display = str(matchup.pair2) if matchup.pair2 else "Unknown Opponent"
+    elif matchup.pair1_player1: # MoC style tournament
+        p1_name = get_player_name(matchup.pair1_player1)
+        p2_name = get_player_name(matchup.pair1_player2)
+        team1_display = f"{p1_name} & {p2_name}"
+        
+        p3_name = get_player_name(matchup.pair2_player1)
+        p4_name = get_player_name(matchup.pair2_player2)
+        team2_display = f"{p3_name} & {p4_name}"
+    
+    matchup_str = f"{team1_display} vs {team2_display} (Round {matchup.round_number}, Court {matchup.court_number})"
+
+    scores_data = match_result_log_instance.details
+    team1_scores_str = ", ".join(map(str, scores_data.get('team1_scores', [])))
+    team2_scores_str = ", ".join(map(str, scores_data.get('team2_scores', [])))
+    winning_team_declared = scores_data.get('winning_team', 'N/A')
+    
+    scores_formatted_str = (
+        f"  Team 1 Scores: {team1_scores_str}\n"
+        f"  Team 2 Scores: {team2_scores_str}\n"
+        f"  Declared Winner: {winning_team_declared}"
+    )
+
+    message_body = (
+        f"Match Result Update - {tournament_name}\n"
+        f"Recorded by: {user_who_recorded.username}\n\n"
+        f"Matchup: {matchup_str}\n"
+        f"Action: {match_result_log_instance.action}\n"
+        f"Scores Reported:\n{scores_formatted_str}\n\n"
+        f"Raw Score Details: {scores_data}"
+    )
+
+    # Prepare payload for signal-cli-rest-api
+    payload = {
+        "number": signal_sender_phone_number,
+        "message": message_body
+    }
+    if actual_recipient_usernames:
+        payload["recipients"] = actual_recipient_usernames
+    if actual_recipient_group_ids:
+        payload["group_recipients"] = actual_recipient_group_ids
+        
+    # Send the message
+    send_url = f"{signal_cli_rest_api_url.rstrip('/')}/v2/send"
+    
+    try:
+        response = requests.post(send_url, json=payload, timeout=10) # Added timeout
+        response.raise_for_status()  # Raises an HTTPError for bad responses (4XX or 5XX)
+
+        # Assuming successful response (e.g., 201 Created)
+        # The actual success criteria might depend on the signal-cli-rest-api version
+        # For now, a 2xx status is considered a success.
+        log_details = f"Signal message sent. API Response: {response.status_code} - {response.text}"
+        if actual_recipient_usernames:
+            log_details += f" Usernames: {', '.join(actual_recipient_usernames)}."
+        if actual_recipient_group_ids:
+            log_details += f" Group IDs: {', '.join(actual_recipient_group_ids)}."
+
+        NotificationLog.objects.create(
+            backend_setting=signal_backend_setting,
+            success=True,
+            details=log_details,
+            match_result_log=match_result_log_instance
+        )
+
+    except requests.exceptions.HTTPError as e:
+        error_details = f"Signal API HTTP Error: {e.response.status_code} - {e.response.text}"
+        try: # Try to parse JSON error from response
+            error_json = e.response.json()
+            if 'error' in error_json:
+                 error_details += f" | API Error Message: {error_json['error']}"
+        except ValueError: # If response is not JSON
+            pass # error_details already contains the text response
+
+        NotificationLog.objects.create(
+            backend_setting=signal_backend_setting,
+            success=False,
+            details=error_details,
+            match_result_log=match_result_log_instance
+        )
+    except requests.exceptions.RequestException as e:
+        NotificationLog.objects.create(
+            backend_setting=signal_backend_setting,
+            success=False,
+            details=f"Failed to send Signal message due to a request exception: {str(e)}",
+            match_result_log=match_result_log_instance
+        )
+    except Exception as e: # Catch any other unexpected errors during sending
+        NotificationLog.objects.create(
+            backend_setting=signal_backend_setting,
+            success=False,
+            details=f"An unexpected error occurred while sending Signal message: {str(e)}",
             match_result_log=match_result_log_instance
         )

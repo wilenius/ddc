@@ -1,0 +1,128 @@
+{% extends "tournament_creator/base.html" %}
+
+{% block title %}Manual Tiebreak Resolution - {{ tournament.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1>Manual Tiebreak Resolution</h1>
+            <h2>{{ tournament.name }}</h2>
+            
+            <div class="alert alert-info">
+                <strong>Instructions:</strong> When automatic tiebreak criteria cannot resolve ties between players with the same number of wins, 
+                tournament directors can manually set the order. Drag and drop players to reorder them, then save the resolution.
+            </div>
+            
+            {% if not ties %}
+                <div class="alert alert-success">
+                    <h4>No Ties Found</h4>
+                    <p>There are no tied players in this tournament that require manual resolution.</p>
+                </div>
+            {% else %}
+                {% for tie in ties %}
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h4>Players Tied at {{ tie.wins }} Wins</h4>
+                            {% if tie.resolved %}
+                                <span class="badge badge-success">Already Resolved</span>
+                            {% else %}
+                                <span class="badge badge-warning">Needs Resolution</span>
+                            {% endif %}
+                        </div>
+                        <div class="card-body">
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="wins_level" value="{{ tie.wins }}">
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Player Order (1st to last):</label>
+                                    <div id="sortable-{{ tie.wins }}" class="sortable-list">
+                                        {% for player_score in tie.players %}
+                                            <div class="sortable-item" data-player-id="{{ player_score.player.id }}">
+                                                <span class="handle">⋮⋮</span>
+                                                <strong>{{ player_score.player.first_name }} {{ player_score.player.last_name }}</strong>
+                                                ({{ player_score.wins }} wins, {{ player_score.total_point_difference }} point diff)
+                                                <input type="hidden" name="player_order" value="{{ player_score.player.id }}">
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="reason" class="form-label">Reason (optional):</label>
+                                    <textarea class="form-control" id="reason" name="reason" rows="3" placeholder="Explain why this manual resolution was needed..."></textarea>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <button type="submit" class="btn btn-primary">Save Resolution</button>
+                                    <a href="{% url 'tournament_detail' tournament.pk %}" class="btn btn-secondary">Cancel</a>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% endif %}
+            
+            <div class="mt-3">
+                <a href="{% url 'tournament_detail' tournament.pk %}" class="btn btn-secondary">Back to Tournament</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.sortable-list {
+    list-style: none;
+    padding: 0;
+}
+
+.sortable-item {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 10px;
+    margin: 5px 0;
+    cursor: move;
+    display: flex;
+    align-items: center;
+}
+
+.sortable-item:hover {
+    background: #e9ecef;
+}
+
+.handle {
+    color: #6c757d;
+    margin-right: 10px;
+    cursor: grab;
+}
+
+.handle:active {
+    cursor: grabbing;
+}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Make each tie group sortable
+    {% for tie in ties %}
+        var el = document.getElementById('sortable-{{ tie.wins }}');
+        var sortable = Sortable.create(el, {
+            handle: '.handle',
+            animation: 150,
+            onUpdate: function (evt) {
+                // Update hidden inputs to reflect new order
+                var items = evt.to.children;
+                for (var i = 0; i < items.length; i++) {
+                    var input = items[i].querySelector('input[name="player_order"]');
+                    var playerId = items[i].getAttribute('data-player-id');
+                    input.value = playerId;
+                }
+            }
+        });
+    {% endfor %}
+});
+</script>
+{% endblock %}

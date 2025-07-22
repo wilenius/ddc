@@ -9,7 +9,7 @@ from django.views.decorators.http import require_POST
 import json
 from ..models.base_models import TournamentChart, Matchup, TournamentArchetype, Player, Pair
 from ..models.tournament_types import PairsTournamentArchetype
-from ..models.scoring import MatchScore, PlayerScore
+from ..models.scoring import MatchScore, PlayerScore, ManualTiebreakResolution
 from ..models.logging import MatchResultLog
 from ..models.notifications import NotificationBackendSetting # Added import
 from ..views.auth import SpectatorAccessMixin, PlayerOrAdminRequiredMixin, AdminRequiredMixin
@@ -237,13 +237,192 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
     def apply_tiebreaks(self, tournament, player_scores):
         """
         Apply proper tiebreak analysis to sort players with equal wins.
-        Tiebreak order:
+        
+        For Monarch of the Court (MoC) tournaments:
+        1. Overall wins
+        2. Head-to-head W/L ratio against other tied players
+        3. Point differential in games against other tied players
+        4. Manual resolution (requires UI implementation)
+        
+        For other tournaments (Swedish pairs, etc.):
         1. Overall wins
         2. Head-to-head record between tied players
         3. Point differential in games between tied players
         4. Record against teams that placed above the initial set of tied teams
         5. Point differential in games against teams that placed above the initial set of tied teams
         6. Point differential in games against all teams in the pool
+        """
+        # Check if this is a MoC tournament by examining matchup structure
+        is_moc_tournament = self._is_moc_tournament(tournament)
+        
+        if is_moc_tournament:
+            return self._apply_moc_tiebreaks(tournament, player_scores)
+        else:
+            return self._apply_pairs_tiebreaks(tournament, player_scores)
+    
+    def _is_moc_tournament(self, tournament):
+        """
+        Determine if this is a MoC tournament by checking matchup structure.
+        MoC tournaments use individual player fields, pairs tournaments use pair fields.
+        """
+        sample_matchup = tournament.matchups.first()
+        if sample_matchup:
+            # If it uses individual player fields, it's MoC
+            return (sample_matchup.pair1_player1_id is not None or 
+                    sample_matchup.pair1_player2_id is not None)
+        return False
+    
+    def _apply_moc_tiebreaks(self, tournament, player_scores):
+        """
+        Apply MoC-specific tiebreak logic:
+        1. Overall wins (already sorted)
+        2. W/L ratio in games against other tied players
+        3. Point differential in games against other tied players  
+        4. Manual resolution (to be implemented)
+        """
+        # First sort by wins and total point differential (basic sort)
+        sorted_scores = sorted(player_scores, key=lambda x: (-x.wins, -x.total_point_difference))
+        
+        # Look for groups of players with the same number of wins
+        groups_of_tied_players = []
+        current_group = []
+        current_wins = None
+        
+        for score in sorted_scores:
+            if current_wins is None or score.wins == current_wins:
+                current_group.append(score)
+                current_wins = score.wins
+            else:
+                if len(current_group) > 1:  # Only record groups with ties
+                    groups_of_tied_players.append(list(current_group))
+                current_group = [score]
+                current_wins = score.wins
+        
+        # Add the last group if it has ties
+        if len(current_group) > 1:
+            groups_of_tied_players.append(list(current_group))
+        
+        # No ties, return the basic sort
+        if not groups_of_tied_players:
+            return sorted_scores
+            
+        # Get all matchups in this tournament with scores
+        all_matchups = Matchup.objects.filter(
+            tournament_chart=tournament,
+            scores__isnull=False
+        ).prefetch_related('scores').distinct()
+        
+        # Process each group of tied players
+        for group in groups_of_tied_players:
+            # Check if there's a manual resolution for this win level
+            wins_level = group[0].wins
+            try:
+                manual_resolution = ManualTiebreakResolution.objects.get(
+                    tournament=tournament,
+                    wins_tied_at=wins_level
+                )
+                # Apply manual resolution
+                player_order = {player_id: idx for idx, player_id in enumerate(manual_resolution.resolved_order)}
+                group.sort(key=lambda score: player_order.get(score.player.id, 999))
+                
+                # Mark as manually resolved for display
+                for score in group:
+                    score.manually_resolved = True
+                    score.manual_resolution_reason = manual_resolution.reason
+                continue
+                
+            except ManualTiebreakResolution.DoesNotExist:
+                # No manual resolution, proceed with automatic tiebreak
+                pass
+                
+            tied_player_ids = [score.player.id for score in group]
+            
+            # Create a record structure to hold MoC tiebreak criteria
+            tiebreak_records = {player_id: {
+                'h2h_wins': 0,                 # Head-to-head wins against tied players
+                'h2h_losses': 0,               # Head-to-head losses against tied players
+                'h2h_point_diff': 0,           # Head-to-head point differential against tied players
+                'needs_manual_resolution': False  # Flag for manual resolution
+            } for player_id in tied_player_ids}
+            
+            # Check each matchup to see if it involves tied players
+            for matchup in all_matchups:
+                # Identify players in team 1 and team 2
+                team1_players = set()
+                team2_players = set()
+                if matchup.pair1_player1_id: team1_players.add(matchup.pair1_player1_id)
+                if matchup.pair1_player2_id: team1_players.add(matchup.pair1_player2_id)
+                if matchup.pair2_player1_id: team2_players.add(matchup.pair2_player1_id)
+                if matchup.pair2_player2_id: team2_players.add(matchup.pair2_player2_id)
+                
+                # Find tied players in this matchup
+                tied_in_team1 = team1_players.intersection(tied_player_ids)
+                tied_in_team2 = team2_players.intersection(tied_player_ids)
+                
+                # Only count games between tied players (head-to-head)
+                is_h2h_match = len(tied_in_team1) > 0 and len(tied_in_team2) > 0
+                
+                if is_h2h_match:
+                    # Process all sets in this matchup
+                    for set_score in matchup.scores.all():
+                        team1_won = set_score.winning_team == 1
+                        
+                        # Process each tied player's results against other tied players
+                        for player_id in tied_player_ids:
+                            on_team1 = player_id in team1_players
+                            on_team2 = player_id in team2_players
+                            
+                            if not (on_team1 or on_team2):
+                                continue  # This player wasn't in this match
+                            
+                            # Calculate point differential from this player's perspective
+                            pd = set_score.point_difference
+                            if (on_team1 and not team1_won) or (on_team2 and team1_won):
+                                pd = -pd  # This player's team lost, so negate the PD
+                                tiebreak_records[player_id]['h2h_losses'] += 1
+                            else:
+                                tiebreak_records[player_id]['h2h_wins'] += 1
+                                
+                            tiebreak_records[player_id]['h2h_point_diff'] += pd
+            
+            # Sort tied players using MoC tiebreak criteria
+            def moc_sort_key(score):
+                player_id = score.player.id
+                h2h_wins = tiebreak_records[player_id]['h2h_wins']
+                h2h_losses = tiebreak_records[player_id]['h2h_losses']
+                
+                # Calculate W/L ratio (avoid division by zero)
+                if h2h_losses == 0:
+                    h2h_ratio = float('inf') if h2h_wins > 0 else 0
+                else:
+                    h2h_ratio = h2h_wins / h2h_losses
+                
+                return (
+                    -h2h_ratio,  # Higher W/L ratio is better
+                    -tiebreak_records[player_id]['h2h_point_diff']  # Higher point diff is better
+                )
+            
+            group.sort(key=moc_sort_key)
+            
+            # Store the tiebreak info for display
+            for score in group:
+                player_id = score.player.id
+                score.h2h_wins = tiebreak_records[player_id]['h2h_wins']
+                score.h2h_losses = tiebreak_records[player_id]['h2h_losses']
+                score.h2h_point_diff = tiebreak_records[player_id]['h2h_point_diff']
+                
+                # Calculate ratio for display
+                if score.h2h_losses == 0:
+                    score.h2h_ratio = float('inf') if score.h2h_wins > 0 else 0
+                else:
+                    score.h2h_ratio = score.h2h_wins / score.h2h_losses
+        
+        # Rebuild the complete standings with tiebreak-sorted groups
+        return self._rebuild_standings(sorted_scores, groups_of_tied_players)
+    
+    def _apply_pairs_tiebreaks(self, tournament, player_scores):
+        """
+        Apply the existing 6-step tiebreak logic for pairs tournaments.
         """
         # First sort by wins and total point differential (basic sort)
         sorted_scores = sorted(player_scores, key=lambda x: (-x.wins, -x.total_point_difference))
@@ -384,6 +563,12 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
                 score.above_pd = tiebreak_records[player_id]['above_team_point_diff']
         
         # Rebuild the complete standings with tiebreak-sorted groups
+        return self._rebuild_standings(sorted_scores, groups_of_tied_players)
+    
+    def _rebuild_standings(self, sorted_scores, groups_of_tied_players):
+        """
+        Helper method to rebuild final standings with tiebreak-sorted groups.
+        """
         final_standings = []
         
         # Map of wins to groups of tied players
@@ -413,6 +598,79 @@ class TournamentDeleteView(AdminRequiredMixin, DeleteView):
         tournament = self.get_object()
         messages.success(request, f'Tournament "{tournament.name}" has been deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+@login_required
+def manual_tiebreak_resolution(request, tournament_id):
+    """
+    View to manually resolve tiebreaks for tournament directors.
+    Shows tied players and allows manual ordering.
+    """
+    tournament = get_object_or_404(TournamentChart, id=tournament_id)
+    
+    # Get player scores for this tournament
+    player_scores = PlayerScore.objects.filter(tournament=tournament).order_by('-wins', '-total_point_difference')
+    
+    # Find groups of tied players
+    ties = []
+    current_group = []
+    current_wins = None
+    
+    for score in player_scores:
+        if current_wins is None or score.wins == current_wins:
+            current_group.append(score)
+            current_wins = score.wins
+        else:
+            if len(current_group) > 1:  # Only show groups with ties
+                ties.append({
+                    'wins': current_wins,
+                    'players': current_group.copy(),
+                    'resolved': ManualTiebreakResolution.objects.filter(
+                        tournament=tournament, wins_tied_at=current_wins
+                    ).exists()
+                })
+            current_group = [score]
+            current_wins = score.wins
+    
+    # Add the last group if it has ties
+    if len(current_group) > 1:
+        ties.append({
+            'wins': current_wins,
+            'players': current_group.copy(),
+            'resolved': ManualTiebreakResolution.objects.filter(
+                tournament=tournament, wins_tied_at=current_wins
+            ).exists()
+        })
+    
+    if request.method == 'POST':
+        wins_level = int(request.POST.get('wins_level'))
+        player_order = request.POST.getlist('player_order')  # List of player IDs in order
+        reason = request.POST.get('reason', '')
+        
+        # Delete existing resolution if any
+        ManualTiebreakResolution.objects.filter(
+            tournament=tournament, wins_tied_at=wins_level
+        ).delete()
+        
+        # Create new resolution
+        resolution = ManualTiebreakResolution.objects.create(
+            tournament=tournament,
+            wins_tied_at=wins_level,
+            resolved_order=[int(pid) for pid in player_order],
+            reason=reason,
+            resolved_by=request.user
+        )
+        
+        # Add tied players to the many-to-many field
+        tied_player_ids = [int(pid) for pid in player_order]
+        resolution.tied_players.set(Player.objects.filter(id__in=tied_player_ids))
+        
+        messages.success(request, f'Manual tiebreak resolution saved for players with {wins_level} wins.')
+        return redirect('tournament_detail', pk=tournament_id)
+    
+    return render(request, 'tournament_creator/manual_tiebreak_resolution.html', {
+        'tournament': tournament,
+        'ties': ties
+    })
 
 @login_required
 @require_POST

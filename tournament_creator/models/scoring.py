@@ -1,5 +1,6 @@
 from django.db import models
 from .base_models import Player, Matchup, TournamentChart
+from .auth import User
 
 class MatchScore(models.Model):
     """
@@ -61,3 +62,24 @@ class PlayerScore(models.Model):
         String summary of the player's score record for listing/ranking.
         """
         return f"{self.player.first_name} - Wins: {self.wins}, Points: {self.total_point_difference}"
+
+
+class ManualTiebreakResolution(models.Model):
+    """
+    Stores manual tiebreak resolutions made by tournament directors.
+    Used when automatic tiebreak criteria cannot resolve ties.
+    """
+    tournament = models.ForeignKey(TournamentChart, on_delete=models.CASCADE)
+    tied_players = models.ManyToManyField(Player)  # Players involved in the tie
+    resolved_order = models.JSONField()  # List of player IDs in resolved order (1st, 2nd, etc.)
+    wins_tied_at = models.IntegerField()  # Number of wins where tie occurred
+    reason = models.TextField(blank=True)  # Optional reason for the manual resolution
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    resolved_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['tournament', 'wins_tied_at']
+        ordering = ['-resolved_at']
+    
+    def __str__(self):
+        return f"Tiebreak resolution for {self.tournament.name} at {self.wins_tied_at} wins"

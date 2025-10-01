@@ -777,6 +777,19 @@ def record_match_result(request, tournament_id, matchup_id):
             # Log and continue, similar to email.
 
         # Update player scores
+        # Get automatic wins from the tournament archetype if applicable
+        from ..models.tournament_types import get_implementation
+        archetype_impl = None
+        automatic_wins_map = {}
+        if hasattr(tournament, 'archetype') and tournament.archetype:
+            archetype_impl = get_implementation(tournament.archetype)
+            if archetype_impl and hasattr(archetype_impl, 'get_automatic_wins'):
+                automatic_wins_map = archetype_impl.get_automatic_wins(len(players))
+
+        # Sort players by ranking to get their seed index
+        sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
+        player_to_seed = {p.id: idx for idx, p in enumerate(sorted_players)}
+
         for player in players:
             player_score, _ = PlayerScore.objects.get_or_create(
                 tournament=tournament,
@@ -797,6 +810,11 @@ def record_match_result(request, tournament_id, matchup_id):
             player_score.matches_played = all_played.count()
             player_score.wins = 0
             player_score.total_point_difference = 0
+
+            # Set automatic wins
+            player_seed = player_to_seed.get(player.id, -1)
+            player_score.automatic_wins = automatic_wins_map.get(player_seed, 0)
+
             for m in all_played:
                 scores = list(m.scores.order_by('set_number'))
                 if not scores:
@@ -814,6 +832,9 @@ def record_match_result(request, tournament_id, matchup_id):
                         player_score.total_point_difference -= s.point_difference
                     elif on_team2 and s.winning_team == 1:
                         player_score.total_point_difference -= s.point_difference
+
+            # Add automatic wins to total wins
+            player_score.wins += player_score.automatic_wins
             player_score.save()
             
         return JsonResponse({'status': 'success'})

@@ -89,6 +89,13 @@ class MoCTournamentArchetype(TournamentArchetype):
         abstract = True
     tournament_category = 'MOC'
 
+    def get_automatic_wins(self, num_players):
+        """
+        Returns a dict mapping player seed (0-indexed) to number of automatic wins.
+        Some formats give automatic wins to top seeds to balance the schedule.
+        """
+        return {}
+
 # Existing Cade Loving's (now Monarch of the Court) format:
 class MonarchOfTheCourt8(MoCTournamentArchetype):
     # Remove abstract=True to allow instantiation
@@ -382,14 +389,21 @@ class MonarchOfTheCourt10(MoCTournamentArchetype):
 class MonarchOfTheCourt11(MoCTournamentArchetype):
     name = "11-player Monarch of the Court"
     description = "MoC: 11-player specific schedule with 2 courts."
-    
+
     def calculate_rounds(self, num_players):
         if num_players != 11:
             raise ValueError("This tournament type requires exactly 11 players")
         return 14
-    
+
     def calculate_courts(self, num_players):
         return 2
+
+    def get_automatic_wins(self, num_players):
+        """
+        In 11-player MoC, seeds 1 & 2 play one fewer match than others.
+        They each receive 1 automatic win to balance the standings.
+        """
+        return {0: 1, 1: 1}  # Seeds 1 & 2 (0-indexed) get +1 automatic win
     
     def generate_matchups(self, tournament_chart, players: List[Player]):
         if len(players) != 11:

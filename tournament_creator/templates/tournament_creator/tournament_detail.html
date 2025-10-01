@@ -145,8 +145,8 @@
                             {% for score in player_scores %}
                                 <tr>
                                     <td>{{ score.player.display_name }}</td>
-                                    <td>{{ score.matches_played }}</td>
-                                    <td>{{ score.wins }}</td>
+                                    <td>{{ score.matches_played }}{% if score.automatic_wins > 0 %} <span class="text-success">+{{ score.automatic_wins }}</span>{% endif %}</td>
+                                    <td>{{ score.wins }}{% if score.automatic_wins > 0 %} <span class="text-success">+{{ score.automatic_wins }}</span>{% endif %}</td>
                                     <td>{{ score.total_point_difference }}</td>
                                     <td>
                                         {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 or score.above_wins > 0 or score.above_pd != 0 %}

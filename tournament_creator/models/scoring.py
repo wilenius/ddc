@@ -52,7 +52,8 @@ class PlayerScore(models.Model):
     wins = models.IntegerField(default=0)
     matches_played = models.IntegerField(default=0)
     total_point_difference = models.IntegerField(default=0)
-    
+    automatic_wins = models.IntegerField(default=0)  # For formats where some players get bye wins
+
     class Meta:
         unique_together = ['tournament', 'player']
         ordering = ['-wins', '-total_point_difference']

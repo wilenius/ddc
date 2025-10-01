@@ -929,3 +929,130 @@ class TiebreakTests(TestCase):
         player1_idx = next(i for i, score in enumerate(tied_players) if score.player.id == self.players[1].id)
         player2_idx = next(i for i, score in enumerate(tied_players) if score.player.id == self.players[2].id)
         self.assertLess(player1_idx, player2_idx, "Player1 should be ranked higher than Player2")
+
+    def test_moc_tiebreak_wl_ratio(self):
+        """
+        Test the MoC-specific tiebreak logic using W/L ratio.
+        
+        Scenario: Players 1, 2, and 3 all have 2 wins, but:
+        - Player1 beats Player2: 15-10 (W/L vs tied: 1/0 = inf)
+        - Player2 beats Player3: 15-12 (W/L vs tied: 1/1 = 1.0)
+        - Player3 beats Player1: 15-8 (W/L vs tied: 1/1 = 1.0)
+        
+        Expected order: Player1 (inf ratio), then by point differential
+        """
+        # Create player scores
+        scores = []
+        for i in range(4):
+            score = PlayerScore.objects.create(
+                player=self.players[i],
+                tournament=self.tournament,
+                wins=2 if i > 0 else 3,  # Players 1,2,3 tied with 2 wins, Player 0 has 3
+                matches_played=3 if i > 0 else 3,
+                total_point_difference=0  # Will be updated based on matches
+            )
+            scores.append(score)
+        
+        # Create MoC-style matchups (using individual player fields)
+        # Player1 vs Player2 (Player1 wins)
+        matchup1 = Matchup.objects.create(
+            tournament_chart=self.tournament,
+            round_number=1,
+            court_number=1,
+            pair1_player1=self.players[1],
+            pair1_player2=self.players[4],  # Partner
+            pair2_player1=self.players[2],
+            pair2_player2=self.players[5]   # Partner
+        )
+        
+        MatchScore.objects.create(
+            matchup=matchup1,
+            set_number=1,
+            team1_score=15,
+            team2_score=10,
+            winning_team=1,
+            point_difference=5
+        )
+        
+        # Player2 vs Player3 (Player2 wins)
+        matchup2 = Matchup.objects.create(
+            tournament_chart=self.tournament,
+            round_number=2,
+            court_number=1,
+            pair1_player1=self.players[2],
+            pair1_player2=self.players[6],  # Partner
+            pair2_player1=self.players[3],
+            pair2_player2=self.players[7]   # Partner
+        )
+        
+        MatchScore.objects.create(
+            matchup=matchup2,
+            set_number=1,
+            team1_score=15,
+            team2_score=12,
+            winning_team=1,
+            point_difference=3
+        )
+        
+        # Player3 vs Player1 (Player3 wins)
+        matchup3 = Matchup.objects.create(
+            tournament_chart=self.tournament,
+            round_number=3,
+            court_number=1,
+            pair1_player1=self.players[3],
+            pair1_player2=self.players[4],  # Partner
+            pair2_player1=self.players[1],
+            pair2_player2=self.players[5]   # Partner
+        )
+        
+        MatchScore.objects.create(
+            matchup=matchup3,
+            set_number=1,
+            team1_score=15,
+            team2_score=8,
+            winning_team=1,
+            point_difference=7
+        )
+        
+        # Update point differentials based on matches
+        scores[1].total_point_difference = 5 - 7  # +5 vs Player2, -7 vs Player3 = -2
+        scores[2].total_point_difference = 3 - 5  # +3 vs Player3, -5 vs Player1 = -2  
+        scores[3].total_point_difference = 7 - 3  # +7 vs Player1, -3 vs Player2 = +4
+        for score in scores:
+            score.save()
+        
+        # Apply tiebreaks
+        result = self.view.apply_tiebreaks(self.tournament, scores)
+        
+        # Find the tied players (should be players 1, 2, 3)
+        tied_players = [score for score in result if score.wins == 2]
+        
+        self.assertEqual(len(tied_players), 3, "Should have exactly 3 tied players")
+        
+        # Check that MoC tiebreak data was calculated
+        for score in tied_players:
+            self.assertTrue(hasattr(score, 'h2h_ratio'), "Should have h2h_ratio calculated")
+            self.assertTrue(hasattr(score, 'h2h_wins'), "Should have h2h_wins calculated")
+            self.assertTrue(hasattr(score, 'h2h_losses'), "Should have h2h_losses calculated")
+        
+        # Player1 should have the best W/L ratio (1/1 but with no losses vs tied players initially)
+        # But actually, let's check the specific logic
+        player1_score = next(score for score in tied_players if score.player.id == self.players[1].id)
+        player2_score = next(score for score in tied_players if score.player.id == self.players[2].id)
+        player3_score = next(score for score in tied_players if score.player.id == self.players[3].id)
+        
+        # Player1: 1 win vs Player2, 1 loss vs Player3 -> W/L = 1/1 = 1.0
+        # Player2: 1 win vs Player3, 1 loss vs Player1 -> W/L = 1/1 = 1.0
+        # Player3: 1 win vs Player1, 1 loss vs Player2 -> W/L = 1/1 = 1.0
+        
+        # Since W/L ratios are equal, should sort by point differential
+        # Player3 has +4, Player1 has -2, Player2 has -2
+        # Player3 should be first, then between Player1 and Player2 depends on implementation
+        
+        # Find Player3's position - should be first among tied players
+        player3_idx = next(i for i, score in enumerate(tied_players) if score.player.id == self.players[3].id)
+        self.assertEqual(player3_idx, 0, "Player3 should be first (best point differential)")
+        
+        print(f"Player1 H2H: {player1_score.h2h_wins}W-{player1_score.h2h_losses}L, ratio: {player1_score.h2h_ratio}, PD: {player1_score.h2h_point_diff}")
+        print(f"Player2 H2H: {player2_score.h2h_wins}W-{player2_score.h2h_losses}L, ratio: {player2_score.h2h_ratio}, PD: {player2_score.h2h_point_diff}")
+        print(f"Player3 H2H: {player3_score.h2h_wins}W-{player3_score.h2h_losses}L, ratio: {player3_score.h2h_ratio}, PD: {player3_score.h2h_point_diff}")

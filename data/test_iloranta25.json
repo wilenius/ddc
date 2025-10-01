@@ -1,0 +1,1829 @@
+[
+{
+  "model": "tournament_creator.user",
+  "pk": 1,
+  "fields": {
+    "password": "pbkdf2_sha256$870000$awDQn0P1guxNch1Iaq4MKr$FWhXB/KqE4NPnP0lvfdEnoF95u6lkp7TNGXgZ0LYAc0=",
+    "last_login": "2025-09-30T12:36:06Z",
+    "is_superuser": true,
+    "username": "admin",
+    "first_name": "",
+    "last_name": "",
+    "email": "hw+admin@iki.fi",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2025-09-30T12:35:47Z",
+    "role": "ADMIN",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1985,
+  "fields": {
+    "first_name": "Taneli",
+    "last_name": "Kuusiholma",
+    "ranking": 1,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1986,
+  "fields": {
+    "first_name": "Heikki",
+    "last_name": "Wilenius",
+    "ranking": 2,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1987,
+  "fields": {
+    "first_name": "Tuomas",
+    "last_name": "Ylä-Anttila",
+    "ranking": 3,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1988,
+  "fields": {
+    "first_name": "Marja",
+    "last_name": "Nappa",
+    "ranking": 4,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1989,
+  "fields": {
+    "first_name": "Mikko",
+    "last_name": "Ravimo",
+    "ranking": 5,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1990,
+  "fields": {
+    "first_name": "Ida",
+    "last_name": "Ravimo",
+    "ranking": 6,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1991,
+  "fields": {
+    "first_name": "Santtu",
+    "last_name": "L",
+    "ranking": 7,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1992,
+  "fields": {
+    "first_name": "Sami",
+    "last_name": "P",
+    "ranking": 8,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1993,
+  "fields": {
+    "first_name": "Viktor",
+    "last_name": "X",
+    "ranking": 9,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1994,
+  "fields": {
+    "first_name": "Emmi",
+    "last_name": "X",
+    "ranking": 10,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.player",
+  "pk": 1995,
+  "fields": {
+    "first_name": "Osmo",
+    "last_name": "X",
+    "ranking": 11,
+    "ranking_points": 0.0
+  }
+},
+{
+  "model": "tournament_creator.tournamentchart",
+  "pk": 4,
+  "fields": {
+    "name": "iloranta test",
+    "date": "2025-10-01",
+    "number_of_rounds": 14,
+    "number_of_courts": 2,
+    "notify_by_email": false,
+    "notify_by_signal": false,
+    "notify_by_matrix": false
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 27,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1985
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 28,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1986
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 29,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1987
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 30,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1988
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 31,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1989
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 32,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1990
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 33,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1991
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 34,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1992
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 35,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1993
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 36,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1994
+  }
+},
+{
+  "model": "tournament_creator.tournamentplayer",
+  "pk": 37,
+  "fields": {
+    "tournament_chart": 4,
+    "player": 1995
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 55,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1985,
+    "pair1_player2": 1987,
+    "pair2_player1": 1993,
+    "pair2_player2": 1995,
+    "round_number": 1,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 56,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1985,
+    "pair1_player2": 1992,
+    "pair2_player1": 1988,
+    "pair2_player2": 1989,
+    "round_number": 2,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 57,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1986,
+    "pair1_player2": 1991,
+    "pair2_player1": 1987,
+    "pair2_player2": 1990,
+    "round_number": 2,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 58,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1992,
+    "pair1_player2": 1995,
+    "pair2_player1": 1993,
+    "pair2_player2": 1994,
+    "round_number": 3,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 59,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1985,
+    "pair1_player2": 1991,
+    "pair2_player1": 1986,
+    "pair2_player2": 1989,
+    "round_number": 3,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 60,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1991,
+    "pair1_player2": 1995,
+    "pair2_player1": 1992,
+    "pair2_player2": 1994,
+    "round_number": 4,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 61,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1985,
+    "pair1_player2": 1990,
+    "pair2_player1": 1987,
+    "pair2_player2": 1988,
+    "round_number": 4,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 62,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1988,
+    "pair1_player2": 1993,
+    "pair2_player1": 1994,
+    "pair2_player2": 1995,
+    "round_number": 5,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 63,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1986,
+    "pair1_player2": 1990,
+    "pair2_player1": 1987,
+    "pair2_player2": 1989,
+    "round_number": 5,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 64,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1991,
+    "pair1_player2": 1994,
+    "pair2_player1": 1992,
+    "pair2_player2": 1993,
+    "round_number": 6,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 65,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1985,
+    "pair1_player2": 1989,
+    "pair2_player1": 1986,
+    "pair2_player2": 1988,
+    "round_number": 6,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 66,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1987,
+    "pair1_player2": 1993,
+    "pair2_player1": 1988,
+    "pair2_player2": 1991,
+    "round_number": 7,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 67,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1989,
+    "pair1_player2": 1995,
+    "pair2_player1": 1990,
+    "pair2_player2": 1994,
+    "round_number": 7,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 68,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1985,
+    "pair1_player2": 1995,
+    "pair2_player1": 1988,
+    "pair2_player2": 1992,
+    "round_number": 8,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 69,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1986,
+    "pair1_player2": 1994,
+    "pair2_player1": 1989,
+    "pair2_player2": 1991,
+    "round_number": 8,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 70,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1987,
+    "pair1_player2": 1995,
+    "pair2_player1": 1988,
+    "pair2_player2": 1994,
+    "round_number": 9,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 71,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1989,
+    "pair1_player2": 1993,
+    "pair2_player1": 1990,
+    "pair2_player2": 1992,
+    "round_number": 9,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 72,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1985,
+    "pair1_player2": 1993,
+    "pair2_player1": 1987,
+    "pair2_player2": 1991,
+    "round_number": 10,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 73,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1986,
+    "pair1_player2": 1992,
+    "pair2_player1": 1988,
+    "pair2_player2": 1990,
+    "round_number": 10,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 74,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1986,
+    "pair1_player2": 1995,
+    "pair2_player1": 1990,
+    "pair2_player2": 1991,
+    "round_number": 11,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 75,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1987,
+    "pair1_player2": 1994,
+    "pair2_player1": 1989,
+    "pair2_player2": 1992,
+    "round_number": 11,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 76,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1985,
+    "pair1_player2": 1994,
+    "pair2_player1": 1989,
+    "pair2_player2": 1990,
+    "round_number": 12,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 77,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1986,
+    "pair1_player2": 1993,
+    "pair2_player1": 1987,
+    "pair2_player2": 1992,
+    "round_number": 12,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 78,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1988,
+    "pair1_player2": 1995,
+    "pair2_player1": 1990,
+    "pair2_player2": 1993,
+    "round_number": 13,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 79,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1989,
+    "pair1_player2": 1994,
+    "pair2_player1": 1991,
+    "pair2_player2": 1992,
+    "round_number": 13,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 80,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1990,
+    "pair1_player2": 1995,
+    "pair2_player1": 1991,
+    "pair2_player2": 1993,
+    "round_number": 14,
+    "court_number": 1
+  }
+},
+{
+  "model": "tournament_creator.matchup",
+  "pk": 81,
+  "fields": {
+    "tournament_chart": 4,
+    "pair1": null,
+    "pair2": null,
+    "pair1_player1": 1985,
+    "pair1_player2": 1988,
+    "pair2_player1": 1986,
+    "pair2_player2": 1987,
+    "round_number": 14,
+    "court_number": 2
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 1,
+  "fields": {
+    "name": "2 pairs Swedish format",
+    "description": "Best of 5 sets, always 1 vs 2, on single field.",
+    "tournament_category": "PAIRS"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 2,
+  "fields": {
+    "name": "3 pairs Swedish format",
+    "description": "Round robin: 3 rounds, 1 field.",
+    "tournament_category": "PAIRS"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 3,
+  "fields": {
+    "name": "4 pairs Swedish format",
+    "description": "Round robin: 3 rounds on 2 fields with 4 pairs.",
+    "tournament_category": "PAIRS"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 4,
+  "fields": {
+    "name": "5 pairs Swedish format",
+    "description": "Official pairing from Swedish protokoll.",
+    "tournament_category": "PAIRS"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 5,
+  "fields": {
+    "name": "6 pairs Swedish format",
+    "description": "Official pairing from Swedish protokoll.",
+    "tournament_category": "PAIRS"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 6,
+  "fields": {
+    "name": "7 pairs Swedish format",
+    "description": "Official pairing from Swedish protokoll.",
+    "tournament_category": "PAIRS"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 7,
+  "fields": {
+    "name": "8 pairs Swedish format",
+    "description": "Official pairing from Swedish protokoll.",
+    "tournament_category": "PAIRS"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 8,
+  "fields": {
+    "name": "9 pairs Swedish format",
+    "description": "Official pairing from Swedish protokoll.",
+    "tournament_category": "PAIRS"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 9,
+  "fields": {
+    "name": "10 pairs Swedish format",
+    "description": "Official pairing from Swedish protokoll.",
+    "tournament_category": "PAIRS"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 10,
+  "fields": {
+    "name": "5-player Monarch of the Court",
+    "description": "MoC: 5-player specific schedule (Option A).",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 11,
+  "fields": {
+    "name": "6-player Monarch of the Court",
+    "description": "MoC: 6-player specific schedule (Option A).",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 12,
+  "fields": {
+    "name": "7-player Monarch of the Court",
+    "description": "MoC: 7-player specific schedule.",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 13,
+  "fields": {
+    "name": "9-player Monarch of the Court",
+    "description": "MoC: 9-player specific schedule with 2 courts.",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 14,
+  "fields": {
+    "name": "10-player Monarch of the Court",
+    "description": "MoC: 10-player specific schedule with 2 courts.",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 15,
+  "fields": {
+    "name": "11-player Monarch of the Court",
+    "description": "MoC: 11-player specific schedule with 2 courts.",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 16,
+  "fields": {
+    "name": "12-player Monarch of the Court",
+    "description": "MoC: 12-player specific schedule with 3 courts.",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 17,
+  "fields": {
+    "name": "13-player Monarch of the Court",
+    "description": "MoC: 13-player specific schedule with 3 courts.",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 18,
+  "fields": {
+    "name": "14-player Monarch of the Court",
+    "description": "MoC: 14-player specific schedule with 3 courts.",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 19,
+  "fields": {
+    "name": "15-player Monarch of the Court",
+    "description": "MoC: 15-player specific schedule with 3 courts.",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.tournamentarchetype",
+  "pk": 20,
+  "fields": {
+    "name": "16-player Monarch of the Court",
+    "description": "MoC: 16-player specific schedule with 4 courts.",
+    "tournament_category": "MOC"
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 6,
+  "fields": {
+    "matchup": 55,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T03:56:13.701Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        12
+      ],
+      "team2_scores": [
+        0
+      ],
+      "winning_team": 1,
+      "team1_sets_won": 1,
+      "team2_sets_won": 0
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 7,
+  "fields": {
+    "matchup": 56,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T03:56:31.300Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        8
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 8,
+  "fields": {
+    "matchup": 58,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T03:56:42.588Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        11
+      ],
+      "team2_scores": [
+        7
+      ],
+      "winning_team": 1,
+      "team1_sets_won": 1,
+      "team2_sets_won": 0
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 9,
+  "fields": {
+    "matchup": 60,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T03:57:25.474Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        6
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 10,
+  "fields": {
+    "matchup": 62,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T03:57:35.724Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        11
+      ],
+      "team2_scores": [
+        2
+      ],
+      "winning_team": 1,
+      "team1_sets_won": 1,
+      "team2_sets_won": 0
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 11,
+  "fields": {
+    "matchup": 64,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:16:02.911Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        5
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 12,
+  "fields": {
+    "matchup": 66,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:16:12.831Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        7
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 13,
+  "fields": {
+    "matchup": 68,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:16:23.299Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        9
+      ],
+      "team2_scores": [
+        12
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 14,
+  "fields": {
+    "matchup": 70,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:16:34.643Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        12
+      ],
+      "team2_scores": [
+        9
+      ],
+      "winning_team": 1,
+      "team1_sets_won": 1,
+      "team2_sets_won": 0
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 15,
+  "fields": {
+    "matchup": 72,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:16:47.719Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        11
+      ],
+      "team2_scores": [
+        6
+      ],
+      "winning_team": 1,
+      "team1_sets_won": 1,
+      "team2_sets_won": 0
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 16,
+  "fields": {
+    "matchup": 74,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:16:57.455Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        7
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 17,
+  "fields": {
+    "matchup": 76,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:17:13.557Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        2
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 18,
+  "fields": {
+    "matchup": 78,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:17:23.414Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        11
+      ],
+      "team2_scores": [
+        13
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 19,
+  "fields": {
+    "matchup": 80,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:17:32.816Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        11
+      ],
+      "team2_scores": [
+        3
+      ],
+      "winning_team": 1,
+      "team1_sets_won": 1,
+      "team2_sets_won": 0
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 20,
+  "fields": {
+    "matchup": 57,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:17:44.301Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        11
+      ],
+      "team2_scores": [
+        6
+      ],
+      "winning_team": 1,
+      "team1_sets_won": 1,
+      "team2_sets_won": 0
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 21,
+  "fields": {
+    "matchup": 59,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:17:54.497Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        2
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 22,
+  "fields": {
+    "matchup": 61,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:18:04.244Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        5
+      ],
+      "team2_scores": [
+        12
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 23,
+  "fields": {
+    "matchup": 63,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:18:15.533Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        5
+      ],
+      "team2_scores": [
+        12
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 24,
+  "fields": {
+    "matchup": 65,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:18:28.980Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        7
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 25,
+  "fields": {
+    "matchup": 67,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:18:37.921Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        11
+      ],
+      "team2_scores": [
+        8
+      ],
+      "winning_team": 1,
+      "team1_sets_won": 1,
+      "team2_sets_won": 0
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 26,
+  "fields": {
+    "matchup": 69,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:18:48.826Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        7
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 27,
+  "fields": {
+    "matchup": 71,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:18:58.444Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        7
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 28,
+  "fields": {
+    "matchup": 73,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:19:09.087Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        11
+      ],
+      "team2_scores": [
+        8
+      ],
+      "winning_team": 1,
+      "team1_sets_won": 1,
+      "team2_sets_won": 0
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 29,
+  "fields": {
+    "matchup": 75,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:19:18.453Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        9
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 30,
+  "fields": {
+    "matchup": 77,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:19:29.726Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        13
+      ],
+      "team2_scores": [
+        11
+      ],
+      "winning_team": 1,
+      "team1_sets_won": 1,
+      "team2_sets_won": 0
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 31,
+  "fields": {
+    "matchup": 79,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:19:39.700Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        10
+      ],
+      "team2_scores": [
+        12
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchresultlog",
+  "pk": 32,
+  "fields": {
+    "matchup": 81,
+    "recorded_by": 1,
+    "recorded_at": "2025-10-01T05:19:50.038Z",
+    "action": "UPDATE",
+    "details": {
+      "team1_scores": [
+        11
+      ],
+      "team2_scores": [
+        13
+      ],
+      "winning_team": 2,
+      "team1_sets_won": 0,
+      "team2_sets_won": 1
+    }
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 6,
+  "fields": {
+    "matchup": 55,
+    "set_number": 1,
+    "team1_score": 12,
+    "team2_score": 0,
+    "winning_team": 1,
+    "point_difference": 12
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 7,
+  "fields": {
+    "matchup": 56,
+    "set_number": 1,
+    "team1_score": 8,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 3
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 8,
+  "fields": {
+    "matchup": 58,
+    "set_number": 1,
+    "team1_score": 11,
+    "team2_score": 7,
+    "winning_team": 1,
+    "point_difference": 4
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 9,
+  "fields": {
+    "matchup": 60,
+    "set_number": 1,
+    "team1_score": 6,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 5
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 10,
+  "fields": {
+    "matchup": 62,
+    "set_number": 1,
+    "team1_score": 11,
+    "team2_score": 2,
+    "winning_team": 1,
+    "point_difference": 9
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 11,
+  "fields": {
+    "matchup": 64,
+    "set_number": 1,
+    "team1_score": 5,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 6
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 12,
+  "fields": {
+    "matchup": 66,
+    "set_number": 1,
+    "team1_score": 7,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 4
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 13,
+  "fields": {
+    "matchup": 68,
+    "set_number": 1,
+    "team1_score": 9,
+    "team2_score": 12,
+    "winning_team": 2,
+    "point_difference": 3
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 14,
+  "fields": {
+    "matchup": 70,
+    "set_number": 1,
+    "team1_score": 12,
+    "team2_score": 9,
+    "winning_team": 1,
+    "point_difference": 3
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 15,
+  "fields": {
+    "matchup": 72,
+    "set_number": 1,
+    "team1_score": 11,
+    "team2_score": 6,
+    "winning_team": 1,
+    "point_difference": 5
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 16,
+  "fields": {
+    "matchup": 74,
+    "set_number": 1,
+    "team1_score": 7,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 4
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 17,
+  "fields": {
+    "matchup": 76,
+    "set_number": 1,
+    "team1_score": 2,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 9
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 18,
+  "fields": {
+    "matchup": 78,
+    "set_number": 1,
+    "team1_score": 11,
+    "team2_score": 13,
+    "winning_team": 2,
+    "point_difference": 2
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 19,
+  "fields": {
+    "matchup": 80,
+    "set_number": 1,
+    "team1_score": 11,
+    "team2_score": 3,
+    "winning_team": 1,
+    "point_difference": 8
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 20,
+  "fields": {
+    "matchup": 57,
+    "set_number": 1,
+    "team1_score": 11,
+    "team2_score": 6,
+    "winning_team": 1,
+    "point_difference": 5
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 21,
+  "fields": {
+    "matchup": 59,
+    "set_number": 1,
+    "team1_score": 2,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 9
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 22,
+  "fields": {
+    "matchup": 61,
+    "set_number": 1,
+    "team1_score": 5,
+    "team2_score": 12,
+    "winning_team": 2,
+    "point_difference": 7
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 23,
+  "fields": {
+    "matchup": 63,
+    "set_number": 1,
+    "team1_score": 5,
+    "team2_score": 12,
+    "winning_team": 2,
+    "point_difference": 7
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 24,
+  "fields": {
+    "matchup": 65,
+    "set_number": 1,
+    "team1_score": 7,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 4
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 25,
+  "fields": {
+    "matchup": 67,
+    "set_number": 1,
+    "team1_score": 11,
+    "team2_score": 8,
+    "winning_team": 1,
+    "point_difference": 3
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 26,
+  "fields": {
+    "matchup": 69,
+    "set_number": 1,
+    "team1_score": 7,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 4
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 27,
+  "fields": {
+    "matchup": 71,
+    "set_number": 1,
+    "team1_score": 7,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 4
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 28,
+  "fields": {
+    "matchup": 73,
+    "set_number": 1,
+    "team1_score": 11,
+    "team2_score": 8,
+    "winning_team": 1,
+    "point_difference": 3
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 29,
+  "fields": {
+    "matchup": 75,
+    "set_number": 1,
+    "team1_score": 9,
+    "team2_score": 11,
+    "winning_team": 2,
+    "point_difference": 2
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 30,
+  "fields": {
+    "matchup": 77,
+    "set_number": 1,
+    "team1_score": 13,
+    "team2_score": 11,
+    "winning_team": 1,
+    "point_difference": 2
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 31,
+  "fields": {
+    "matchup": 79,
+    "set_number": 1,
+    "team1_score": 10,
+    "team2_score": 12,
+    "winning_team": 2,
+    "point_difference": 2
+  }
+},
+{
+  "model": "tournament_creator.matchscore",
+  "pk": 32,
+  "fields": {
+    "matchup": 81,
+    "set_number": 1,
+    "team1_score": 11,
+    "team2_score": 13,
+    "winning_team": 2,
+    "point_difference": 2
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 6,
+  "fields": {
+    "tournament": 4,
+    "player": 1985,
+    "wins": 2,
+    "matches_played": 9,
+    "total_point_difference": -20
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 7,
+  "fields": {
+    "tournament": 4,
+    "player": 1987,
+    "wins": 5,
+    "matches_played": 10,
+    "total_point_difference": 13
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 8,
+  "fields": {
+    "tournament": 4,
+    "player": 1993,
+    "wins": 5,
+    "matches_played": 10,
+    "total_point_difference": -8
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 9,
+  "fields": {
+    "tournament": 4,
+    "player": 1995,
+    "wins": 4,
+    "matches_played": 10,
+    "total_point_difference": -17
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 10,
+  "fields": {
+    "tournament": 4,
+    "player": 1992,
+    "wins": 8,
+    "matches_played": 10,
+    "total_point_difference": 24
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 11,
+  "fields": {
+    "tournament": 4,
+    "player": 1988,
+    "wins": 6,
+    "matches_played": 10,
+    "total_point_difference": 20
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 12,
+  "fields": {
+    "tournament": 4,
+    "player": 1989,
+    "wins": 7,
+    "matches_played": 10,
+    "total_point_difference": 27
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 13,
+  "fields": {
+    "tournament": 4,
+    "player": 1994,
+    "wins": 1,
+    "matches_played": 10,
+    "total_point_difference": -37
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 14,
+  "fields": {
+    "tournament": 4,
+    "player": 1991,
+    "wins": 5,
+    "matches_played": 10,
+    "total_point_difference": -14
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 15,
+  "fields": {
+    "tournament": 4,
+    "player": 1986,
+    "wins": 6,
+    "matches_played": 9,
+    "total_point_difference": 10
+  }
+},
+{
+  "model": "tournament_creator.playerscore",
+  "pk": 16,
+  "fields": {
+    "tournament": 4,
+    "player": 1990,
+    "wins": 5,
+    "matches_played": 10,
+    "total_point_difference": 2
+  }
+}
+]

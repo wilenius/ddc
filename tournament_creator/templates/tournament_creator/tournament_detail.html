@@ -10,6 +10,10 @@
     </div>
     <div class="col-auto">
         {% if user.is_authenticated and user.is_admin %}
+            <a href="{% url 'manual_tiebreak_resolution' tournament.pk %}" 
+               class="btn btn-warning me-2">
+                Resolve Tiebreaks
+            </a>
             <a href="{% url 'tournament_delete' tournament.pk %}" 
                class="btn btn-danger" 
                onclick="return confirm('Are you sure you want to delete this tournament? This action cannot be undone.')">
@@ -141,17 +145,17 @@
                             {% for score in player_scores %}
                                 <tr>
                                     <td>{{ score.player.display_name }}</td>
-                                    <td>{{ score.matches_played }}</td>
-                                    <td>{{ score.wins }}</td>
+                                    <td>{{ score.matches_played }}{% if score.automatic_wins > 0 %} <span class="text-success">+{{ score.automatic_wins }}</span>{% endif %}</td>
+                                    <td>{{ score.wins }}{% if score.automatic_wins > 0 %} <span class="text-success">+{{ score.automatic_wins }}</span>{% endif %}</td>
                                     <td>{{ score.total_point_difference }}</td>
                                     <td>
-                                        {% if score.h2h_wins > 0 or score.h2h_point_diff != 0 or score.above_wins > 0 or score.above_pd != 0 %}
-                                            <span title="H2H: {{ score.h2h_wins }}W/{{ score.h2h_point_diff }}PD{% if score.above_wins > 0 or score.above_pd != 0 %}, VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD{% endif %}">
-                                                {% if score.h2h_wins > 0 or score.h2h_point_diff != 0 %}
-                                                    H2H: {{ score.h2h_wins }}W/{{ score.h2h_point_diff }}PD
+                                        {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 or score.above_wins > 0 or score.above_pd != 0 %}
+                                            <span title="H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L, {{ score.h2h_point_diff }}PD{% if score.above_wins > 0 or score.above_pd != 0 %}, VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD{% endif %}">
+                                                {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 %}
+                                                    H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L ({{ score.h2h_point_diff }}PD)
                                                 {% endif %}
                                                 {% if score.above_wins > 0 or score.above_pd != 0 %}
-                                                    {% if score.h2h_wins > 0 or score.h2h_point_diff != 0 %}, {% endif %}
+                                                    {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 %}, {% endif %}
                                                     VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD
                                                 {% endif %}
                                             </span>

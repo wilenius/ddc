@@ -89,20 +89,65 @@ class MoCTournamentArchetype(TournamentArchetype):
         abstract = True
     tournament_category = 'MOC'
 
+    def get_automatic_wins(self, num_players):
+        """
+        Returns a dict mapping player seed (0-indexed) to number of automatic wins.
+        Some formats give automatic wins to top seeds to balance the schedule.
+        """
+        return {}
+
 # Existing Cade Loving's (now Monarch of the Court) format:
 class MonarchOfTheCourt8(MoCTournamentArchetype):
     # Remove abstract=True to allow instantiation
     name = "8-player Monarch of the Court"  # Exact match to migration
     description = "MoC: 8-player specific schedule."
+
     def calculate_rounds(self, num_players):
         if num_players != 8:
             raise ValueError("This tournament type requires exactly 8 players")
         return 7
+
     def calculate_courts(self, num_players):
         return 2
-    # Use the base implementation's generate_matchups method instead of this incomplete one
-    # The base implementation handles Cade Loving's 8-player tournament specifically
-    # and is more complete than this implementation
+
+    def generate_matchups(self, tournament_chart, players: List[Player]):
+        if len(players) != 8:
+            raise ValueError("This tournament type requires exactly 8 players")
+
+        # Sort players by ranking
+        sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
+
+        # Define schedule according to the 8-player format from kodiak_formats.md
+        schedule = [
+            # Round 1: Court 1: 1&3 vs 6&8 (4 v 14), Court 2: 2&4 vs 5&7 (6 v 12)
+            [(0, 2, 5, 7, 1), (1, 3, 4, 6, 2)],
+            # Round 2: Court 1: 1&6 vs 4&7 (7 v 11), Court 2: 3&8 vs 2&5 (11 v 7)
+            [(0, 5, 3, 6, 1), (2, 7, 1, 4, 2)],
+            # Round 3: Court 1: 1&2 vs 7&8 (3 v 15), Court 2: 3&4 vs 5&6 (7 v 11)
+            [(0, 1, 6, 7, 1), (2, 3, 4, 5, 2)],
+            # Round 4: Court 1: 1&5 vs 2&6 (6 v 8), Court 2: 4&8 vs 3&7 (12 v 10)
+            [(0, 4, 1, 5, 1), (3, 7, 2, 6, 2)],
+            # Round 5: Court 1: 1&8 vs 4&5 (9 v 9), Court 2: 2&7 vs 3&6 (9 v 9)
+            [(0, 7, 3, 4, 1), (1, 6, 2, 5, 2)],
+            # Round 6: Court 1: 1&7 vs 3&5 (8 v 8), Court 2: 4&6 vs 2&8 (10 v 10)
+            [(0, 6, 2, 4, 1), (3, 5, 1, 7, 2)],
+            # Round 7: Court 1: 1&4 vs 2&3 (5 v 5), Court 2: 6&7 vs 5&8 (13 v 13)
+            [(0, 3, 1, 2, 1), (5, 6, 4, 7, 2)],
+        ]
+
+        # Create matchups
+        for round_idx, round_matches in enumerate(schedule, 1):
+            for match in round_matches:
+                p1, p2, p3, p4, court = match
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    pair1_player1=sorted_players[p1],
+                    pair1_player2=sorted_players[p2],
+                    pair2_player1=sorted_players[p3],
+                    pair2_player2=sorted_players[p4],
+                    round_number=round_idx,
+                    court_number=court
+                )
 
 # 5-player Monarch of the Court (Option A)
 class MonarchOfTheCourt5(MoCTournamentArchetype):
@@ -382,14 +427,21 @@ class MonarchOfTheCourt10(MoCTournamentArchetype):
 class MonarchOfTheCourt11(MoCTournamentArchetype):
     name = "11-player Monarch of the Court"
     description = "MoC: 11-player specific schedule with 2 courts."
-    
+
     def calculate_rounds(self, num_players):
         if num_players != 11:
             raise ValueError("This tournament type requires exactly 11 players")
         return 14
-    
+
     def calculate_courts(self, num_players):
         return 2
+
+    def get_automatic_wins(self, num_players):
+        """
+        In 11-player MoC, seeds 1 & 2 play one fewer match than others.
+        They each receive 1 automatic win to balance the standings.
+        """
+        return {0: 1, 1: 1}  # Seeds 1 & 2 (0-indexed) get +1 automatic win
     
     def generate_matchups(self, tournament_chart, players: List[Player]):
         if len(players) != 11:

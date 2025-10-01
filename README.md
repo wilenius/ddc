@@ -74,6 +74,24 @@ python manage.py test tournament_creator.tests.test_views
 python manage.py test tournament_creator.tests.test_tournament_logic
 python manage.py test tournament_creator.tests.test_scoring
 ```
+## Exporting and Loading Test Cases
+
+You can use Django's dumpdata command to export your database to a JSON fixture:
+```bash
+python manage.py dumpdata tournament_creator --indent 2 > test_fixture.json
+```
+This exports all data from the tournament_creator app. To restore it later to an empty database:
+```bash
+python manage.py loaddata test_fixture.json
+```
+If you want to be more selective and only export specific models:
+```bash
+python manage.py dumpdata tournament_creator.Player tournament_creator.TournamentChart tournament_creator.Matchup tournament_creator.MatchScore tournament_creator.PlayerScore --indent 2 > test_fixture.json
+```
+Before loading the fixture into a clean database, make sure to:
+  1. Run migrations: python manage.py migrate
+  2. Then load the data: python manage.py loaddata test_fixture.json
+
 
 ## Signal Notification Backend Setup
 

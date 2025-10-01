@@ -199,6 +199,7 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         for score in player_scores:
             if not hasattr(score, 'h2h_wins'):
                 score.h2h_wins = 0
+                score.h2h_losses = 0
                 score.h2h_point_diff = 0
             if not hasattr(score, 'above_wins'):
                 score.above_wins = 0

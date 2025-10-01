@@ -149,13 +149,13 @@
                                     <td>{{ score.wins }}</td>
                                     <td>{{ score.total_point_difference }}</td>
                                     <td>
-                                        {% if score.h2h_wins > 0 or score.h2h_point_diff != 0 or score.above_wins > 0 or score.above_pd != 0 %}
-                                            <span title="H2H: {{ score.h2h_wins }}W/{{ score.h2h_point_diff }}PD{% if score.above_wins > 0 or score.above_pd != 0 %}, VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD{% endif %}">
-                                                {% if score.h2h_wins > 0 or score.h2h_point_diff != 0 %}
-                                                    H2H: {{ score.h2h_wins }}W/{{ score.h2h_point_diff }}PD
+                                        {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 or score.above_wins > 0 or score.above_pd != 0 %}
+                                            <span title="H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L, {{ score.h2h_point_diff }}PD{% if score.above_wins > 0 or score.above_pd != 0 %}, VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD{% endif %}">
+                                                {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 %}
+                                                    H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L ({{ score.h2h_point_diff }}PD)
                                                 {% endif %}
                                                 {% if score.above_wins > 0 or score.above_pd != 0 %}
-                                                    {% if score.h2h_wins > 0 or score.h2h_point_diff != 0 %}, {% endif %}
+                                                    {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 %}, {% endif %}
                                                     VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD
                                                 {% endif %}
                                             </span>

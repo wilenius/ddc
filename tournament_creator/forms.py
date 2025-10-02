@@ -209,4 +209,11 @@ class SignalBackendConfigForm(forms.ModelForm):
             existing_group_ids = config.get('recipient_group_ids', '')
             if existing_group_ids:
                 selected_ids = [gid.strip() for gid in existing_group_ids.split(',') if gid.strip()]
-                self.fields['recipient_groups_picker'].initial = selected_ids
+
+                # Try to pre-select IDs that exist in the picker choices
+                picker_ids = [choice[0] for choice in choices]
+                picker_selected = [gid for gid in selected_ids if gid in picker_ids]
+                self.fields['recipient_groups_picker'].initial = picker_selected
+
+                # Put ALL existing group IDs in the manual field as backup
+                self.fields['recipient_group_ids'].initial = existing_group_ids

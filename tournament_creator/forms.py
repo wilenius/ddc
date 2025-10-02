@@ -19,12 +19,26 @@ class TournamentCreationForm(forms.ModelForm):
 
     class Meta:
         model = TournamentChart
-        fields = ['name', 'date', 'notify_by_email', 'notify_by_signal', 'notify_by_matrix']
+        fields = [
+            'name', 'date',
+            'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
+            'signal_recipient_usernames', 'signal_recipient_group_ids'
+        ]
         widgets = {
             'notify_by_email': forms.CheckboxInput,
             'notify_by_signal': forms.CheckboxInput,
             'notify_by_matrix': forms.CheckboxInput,
             'date': forms.DateInput(attrs={'type': 'date'}),
+            'signal_recipient_usernames': forms.Textarea(attrs={
+                'rows': 2,
+                'placeholder': 'Optional: +358401234567, +358409876543 (leave empty to use global settings)',
+                'class': 'form-control'
+            }),
+            'signal_recipient_group_ids': forms.Textarea(attrs={
+                'rows': 2,
+                'placeholder': 'Optional: group.ABC123== (leave empty to use global settings)',
+                'class': 'form-control'
+            }),
         }
 
 class PairForm(forms.Form):

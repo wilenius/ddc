@@ -65,6 +65,9 @@ class TournamentChart(models.Model):
     notify_by_email = models.BooleanField(default=False)
     notify_by_signal = models.BooleanField(default=False)
     notify_by_matrix = models.BooleanField(default=False)
+    # Per-tournament Signal notification recipients (optional, falls back to global settings)
+    signal_recipient_usernames = models.TextField(blank=True, help_text="Comma-separated phone numbers (e.g., +358401234567, +358409876543). Leave empty to use global settings.")
+    signal_recipient_group_ids = models.TextField(blank=True, help_text="Comma-separated group IDs (e.g., group.ABC123==). Leave empty to use global settings.")
     def __str__(self):
         return self.name
     class Meta:

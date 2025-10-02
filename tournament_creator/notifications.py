@@ -1,6 +1,7 @@
 import smtplib # Still useful for SMTPException
 from django.core.mail import send_mail
 from django.core.mail.backends.smtp import EmailBackend as SMTPEmailBackend
+from django.core.cache import cache
 import json
 import requests
 from django.conf import settings
@@ -8,6 +9,45 @@ from tournament_creator.models.base_models import TournamentChart # Added import
 from tournament_creator.models.notifications import NotificationBackendSetting, NotificationLog
 from tournament_creator.models.auth import User
 # from tournament_creator.models.logging import MatchResultLog # For type hinting if needed
+
+def get_signal_groups():
+    """
+    Fetch available Signal groups from the API and cache them for 5 minutes.
+    Returns a list of dicts with 'id', 'name', and other group info.
+    """
+    # Check cache first
+    cached_groups = cache.get('signal_groups')
+    if cached_groups is not None:
+        return cached_groups
+
+    try:
+        # Get Signal backend settings
+        signal_backend = NotificationBackendSetting.objects.get(backend_name='signal', is_active=True)
+        config = signal_backend.config
+        if not config:
+            return []
+
+        signal_cli_rest_api_url = config.get('signal_cli_rest_api_url')
+        signal_sender_phone_number = config.get('signal_sender_phone_number')
+
+        if not signal_cli_rest_api_url or not signal_sender_phone_number:
+            return []
+
+        # Fetch groups from API
+        groups_url = f"{signal_cli_rest_api_url.rstrip('/')}/v1/groups/{signal_sender_phone_number}"
+        response = requests.get(groups_url, timeout=10)
+        response.raise_for_status()
+
+        groups_data = response.json()
+
+        # Cache for 5 minutes (300 seconds)
+        cache.set('signal_groups', groups_data, 300)
+
+        return groups_data
+
+    except (NotificationBackendSetting.DoesNotExist, requests.RequestException, ValueError, KeyError):
+        # Return empty list if anything fails
+        return []
 
 def get_player_name(player):
     return str(player) if player else "Unknown Player"
@@ -236,8 +276,6 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
     # Proceed with sending Signal message if all checks passed
     signal_cli_rest_api_url = config.get('signal_cli_rest_api_url')
     signal_sender_phone_number = config.get('signal_sender_phone_number')
-    recipient_usernames_str = config.get('recipient_usernames', '')
-    recipient_group_ids_str = config.get('recipient_group_ids', '')
 
     if not signal_cli_rest_api_url or not signal_sender_phone_number:
         NotificationLog.objects.create(
@@ -247,12 +285,21 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
         )
         return
 
+    # Check for per-tournament recipients first, fall back to global settings
+    recipient_usernames_str = tournament_chart_instance.signal_recipient_usernames.strip() if tournament_chart_instance.signal_recipient_usernames else ''
+    recipient_group_ids_str = tournament_chart_instance.signal_recipient_group_ids.strip() if tournament_chart_instance.signal_recipient_group_ids else ''
+
+    # If no per-tournament recipients, use global settings
+    if not recipient_usernames_str and not recipient_group_ids_str:
+        recipient_usernames_str = config.get('recipient_usernames', '')
+        recipient_group_ids_str = config.get('recipient_group_ids', '')
+
     actual_recipient_usernames = []
     if isinstance(recipient_usernames_str, str) and recipient_usernames_str.strip():
         actual_recipient_usernames = [name.strip() for name in recipient_usernames_str.split(',') if name.strip()]
     elif isinstance(recipient_usernames_str, list):
         actual_recipient_usernames = [str(name).strip() for name in recipient_usernames_str if str(name).strip()]
-        
+
     actual_recipient_group_ids = []
     if isinstance(recipient_group_ids_str, str) and recipient_group_ids_str.strip():
         actual_recipient_group_ids = [gid.strip() for gid in recipient_group_ids_str.split(',') if gid.strip()]
@@ -262,7 +309,7 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
     if not actual_recipient_usernames and not actual_recipient_group_ids:
         NotificationLog.objects.create(
             backend_setting=signal_backend_setting, success=False,
-            details="Failed to send Signal message: No recipient usernames or group IDs found in configuration.",
+            details="Failed to send Signal message: No recipient usernames or group IDs found in tournament-specific or global configuration.",
             match_result_log=match_result_log_instance
         )
         return

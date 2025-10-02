@@ -1,4 +1,5 @@
 from django import forms
+from django.utils.safestring import mark_safe
 from dal import autocomplete
 from .models.base_models import Player, TournamentChart
 from .models.notifications import NotificationBackendSetting # Added import
@@ -218,7 +219,7 @@ class SignalBackendConfigForm(forms.ModelForm):
             'class': 'form-control',
             'style': 'height: 150px;'
         }),
-        help_text='Select groups from the list. <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button>'
+        help_text=mark_safe('Select groups from the list. <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button>')
     )
 
     recipient_group_ids = forms.CharField(
@@ -267,9 +268,9 @@ class SignalBackendConfigForm(forms.ModelForm):
             self.fields['recipient_groups_picker'].choices = choices
             # Always show the refresh button, update message if no groups
             if not choices:
-                self.fields['recipient_groups_picker'].help_text = 'No groups in cache. <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button> to load available groups.'
+                self.fields['recipient_groups_picker'].help_text = mark_safe('No groups in cache. <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button> to load available groups.')
             else:
-                self.fields['recipient_groups_picker'].help_text = f'Select groups from the list ({len(choices)} available). <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button>'
+                self.fields['recipient_groups_picker'].help_text = mark_safe(f'Select groups from the list ({len(choices)} available). <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button>')
 
             # Pre-select groups that are in recipient_group_ids
             existing_group_ids = config.get('recipient_group_ids', '')

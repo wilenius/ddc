@@ -45,18 +45,24 @@ A Django-based tournament management system specifically designed for Double Dis
    ```bash
    python manage.py migrate
    ```
+   *Note: Tournament archetypes are automatically populated after migrations*
 
-5. Create a superuser (admin account):
+5. Collect static files:
+   ```bash
+   python manage.py collectstatic --noinput
+   ```
+
+6. Create a superuser (admin account):
    ```bash
    python manage.py createsuperuser
    ```
 
-6. Run the development server:
+7. Run the development server:
    ```bash
-   python manage.py runserver
+   python manage.py runserver 0.0.0.0:8000
    ```
 
-7. Access the application:
+8. Access the application:
    - Main site: http://127.0.0.1:8000/
    - Admin interface: http://127.0.0.1:8000/admin/
 
@@ -74,6 +80,17 @@ python manage.py test tournament_creator.tests.test_views
 python manage.py test tournament_creator.tests.test_tournament_logic
 python manage.py test tournament_creator.tests.test_scoring
 ```
+
+## Starting Fresh
+
+If you need to reset your database:
+```bash
+rm db.sqlite3
+python manage.py migrate
+python manage.py collectstatic --noinput
+python manage.py createsuperuser
+```
+
 ## Exporting and Loading Test Cases
 
 You can use Django's dumpdata command to export your database to a JSON fixture:

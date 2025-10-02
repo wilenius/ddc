@@ -68,6 +68,12 @@ class TournamentChart(models.Model):
     # Per-tournament Signal notification recipients (optional, falls back to global settings)
     signal_recipient_usernames = models.TextField(blank=True, help_text="Comma-separated phone numbers (e.g., +358401234567, +358409876543). Leave empty to use global settings.")
     signal_recipient_group_ids = models.TextField(blank=True, help_text="Comma-separated group IDs (e.g., group.ABC123==). Leave empty to use global settings.")
+    # Name display preference
+    NAME_DISPLAY_CHOICES = [
+        ('FIRST', 'First names (with last name initial if needed)'),
+        ('LAST', 'Last names only'),
+    ]
+    name_display_format = models.CharField(max_length=10, choices=NAME_DISPLAY_CHOICES, default='FIRST', help_text="How to display player names in notifications and tournament view")
     def __str__(self):
         return self.name
     class Meta:

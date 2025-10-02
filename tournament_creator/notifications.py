@@ -47,8 +47,24 @@ def get_signal_groups(force_refresh=False):
 
     return groups_data
 
-def get_player_name(player):
-    return str(player) if player else "Unknown Player"
+def get_player_name(player, tournament=None):
+    """
+    Get player name for display, respecting tournament name display preference.
+    Args:
+        player: Player instance
+        tournament: TournamentChart instance (optional)
+    Returns:
+        str: Player name formatted according to tournament preference
+    """
+    if not player:
+        return "Unknown Player"
+
+    # If no tournament specified or tournament uses first names, use full name
+    if not tournament or tournament.name_display_format == 'FIRST':
+        return str(player)  # Returns "FirstName LastName"
+
+    # Otherwise use last name only
+    return player.last_name
 
 def send_email_notification(user_who_recorded: User, match_result_log_instance, tournament_chart_instance: TournamentChart):
     """
@@ -136,12 +152,12 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance, 
         team1_display = str(matchup.pair1)
         team2_display = str(matchup.pair2) if matchup.pair2 else "Unknown Opponent"
     elif matchup.pair1_player1:
-        p1_name = get_player_name(matchup.pair1_player1)
-        p2_name = get_player_name(matchup.pair1_player2)
+        p1_name = get_player_name(matchup.pair1_player1, tournament_chart_instance)
+        p2_name = get_player_name(matchup.pair1_player2, tournament_chart_instance)
         team1_display = f"{p1_name} & {p2_name}"
-        
-        p3_name = get_player_name(matchup.pair2_player1)
-        p4_name = get_player_name(matchup.pair2_player2)
+
+        p3_name = get_player_name(matchup.pair2_player1, tournament_chart_instance)
+        p4_name = get_player_name(matchup.pair2_player2, tournament_chart_instance)
         team2_display = f"{p3_name} & {p4_name}"
     
     matchup_str = f"{team1_display} vs {team2_display} (Round {matchup.round_number}, Court {matchup.court_number})"
@@ -156,21 +172,13 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance, 
         score_pairs.append(f"{t1_score}–{t2_score}")
     scores_str = ", ".join(score_pairs) if score_pairs else "No scores"
 
-    # Use last names only for more compact display
-    def get_last_name(player):
-        if not player:
-            return "Unknown"
-        name = str(player).strip()
-        parts = name.split()
-        return parts[-1] if parts else name
-
-    # Format team names with last names only
+    # Format team names according to tournament preference
     if matchup.pair1:
         team1_compact = str(matchup.pair1)
         team2_compact = str(matchup.pair2) if matchup.pair2 else "Unknown"
     elif matchup.pair1_player1:
-        team1_compact = f"{get_last_name(matchup.pair1_player1)} & {get_last_name(matchup.pair1_player2)}"
-        team2_compact = f"{get_last_name(matchup.pair2_player1)} & {get_last_name(matchup.pair2_player2)}"
+        team1_compact = f"{get_player_name(matchup.pair1_player1, tournament_chart_instance)} & {get_player_name(matchup.pair1_player2, tournament_chart_instance)}"
+        team2_compact = f"{get_player_name(matchup.pair2_player1, tournament_chart_instance)} & {get_player_name(matchup.pair2_player2, tournament_chart_instance)}"
     else:
         team1_compact = "Team 1"
         team2_compact = "Team 2"
@@ -309,11 +317,11 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
         team1_display = str(matchup.pair1)
         team2_display = str(matchup.pair2) if matchup.pair2 else "Unknown Opponent"
     elif matchup.pair1_player1:
-        p1_name = get_player_name(matchup.pair1_player1)
-        p2_name = get_player_name(matchup.pair1_player2)
+        p1_name = get_player_name(matchup.pair1_player1, tournament_chart_instance)
+        p2_name = get_player_name(matchup.pair1_player2, tournament_chart_instance)
         team1_display = f"{p1_name} & {p2_name}"
-        p3_name = get_player_name(matchup.pair2_player1)
-        p4_name = get_player_name(matchup.pair2_player2)
+        p3_name = get_player_name(matchup.pair2_player1, tournament_chart_instance)
+        p4_name = get_player_name(matchup.pair2_player2, tournament_chart_instance)
         team2_display = f"{p3_name} & {p4_name}"
     
     matchup_str = f"{team1_display} vs {team2_display} (Round {matchup.round_number}, Court {matchup.court_number})"
@@ -328,21 +336,13 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
         score_pairs.append(f"{t1_score}–{t2_score}")
     scores_str = ", ".join(score_pairs) if score_pairs else "No scores"
 
-    # Use last names only for more compact display
-    def get_last_name(player):
-        if not player:
-            return "Unknown"
-        name = str(player).strip()
-        parts = name.split()
-        return parts[-1] if parts else name
-
-    # Format team names with last names only
+    # Format team names according to tournament preference
     if matchup.pair1:
         team1_compact = str(matchup.pair1)
         team2_compact = str(matchup.pair2) if matchup.pair2 else "Unknown"
     elif matchup.pair1_player1:
-        team1_compact = f"{get_last_name(matchup.pair1_player1)} & {get_last_name(matchup.pair1_player2)}"
-        team2_compact = f"{get_last_name(matchup.pair2_player1)} & {get_last_name(matchup.pair2_player2)}"
+        team1_compact = f"{get_player_name(matchup.pair1_player1, tournament_chart_instance)} & {get_player_name(matchup.pair1_player2, tournament_chart_instance)}"
+        team2_compact = f"{get_player_name(matchup.pair2_player1, tournament_chart_instance)} & {get_player_name(matchup.pair2_player2, tournament_chart_instance)}"
     else:
         team1_compact = "Team 1"
         team2_compact = "Team 2"

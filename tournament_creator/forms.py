@@ -34,7 +34,8 @@ class TournamentCreationForm(forms.ModelForm):
         fields = [
             'name', 'date',
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
-            'signal_recipient_usernames', 'signal_recipient_group_ids'
+            'signal_recipient_usernames', 'signal_recipient_group_ids',
+            'name_display_format'
         ]
         widgets = {
             'notify_by_email': forms.CheckboxInput,

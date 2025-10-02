@@ -59,9 +59,13 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance, 
     Sends an email notification based on a match result log using custom SMTP settings
     from NotificationBackendSetting. Checks both global and per-tournament notification settings.
     """
+    # Check per-tournament setting FIRST - if disabled, don't even try to fetch backend
+    if not tournament_chart_instance.notify_by_email:
+        return  # Silently skip if email notifications disabled for this tournament
+
     email_backend_setting = None
     try:
-        # Check global setting first
+        # Check global setting
         email_backend_setting = NotificationBackendSetting.objects.get(backend_name='email', is_active=True)
     except NotificationBackendSetting.DoesNotExist:
         NotificationLog.objects.create(
@@ -86,16 +90,6 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance, 
             backend_setting=email_backend_setting,
             success=False,
             details="Email backend 'email' is active but has no configuration.",
-            match_result_log=match_result_log_instance
-        )
-        return
-    
-    # Now check per-tournament setting
-    if not tournament_chart_instance.notify_by_email:
-        NotificationLog.objects.create(
-            backend_setting=email_backend_setting, # Global backend exists and is active
-            success=False, 
-            details=f"Email notification skipped for tournament '{tournament_chart_instance.name}' as per tournament settings (disabled).",
             match_result_log=match_result_log_instance
         )
         return
@@ -234,9 +228,13 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
     Sends a Signal notification based on a match result log using settings
     from NotificationBackendSetting. Checks both global and per-tournament notification settings.
     """
+    # Check per-tournament setting FIRST - if disabled, don't even try to fetch backend
+    if not tournament_chart_instance.notify_by_signal:
+        return  # Silently skip if Signal notifications disabled for this tournament
+
     signal_backend_setting = None
     try:
-        # Check global setting first
+        # Check global setting
         signal_backend_setting = NotificationBackendSetting.objects.get(backend_name='signal', is_active=True)
     except NotificationBackendSetting.DoesNotExist:
         NotificationLog.objects.create(
@@ -261,16 +259,6 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
             backend_setting=signal_backend_setting,
             success=False,
             details="Signal backend 'signal' is active but has no configuration.",
-            match_result_log=match_result_log_instance
-        )
-        return
-
-    # Now check per-tournament setting
-    if not tournament_chart_instance.notify_by_signal:
-        NotificationLog.objects.create(
-            backend_setting=signal_backend_setting, # Global backend exists and is active
-            success=False, 
-            details=f"Signal notification skipped for tournament '{tournament_chart_instance.name}' as per tournament settings (disabled).",
             match_result_log=match_result_log_instance
         )
         return

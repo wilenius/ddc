@@ -34,6 +34,13 @@
                         {% if form.date.help_text %}<small class="form-text text-muted">{{ form.date.help_text }}</small>{% endif %}
                     </div>
 
+                    <div class="mb-3">
+                        {{ form.name_display_format.label_tag }}
+                        {{ form.name_display_format }}
+                        {% if form.name_display_format.errors %}<div class="invalid-feedback d-block">{{ form.name_display_format.errors|join:", " }}</div>{% endif %}
+                        {% if form.name_display_format.help_text %}<small class="form-text text-muted">{{ form.name_display_format.help_text }}</small>{% endif %}
+                    </div>
+
                     <div class="mb-3 form-check">
                         {{ form.notify_by_email }}
                         <label class="form-check-label" for="{{ form.notify_by_email.id_for_label }}">
@@ -83,12 +90,14 @@ document.addEventListener('DOMContentLoaded', function() {
             // Collect form values
             var name = document.querySelector('input[name="name"]').value;
             var date = document.querySelector('input[name="date"]').value;
+            var nameDisplayFormat = document.querySelector('select[name="name_display_format"]').value;
             var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
             var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
             var notifyByMatrix = document.querySelector('input[name="notify_by_matrix"]').checked;
             var url = "{% url 'tournament_create' %}?tournament_category=" + this.value +
                       "&name=" + encodeURIComponent(name) +
                       "&date=" + encodeURIComponent(date) +
+                      "&name_display_format=" + encodeURIComponent(nameDisplayFormat) +
                       "&notify_by_email=" + notifyByEmail +
                       "&notify_by_signal=" + notifyBySignal +
                       "&notify_by_matrix=" + notifyByMatrix;

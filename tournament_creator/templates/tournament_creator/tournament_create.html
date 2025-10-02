@@ -71,44 +71,56 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label" for="archetype-select">Tournament Type</label>
-                        <select name="archetype" id="archetype-select" class="form-select" required>
-                            <option value="">Select a tournament type</option>
-                            {% for archetype in archetypes %}
-                                <option value="{{ archetype.id }}" {% if archetype.id|stringformat:'s' == request.GET.archetype %}selected{% endif %}>{{ archetype.name }}</option>
-                            {% endfor %}
-                        </select>
+                        {{ form.tournament_category.label_tag }}
+                        {{ form.tournament_category }}
+                        {% if form.tournament_category.errors %}<div class="invalid-feedback d-block">{{ form.tournament_category.errors|join:", " }}</div>{% endif %}
+                        {% if form.tournament_category.help_text %}<small class="form-text text-muted">{{ form.tournament_category.help_text }}</small>{% endif %}
                         <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var select = document.getElementById('archetype-select');
-    select.addEventListener('change', function() {
-        // Collect form values
-        var name = document.querySelector('input[name="name"]').value;
-        var date = document.querySelector('input[name="date"]').value;
-        var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
-        var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
-        var notifyByMatrix = document.querySelector('input[name="notify_by_matrix"]').checked;
-        var url = "{% url 'tournament_create' %}?archetype=" + this.value +
-                  "&name=" + encodeURIComponent(name) +
-                  "&date=" + encodeURIComponent(date) +
-                  "&notify_by_email=" + notifyByEmail +
-                  "&notify_by_signal=" + notifyBySignal +
-                  "&notify_by_matrix=" + notifyByMatrix;
-        window.location = url;
-    });
+    var select = document.getElementById('{{ form.tournament_category.id_for_label }}');
+    if (select) {
+        select.addEventListener('change', function() {
+            // Collect form values
+            var name = document.querySelector('input[name="name"]').value;
+            var date = document.querySelector('input[name="date"]').value;
+            var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
+            var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
+            var notifyByMatrix = document.querySelector('input[name="notify_by_matrix"]').checked;
+            var url = "{% url 'tournament_create' %}?tournament_category=" + this.value +
+                      "&name=" + encodeURIComponent(name) +
+                      "&date=" + encodeURIComponent(date) +
+                      "&notify_by_email=" + notifyByEmail +
+                      "&notify_by_signal=" + notifyBySignal +
+                      "&notify_by_matrix=" + notifyByMatrix;
+            window.location = url;
+        });
+    }
 });
 </script>
                     </div>
                 </div>
             </div>
 
-            {% if archetype and archetype.tournament_category == "MOC" %}
+            {% if selected_category %}
                 <div class="card mb-4">
-                    <div class="card-header">Select Players</div>
+                    <div class="card-header">
+                        Select Players
+                        {% if selected_category == 'MOC' %}
+                            <small class="text-muted">- Monarch of the Court</small>
+                        {% elif selected_category == 'PAIRS' %}
+                            <small class="text-muted">- Doubles Tournament (select an even number of players)</small>
+                        {% endif %}
+                    </div>
                     <div class="card-body">
                         <div class="mb-3">
                             {{ moc_player_form.players }}
                         </div>
+                        <small class="form-text text-muted">
+                            The tournament format will be automatically selected based on the number of players you choose.
+                            {% if selected_category == 'PAIRS' %}
+                            Players will be paired based on their rankings (1st with 2nd, 3rd with 4th, etc.).
+                            {% endif %}
+                        </small>
                     </div>
                 </div>
                 <script>

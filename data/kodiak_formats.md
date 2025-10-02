@@ -125,6 +125,24 @@ Round Court 1 (Pairs) Power Rank
 
 10 1&4 vs 2&3 (5 v 5)
 ```
+### 8 Players
+
+Here's the 8-player format converted to a markdown table:
+
+## 8 Players Format
+
+**Players:** #1-#8
+
+| Round | Court 1    | Power Rank | Court 2    | Power Rank |
+|-------|------------|------------|------------|------------|
+| 1     | 1&3 vs 6&8 | 4 v 14     | 2&4 vs 5&7 |   6 v 12   |
+| 2     | 1&6 vs 4&7 | 7 v 11     | 3&8 vs 2&5 |  11 v 7    |
+| 3     | 1&2 vs 7&8 | 3 v 15     | 3&4 vs 5&6 |   7 v 11   |
+| 4     | 1&5 vs 2&6 | 6 v 8      | 4&8 vs 3&7 |  12 v 10   |
+| 5     | 1&8 vs 4&5 | 9 v 9      | 2&7 vs 3&6 |   9 v 9    |
+| 6     | 1&7 vs 3&5 | 8 v 8      | 4&6 vs 2&8 |  10 v 10   |
+| 7     | 1&4 vs 2&3 | 5 v 5      | 6&7 vs 5&8 |  13 v 13   |
+
 
 ### 9 Players
 

@@ -189,9 +189,9 @@ class SignalBackendConfigForm(forms.ModelForm):
                 if field_name in self.fields: # Check field exists on form
                     self.fields[field_name].initial = config.get(field_name)
 
-            # Populate group picker choices
-            from .notifications import get_signal_groups
-            groups = get_signal_groups()
+            # Populate group picker choices - ONLY from cache, never make API calls during form load
+            from django.core.cache import cache
+            groups = cache.get('signal_groups', [])  # Get from cache only, default to empty list
             choices = []
             selected_ids = []
 
@@ -204,6 +204,8 @@ class SignalBackendConfigForm(forms.ModelForm):
                         choices.append((group_id, f"{group_name} ({group_id[:30]}...)"))
 
             self.fields['recipient_groups_picker'].choices = choices
+            if not choices:
+                self.fields['recipient_groups_picker'].help_text = 'No groups in cache. Click "Refresh Groups" to load available groups.'
 
             # Pre-select groups that are in recipient_group_ids
             existing_group_ids = config.get('recipient_group_ids', '')

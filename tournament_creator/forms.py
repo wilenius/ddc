@@ -81,6 +81,9 @@ class TournamentCreationForm(forms.ModelForm):
                 picker_selected = [gid for gid in selected_ids if gid in picker_ids]
                 self.fields['signal_groups_picker'].initial = picker_selected
 
+                # Also populate the manual field with ALL existing group IDs as backup
+                self.fields['signal_recipient_group_ids'].initial = existing_group_ids
+
     def save(self, commit=True):
         instance = super().save(commit=False)
 

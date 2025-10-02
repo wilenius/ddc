@@ -197,11 +197,11 @@ class SignalBackendConfigForm(forms.ModelForm):
 
             if groups:
                 for group in groups:
-                    # Extract group info - structure may vary
-                    group_id = group.get('internal_id') or group.get('id', '')
+                    # Extract group info - use 'id' (with group. prefix) not 'internal_id'
+                    group_id = group.get('id', '') or group.get('internal_id', '')
                     group_name = group.get('name') or group.get('title', 'Unnamed Group')
                     if group_id:
-                        choices.append((group_id, f"{group_name} ({group_id[:20]}...)"))
+                        choices.append((group_id, f"{group_name} ({group_id[:30]}...)"))
 
             self.fields['recipient_groups_picker'].choices = choices
 

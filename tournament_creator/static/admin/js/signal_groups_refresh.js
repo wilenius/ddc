@@ -30,13 +30,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Add new options from refreshed groups
                     if (data.groups && data.groups.length > 0) {
                         data.groups.forEach(group => {
-                            const groupId = group.internal_id || group.id || '';
+                            // Use 'id' (with group. prefix) not 'internal_id'
+                            const groupId = group.id || group.internal_id || '';
                             const groupName = group.name || group.title || 'Unnamed Group';
 
                             if (groupId) {
                                 const option = document.createElement('option');
                                 option.value = groupId;
-                                option.textContent = `${groupName} (${groupId.substring(0, 20)}...)`;
+                                option.textContent = `${groupName} (${groupId.substring(0, 30)}...)`;
 
                                 // Re-select if it was previously selected
                                 if (selected.includes(groupId)) {

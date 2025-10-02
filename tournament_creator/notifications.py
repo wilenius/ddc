@@ -15,6 +15,7 @@ def get_signal_groups(force_refresh=False):
     Fetch available Signal groups from the API and cache them permanently.
     Use force_refresh=True to bypass cache and fetch fresh data.
     Returns a list of dicts with 'id', 'name', and other group info.
+    Raises exceptions on errors for proper error reporting.
     """
     # Check cache first unless force refresh
     if not force_refresh:
@@ -22,34 +23,29 @@ def get_signal_groups(force_refresh=False):
         if cached_groups is not None:
             return cached_groups
 
-    try:
-        # Get Signal backend settings
-        signal_backend = NotificationBackendSetting.objects.get(backend_name='signal', is_active=True)
-        config = signal_backend.config
-        if not config:
-            return []
+    # Get Signal backend settings - will raise DoesNotExist if not found
+    signal_backend = NotificationBackendSetting.objects.get(backend_name='signal', is_active=True)
+    config = signal_backend.config
+    if not config:
+        raise ValueError("Signal backend has no configuration")
 
-        signal_cli_rest_api_url = config.get('signal_cli_rest_api_url')
-        signal_sender_phone_number = config.get('signal_sender_phone_number')
+    signal_cli_rest_api_url = config.get('signal_cli_rest_api_url')
+    signal_sender_phone_number = config.get('signal_sender_phone_number')
 
-        if not signal_cli_rest_api_url or not signal_sender_phone_number:
-            return []
+    if not signal_cli_rest_api_url or not signal_sender_phone_number:
+        raise ValueError("Signal CLI URL or sender phone number not configured")
 
-        # Fetch groups from API
-        groups_url = f"{signal_cli_rest_api_url.rstrip('/')}/v1/groups/{signal_sender_phone_number}"
-        response = requests.get(groups_url, timeout=10)
-        response.raise_for_status()
+    # Fetch groups from API - will raise RequestException if fails
+    groups_url = f"{signal_cli_rest_api_url.rstrip('/')}/v1/groups/{signal_sender_phone_number}"
+    response = requests.get(groups_url, timeout=10)
+    response.raise_for_status()
 
-        groups_data = response.json()
+    groups_data = response.json()
 
-        # Cache permanently (None = no expiration)
-        cache.set('signal_groups', groups_data, None)
+    # Cache permanently (None = no expiration)
+    cache.set('signal_groups', groups_data, None)
 
-        return groups_data
-
-    except (NotificationBackendSetting.DoesNotExist, requests.RequestException, ValueError, KeyError):
-        # Return empty list if anything fails
-        return []
+    return groups_data
 
 def get_player_name(player):
     return str(player) if player else "Unknown Player"

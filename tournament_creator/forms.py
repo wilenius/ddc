@@ -17,6 +17,17 @@ class TournamentCreationForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
 
+    # Group picker for tournaments (same as Signal backend, but without refresh button)
+    signal_groups_picker = forms.MultipleChoiceField(
+        label="Select Signal Groups",
+        required=False,
+        widget=forms.SelectMultiple(attrs={
+            'class': 'form-control',
+            'style': 'height: 150px;'
+        }),
+        help_text='Select Signal groups for notifications (leave empty to use global settings)'
+    )
+
     class Meta:
         model = TournamentChart
         fields = [
@@ -36,10 +47,60 @@ class TournamentCreationForm(forms.ModelForm):
             }),
             'signal_recipient_group_ids': forms.Textarea(attrs={
                 'rows': 2,
-                'placeholder': 'Optional: group.ABC123== (leave empty to use global settings)',
+                'placeholder': 'Optional: Manually enter group IDs or use picker above',
                 'class': 'form-control'
             }),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Populate group picker choices from cache
+        from django.core.cache import cache
+        groups = cache.get('signal_groups', [])
+        choices = []
+
+        if groups:
+            for group in groups:
+                group_id = group.get('id', '') or group.get('internal_id', '')
+                group_name = group.get('name') or group.get('title', 'Unnamed Group')
+                if group_id:
+                    choices.append((group_id, f"{group_name} ({group_id[:30]}...)"))
+
+        self.fields['signal_groups_picker'].choices = choices
+        if not choices:
+            self.fields['signal_groups_picker'].help_text = 'No groups available. Configure groups in Signal backend settings first.'
+
+        # Pre-select groups if editing existing tournament
+        if self.instance and self.instance.pk:
+            existing_group_ids = self.instance.signal_recipient_group_ids
+            if existing_group_ids:
+                selected_ids = [gid.strip() for gid in existing_group_ids.split(',') if gid.strip()]
+                picker_ids = [choice[0] for choice in choices]
+                picker_selected = [gid for gid in selected_ids if gid in picker_ids]
+                self.fields['signal_groups_picker'].initial = picker_selected
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+
+        # Combine group picker selections with manual group IDs
+        selected_groups = self.cleaned_data.get('signal_groups_picker', [])
+        manual_group_ids = self.cleaned_data.get('signal_recipient_group_ids', '')
+
+        # Combine both sources
+        all_group_ids = list(selected_groups)
+        if manual_group_ids and manual_group_ids.strip():
+            manual_ids = [gid.strip() for gid in manual_group_ids.split(',') if gid.strip()]
+            for gid in manual_ids:
+                if gid not in all_group_ids:
+                    all_group_ids.append(gid)
+
+        # Update the field with combined IDs
+        instance.signal_recipient_group_ids = ', '.join(all_group_ids) if all_group_ids else ''
+
+        if commit:
+            instance.save()
+        return instance
 
 class PairForm(forms.Form):
     player1 = forms.ModelChoiceField(

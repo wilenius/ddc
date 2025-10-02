@@ -673,6 +673,18 @@ def manual_tiebreak_resolution(request, tournament_id):
         'ties': ties
     })
 
+def _is_moc_tournament_helper(tournament):
+    """
+    Helper function to determine if a tournament is MoC format.
+    MoC tournaments use individual player fields, pairs tournaments use pair fields.
+    """
+    sample_matchup = tournament.matchups.first()
+    if sample_matchup:
+        # If it uses individual player fields, it's MoC
+        return (sample_matchup.pair1_player1_id is not None or
+                sample_matchup.pair1_player2_id is not None)
+    return False
+
 @login_required
 @require_POST
 def record_match_result(request, tournament_id, matchup_id):
@@ -786,6 +798,9 @@ def record_match_result(request, tournament_id, matchup_id):
             if archetype_impl and hasattr(archetype_impl, 'get_automatic_wins'):
                 automatic_wins_map = archetype_impl.get_automatic_wins(len(players))
 
+        # Determine if this is a MoC tournament (sets count as separate matches)
+        is_moc = _is_moc_tournament_helper(tournament)
+
         # Sort players by ranking to get their seed index
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
         player_to_seed = {p.id: idx for idx, p in enumerate(sorted_players)}
@@ -807,7 +822,14 @@ def record_match_result(request, tournament_id, matchup_id):
             ).filter(
                 has_scores__gt=0
             ).distinct()
-            player_score.matches_played = all_played.count()
+
+            # For MoC tournaments, count each set as a separate match
+            # For other tournaments, count matchups as matches
+            if is_moc:
+                player_score.matches_played = sum(m.scores.count() for m in all_played)
+            else:
+                player_score.matches_played = all_played.count()
+
             player_score.wins = 0
             player_score.total_point_difference = 0
 

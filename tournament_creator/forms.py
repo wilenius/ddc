@@ -56,6 +56,10 @@ class TournamentCreationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # Make tournament_category not required when editing (only needed during creation)
+        if self.instance and self.instance.pk:
+            self.fields['tournament_category'].required = False
+
         # Populate group picker choices from cache
         from django.core.cache import cache
         groups = cache.get('signal_groups', [])

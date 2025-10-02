@@ -289,10 +289,16 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
         "number": signal_sender_phone_number,
         "message": message_body
     }
+
+    # Combine usernames and group IDs into a single recipients list
+    all_recipients = []
     if actual_recipient_usernames:
-        payload["recipients"] = actual_recipient_usernames
+        all_recipients.extend(actual_recipient_usernames)
     if actual_recipient_group_ids:
-        payload["group_recipients"] = actual_recipient_group_ids
+        all_recipients.extend(actual_recipient_group_ids)
+
+    if all_recipients:
+        payload["recipients"] = all_recipients
         
     send_url = f"{signal_cli_rest_api_url.rstrip('/')}/v2/send"
     

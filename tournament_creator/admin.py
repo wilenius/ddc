@@ -6,7 +6,7 @@ from .models.scoring import MatchScore, PlayerScore
 from .models.auth import User
 from .models.logging import MatchResultLog
 from .models.notifications import NotificationBackendSetting, NotificationLog
-from .forms import EmailBackendConfigForm, SignalBackendConfigForm
+from .forms import EmailBackendConfigForm, SignalBackendConfigForm, TournamentCreationForm
 from django.utils.text import Truncator
 # import functools # Removed import
 
@@ -29,8 +29,19 @@ class PlayerAdmin(admin.ModelAdmin):
 
 @admin.register(TournamentChart)
 class TournamentChartAdmin(admin.ModelAdmin):
+    form = TournamentCreationForm
     list_display = ('name', 'date', 'number_of_rounds', 'number_of_courts')
     ordering = ('-date',)
+    fieldsets = [
+        (None, {'fields': ('name', 'date')}),
+        ('Notification Settings', {
+            'fields': ('notify_by_email', 'notify_by_signal', 'notify_by_matrix')
+        }),
+        ('Signal Recipients (Optional - overrides global settings)', {
+            'fields': ('signal_groups_picker', 'signal_recipient_usernames', 'signal_recipient_group_ids'),
+            'classes': ('collapse',)
+        })
+    ]
 
 @admin.register(Matchup)
 class MatchupAdmin(admin.ModelAdmin):

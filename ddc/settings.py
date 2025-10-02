@@ -17,8 +17,9 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ajax stuff needs this
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
-STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
+STATIC_ROOT = '/usr/share/nginx/static'
+#STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+#STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -27,9 +28,9 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 SECRET_KEY = 'django-insecure-zk$2yw!!n#qk2eyf18fuu4#qthf3dz51%%+k#la$e9l9g+y7px'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ['0.0.0.0', '127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['0.0.0.0', '127.0.0.1', 'localhost', 'ddc.hw.iki.fi']
 
 
 # Application definition
@@ -93,15 +94,16 @@ DATABASES = {
     }
 }
 
-# Email Configuration (placeholders - actual notification sending uses model-based config)
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.example.com'  # Placeholder
-EMAIL_PORT = 587                   # Placeholder (standard for TLS)
-EMAIL_USE_TLS = True               # Placeholder
-EMAIL_HOST_USER = 'user@example.com'  # Placeholder
-EMAIL_HOST_PASSWORD = 'password'       # Placeholder
-DEFAULT_FROM_EMAIL = 'webmaster@localhost' # Placeholder
-
+# Cache configuration - file-based for persistence across server restarts
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': BASE_DIR / 'cache',
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000
+        }
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

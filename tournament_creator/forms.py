@@ -236,7 +236,27 @@ class SignalBackendConfigForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Populate custom form fields from instance.config for 'signal' backend
+        # Always populate group picker choices from cache (needed for both GET and POST/validation)
+        from django.core.cache import cache
+        groups = cache.get('signal_groups', [])  # Get from cache only, default to empty list
+        choices = []
+
+        if groups:
+            for group in groups:
+                # Extract group info - use 'id' (with group. prefix) not 'internal_id'
+                group_id = group.get('id', '') or group.get('internal_id', '')
+                group_name = group.get('name') or group.get('title', 'Unnamed Group')
+                if group_id:
+                    choices.append((group_id, f"{group_name} ({group_id[:30]}...)"))
+
+        self.fields['recipient_groups_picker'].choices = choices
+        # Always show the refresh button, update message if no groups
+        if not choices:
+            self.fields['recipient_groups_picker'].help_text = mark_safe('No groups in cache. <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button> to load available groups.')
+        else:
+            self.fields['recipient_groups_picker'].help_text = mark_safe(f'Select groups from the list ({len(choices)} available). <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button>')
+
+        # Populate custom form fields from instance.config for 'signal' backend (only when editing)
         if self.instance and self.instance.pk and self.instance.backend_name == 'signal':
             config = self.instance.config or {}
 
@@ -250,27 +270,6 @@ class SignalBackendConfigForm(forms.ModelForm):
             for field_name in custom_field_keys:
                 if field_name in self.fields: # Check field exists on form
                     self.fields[field_name].initial = config.get(field_name)
-
-            # Populate group picker choices - ONLY from cache, never make API calls during form load
-            from django.core.cache import cache
-            groups = cache.get('signal_groups', [])  # Get from cache only, default to empty list
-            choices = []
-            selected_ids = []
-
-            if groups:
-                for group in groups:
-                    # Extract group info - use 'id' (with group. prefix) not 'internal_id'
-                    group_id = group.get('id', '') or group.get('internal_id', '')
-                    group_name = group.get('name') or group.get('title', 'Unnamed Group')
-                    if group_id:
-                        choices.append((group_id, f"{group_name} ({group_id[:30]}...)"))
-
-            self.fields['recipient_groups_picker'].choices = choices
-            # Always show the refresh button, update message if no groups
-            if not choices:
-                self.fields['recipient_groups_picker'].help_text = mark_safe('No groups in cache. <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button> to load available groups.')
-            else:
-                self.fields['recipient_groups_picker'].help_text = mark_safe(f'Select groups from the list ({len(choices)} available). <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button>')
 
             # Pre-select groups that are in recipient_group_ids
             existing_group_ids = config.get('recipient_group_ids', '')

@@ -148,11 +148,23 @@ class SignalBackendConfigForm(forms.ModelForm):
         required=False,
         help_text="Comma-separated list of recipient phone numbers (e.g., +1987654321,+1555123456)."
     )
+
+    # Group picker - populated from cache
+    recipient_groups_picker = forms.MultipleChoiceField(
+        label="Select Groups",
+        required=False,
+        widget=forms.SelectMultiple(attrs={
+            'class': 'form-control',
+            'style': 'height: 150px;'
+        }),
+        help_text='Select groups from the list. <button type="button" id="refresh-groups-btn" class="btn btn-sm btn-secondary">Refresh Groups</button>'
+    )
+
     recipient_group_ids = forms.CharField(
-        label="Recipient Group IDs",
+        label="Manual Group IDs (Advanced)",
         widget=forms.Textarea(attrs={'rows': 3}),
         required=False,
-        help_text="Comma-separated list of Signal group IDs. Ensure the sender bot is a member of these groups."
+        help_text="Manually enter comma-separated group IDs if not available in the picker above."
     )
 
     class Meta:
@@ -165,14 +177,36 @@ class SignalBackendConfigForm(forms.ModelForm):
         # Populate custom form fields from instance.config for 'signal' backend
         if self.instance and self.instance.pk and self.instance.backend_name == 'signal':
             config = self.instance.config or {}
-            
+
             custom_field_keys = [
-                'signal_cli_rest_api_url', 
-                'signal_sender_phone_number', 
-                'recipient_usernames', 
+                'signal_cli_rest_api_url',
+                'signal_sender_phone_number',
+                'recipient_usernames',
                 'recipient_group_ids'
             ]
-            
+
             for field_name in custom_field_keys:
                 if field_name in self.fields: # Check field exists on form
                     self.fields[field_name].initial = config.get(field_name)
+
+            # Populate group picker choices
+            from .notifications import get_signal_groups
+            groups = get_signal_groups()
+            choices = []
+            selected_ids = []
+
+            if groups:
+                for group in groups:
+                    # Extract group info - structure may vary
+                    group_id = group.get('internal_id') or group.get('id', '')
+                    group_name = group.get('name') or group.get('title', 'Unnamed Group')
+                    if group_id:
+                        choices.append((group_id, f"{group_name} ({group_id[:20]}...)"))
+
+            self.fields['recipient_groups_picker'].choices = choices
+
+            # Pre-select groups that are in recipient_group_ids
+            existing_group_ids = config.get('recipient_group_ids', '')
+            if existing_group_ids:
+                selected_ids = [gid.strip() for gid in existing_group_ids.split(',') if gid.strip()]
+                self.fields['recipient_groups_picker'].initial = selected_ids

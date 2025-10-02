@@ -10,15 +10,17 @@ from tournament_creator.models.notifications import NotificationBackendSetting, 
 from tournament_creator.models.auth import User
 # from tournament_creator.models.logging import MatchResultLog # For type hinting if needed
 
-def get_signal_groups():
+def get_signal_groups(force_refresh=False):
     """
-    Fetch available Signal groups from the API and cache them for 5 minutes.
+    Fetch available Signal groups from the API and cache them permanently.
+    Use force_refresh=True to bypass cache and fetch fresh data.
     Returns a list of dicts with 'id', 'name', and other group info.
     """
-    # Check cache first
-    cached_groups = cache.get('signal_groups')
-    if cached_groups is not None:
-        return cached_groups
+    # Check cache first unless force refresh
+    if not force_refresh:
+        cached_groups = cache.get('signal_groups')
+        if cached_groups is not None:
+            return cached_groups
 
     try:
         # Get Signal backend settings
@@ -40,8 +42,8 @@ def get_signal_groups():
 
         groups_data = response.json()
 
-        # Cache for 5 minutes (300 seconds)
-        cache.set('signal_groups', groups_data, 300)
+        # Cache permanently (None = no expiration)
+        cache.set('signal_groups', groups_data, None)
 
         return groups_data
 

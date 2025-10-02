@@ -67,6 +67,12 @@ class NotificationBackendSettingAdmin(admin.ModelAdmin):
     list_editable = ('is_active',)
     search_fields = ('backend_name',)
 
+    class Media:
+        js = ('admin/js/signal_groups_refresh.js',)
+        css = {
+            'all': ('admin/css/signal_admin.css',)
+        }
+
     def get_form(self, request, obj=None, change=False, **kwargs):
         if obj and obj.backend_name == 'email':
             kwargs['form'] = EmailBackendConfigForm
@@ -85,7 +91,7 @@ class NotificationBackendSettingAdmin(admin.ModelAdmin):
                 ('Email Configuration', {'fields': email_specific_fields})
             ]
         elif obj and obj.backend_name == 'signal':
-            signal_specific_fields = ['signal_cli_rest_api_url', 'signal_sender_phone_number', 'recipient_usernames', 'recipient_group_ids']
+            signal_specific_fields = ['signal_cli_rest_api_url', 'signal_sender_phone_number', 'recipient_usernames', 'recipient_groups_picker', 'recipient_group_ids']
             return [
                 (None, {'fields': ('backend_name', 'is_active')}),
                 ('Signal Configuration', {'fields': signal_specific_fields})
@@ -123,12 +129,25 @@ class NotificationBackendSettingAdmin(admin.ModelAdmin):
         
         elif obj.backend_name == 'signal' and isinstance(form, SignalBackendConfigForm):
             new_config = {}
-            custom_field_keys = ['signal_cli_rest_api_url', 'signal_sender_phone_number', 'recipient_usernames', 'recipient_group_ids']
+            custom_field_keys = ['signal_cli_rest_api_url', 'signal_sender_phone_number', 'recipient_usernames']
             for field_name in custom_field_keys:
-                # Get the value from the form's cleaned_data
-                # For optional fields (recipient_usernames, recipient_group_ids), if they are empty,
-                # form.cleaned_data.get(field_name) will return an empty string, which is fine for storing in JSON.
                 new_config[field_name] = form.cleaned_data.get(field_name)
+
+            # Combine group picker selections with manual group IDs
+            selected_groups = form.cleaned_data.get('recipient_groups_picker', [])
+            manual_group_ids = form.cleaned_data.get('recipient_group_ids', '')
+
+            # Combine both sources
+            all_group_ids = list(selected_groups)  # Start with picker selections
+            if manual_group_ids and manual_group_ids.strip():
+                manual_ids = [gid.strip() for gid in manual_group_ids.split(',') if gid.strip()]
+                # Add manual IDs that aren't already in the list
+                for gid in manual_ids:
+                    if gid not in all_group_ids:
+                        all_group_ids.append(gid)
+
+            # Store as comma-separated string
+            new_config['recipient_group_ids'] = ', '.join(all_group_ids) if all_group_ids else ''
             obj.config = new_config
         
         # Call super().save_model() to save the NotificationBackendSetting instance.

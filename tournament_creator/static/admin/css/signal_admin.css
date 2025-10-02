@@ -1,0 +1,18 @@
+/* Signal groups refresh button styling */
+#refresh-groups-btn {
+    margin-left: 10px;
+    padding: 4px 12px;
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+#refresh-groups-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Make the help text with button display nicely */
+.helptext {
+    display: block;
+    margin-top: 5px;
+}

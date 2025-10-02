@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
             refreshBtn.textContent = 'Refreshing...';
 
             // Make AJAX request to refresh endpoint
-            fetch('/admin/refresh-signal-groups/', {
+            fetch('/api/refresh-signal-groups/', {
                 method: 'GET',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',

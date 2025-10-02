@@ -34,5 +34,5 @@ urlpatterns = [
     path('rankings/status/', check_update_status, name='check_rankings_status'),
 
     # Notifications URLs
-    path('admin/refresh-signal-groups/', refresh_signal_groups, name='refresh_signal_groups'),
+    path('api/refresh-signal-groups/', refresh_signal_groups, name='refresh_signal_groups'),
 ]

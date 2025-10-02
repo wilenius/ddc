@@ -34,6 +34,9 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             initial['name'] = self.request.GET.get('name')
         if 'date' in self.request.GET:
             initial['date'] = self.request.GET.get('date')
+        # Preserve tournament category
+        if 'tournament_category' in self.request.GET:
+            initial['tournament_category'] = self.request.GET.get('tournament_category')
         # Preserve notification checkbox states from GET parameters if available
         if 'notify_by_email' in self.request.GET:
             initial['notify_by_email'] = self.request.GET.get('notify_by_email') == 'true'
@@ -50,115 +53,105 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         context['notification_backend_settings'] = {
             setting.backend_name: setting.is_active for setting in notification_settings
         }
-        # Custom sorting: category first, then by player count
-        archetypes = list(TournamentArchetype.objects.all())
-        archetypes.sort(key=lambda x: (x.tournament_category, x.player_count, x.name))
-        context['archetypes'] = archetypes
-        archetype_id = self.request.GET.get('archetype') or self.request.POST.get('archetype')
-        if archetype_id:
-            archetype = TournamentArchetype.objects.get(id=archetype_id)
-            context['archetype'] = archetype
-            # Determine the tournament type (for only two allowed overall types)
-            if hasattr(archetype, 'tournament_category') and archetype.tournament_category == 'MOC':
-                context['moc_player_form'] = MoCPlayerSelectForm(self.request.POST or None)
-            else:
-                context['moc_player_form'] = None
+
+        # Get tournament category from GET or POST
+        tournament_category = self.request.GET.get('tournament_category') or self.request.POST.get('tournament_category')
+        context['selected_category'] = tournament_category
+
+        # Show player selection forms based on category
+        if tournament_category == 'MOC':
+            context['moc_player_form'] = MoCPlayerSelectForm(self.request.POST or None)
+        elif tournament_category == 'PAIRS':
+            # For pairs, we'll let the user select players and auto-detect pairs count
+            context['moc_player_form'] = MoCPlayerSelectForm(self.request.POST or None)
         else:
-            context['archetype'] = None
             context['moc_player_form'] = None
+
         return context
 
     def post(self, request, *args, **kwargs):
         self.object = None
-        archetype_id = request.POST.get('archetype')
-        archetype = TournamentArchetype.objects.get(id=archetype_id)
-        # ----- PAIRS -----
-        if archetype.tournament_category == 'PAIRS':
-            # get number of pairs from archetype name, e.g. "2 pairs Swedish format"
-            num_pairs = int(archetype.name.split()[0]) if archetype.name.split()[0].isdigit() else 2
-            pair_formset = PairFormSet(request.POST, prefix="pairs", extra=num_pairs)
-            if pair_formset.is_valid():
-                seen_players = set()
-                pairs = []
-                for form in pair_formset:
-                    p1 = form.cleaned_data['player1']
-                    p2 = form.cleaned_data['player2']
-                    if p1 == p2 or p1 in seen_players or p2 in seen_players:
-                        pair_formset.non_form_errors = lambda: ['Each player must appear only once and every pair must be two different players!']
-                        return render(request, 'tournament_creator/tournament_create_pairs.html', {
-                            'archetype': archetype,
-                            'pair_formset': pair_formset
-                        })
-                    seen_players.update([p1, p2])
-                    pair = Pair.objects.create(player1=p1, player2=p2)
-                    pairs.append(pair)
-                tournament = TournamentChart.objects.create(
-                    name=request.POST['name'],
-                    date=request.POST['date'],
-                    number_of_rounds=num_pairs+1,  # fallback, update to your real logic
-                    number_of_courts=min(num_pairs, 4), # fallback, update to your real logic
-                )
-                tournament.pairs.set(pairs)
-                # pairs_archetype.generate_matchups(tournament, pairs)
-                messages.success(request, "Tournament created successfully!")
-                return redirect('tournament_detail', pk=tournament.pk)
-            else:
-                return render(request, 'tournament_creator/tournament_create_pairs.html', {
-                    'archetype': archetype,
-                    'pair_formset': pair_formset
-                })
-        # ----- MOC -----
-        if hasattr(archetype, 'tournament_category') and archetype.tournament_category == 'MOC':
-            form = self.get_form_class()(request.POST)
-            moc_player_form = MoCPlayerSelectForm(request.POST)
-            if form.is_valid() and moc_player_form.is_valid():
-                players = moc_player_form.cleaned_data['players']
-                tournament = form.save(commit=False)
-                tournament.number_of_rounds = archetype.calculate_rounds(len(players))
-                tournament.number_of_courts = archetype.calculate_courts(len(players))
-                tournament.save()
-                tournament.players.set(players)
-                archetype.generate_matchups(tournament, players)
-                messages.success(self.request, "Tournament created successfully!")
-                return redirect('tournament_detail', pk=tournament.pk)
-            else:
-                context = self.get_context_data(object=None)
-                context['archetype'] = archetype
-                context['moc_player_form'] = moc_player_form
-                # Add form to context if it's invalid
-                if not form.is_valid():
-                    context['form'] = form
-                return render(request, 'tournament_creator/tournament_create.html', context)
-        # ----- GENERIC (should not happen for current archetypes, fallback) -----
+        tournament_category = request.POST.get('tournament_category')
+
+        # Auto-detect archetype based on player count and category
         form = self.get_form_class()(request.POST)
-        if form.is_valid():
-            player_ids = self.request.POST.getlist('players')
-            if not player_ids:
-                messages.error(self.request, "Please select players for the tournament")
+        moc_player_form = MoCPlayerSelectForm(request.POST)
+
+        if not form.is_valid() or not moc_player_form.is_valid():
+            context = self.get_context_data(object=None)
+            context['form'] = form
+            context['moc_player_form'] = moc_player_form
+            return render(request, self.template_name, context)
+
+        players = list(moc_player_form.cleaned_data['players'])
+        num_players = len(players)
+
+        # Find the matching archetype
+        try:
+            if tournament_category == 'MOC':
+                archetype = TournamentArchetype.objects.get(
+                    tournament_category='MOC',
+                    name=f"{num_players}-player Monarch of the Court"
+                )
+            elif tournament_category == 'PAIRS':
+                # For pairs, num_players should be even
+                if num_players % 2 != 0:
+                    messages.error(request, f"Pairs tournaments require an even number of players. You selected {num_players} players.")
+                    context = self.get_context_data(object=None)
+                    context['form'] = form
+                    context['moc_player_form'] = moc_player_form
+                    return render(request, self.template_name, context)
+
+                num_pairs = num_players // 2
+                archetype = TournamentArchetype.objects.get(
+                    tournament_category='PAIRS',
+                    name=f"{num_pairs} pairs doubles tournament"
+                )
+            else:
+                messages.error(request, "Please select a tournament type")
                 context = self.get_context_data(object=None)
-                context['archetype'] = archetype
-                context['form'] = form # Add form to context
+                context['form'] = form
                 return render(request, self.template_name, context)
-            players = list(Player.objects.filter(id__in=player_ids).order_by('ranking'))
+        except TournamentArchetype.DoesNotExist:
+            messages.error(request, f"No tournament format exists for {num_players} players in {tournament_category} category. Available sizes may vary.")
+            context = self.get_context_data(object=None)
+            context['form'] = form
+            context['moc_player_form'] = moc_player_form
+            return render(request, self.template_name, context)
+        # Create tournament with auto-detected archetype
+        if tournament_category == 'MOC':
+            # MoC tournaments use individual players
             tournament = form.save(commit=False)
-            tournament.number_of_rounds = archetype.calculate_rounds(len(players))
-            tournament.number_of_courts = archetype.calculate_courts(len(players))
+            tournament.number_of_rounds = archetype.calculate_rounds(num_players)
+            tournament.number_of_courts = archetype.calculate_courts(num_players)
             tournament.save()
             tournament.players.set(players)
             archetype.generate_matchups(tournament, players)
-            messages.success(self.request, "Tournament created successfully!")
+            messages.success(request, f"Tournament created successfully with {num_players} players!")
             return redirect('tournament_detail', pk=tournament.pk)
-        else:
-            # Form is invalid, re-render with errors
-            context = self.get_context_data(object=None)
-            context['archetype'] = archetype
-            context['form'] = form # Add form to context
-            # Need to handle MOC player form if applicable, similar to GET
-            if archetype_id:
-                moc_archetype = TournamentArchetype.objects.get(id=archetype_id)
-                if hasattr(moc_archetype, 'tournament_category') and moc_archetype.tournament_category == 'MOC':
-                    context['moc_player_form'] = MoCPlayerSelectForm(request.POST or None) # Keep submitted data
-            return render(request, self.template_name, context)
+
+        elif tournament_category == 'PAIRS':
+            # For pairs tournaments, create pairs from consecutive players (ranked)
+            # Sort players by ranking
+            sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
+            pairs = []
+            for i in range(0, len(sorted_players), 2):
+                pair = Pair.objects.create(
+                    player1=sorted_players[i],
+                    player2=sorted_players[i+1]
+                )
+                pairs.append(pair)
+
+            tournament = form.save(commit=False)
+            from .models.tournament_types import get_implementation
+            archetype_impl = get_implementation(archetype)
+            tournament.number_of_rounds = archetype_impl.calculate_rounds(len(pairs))
+            tournament.number_of_courts = archetype_impl.calculate_courts(len(pairs))
+            tournament.save()
+            tournament.pairs.set(pairs)
+            archetype_impl.generate_matchups(tournament, pairs)
+            messages.success(request, f"Tournament created successfully with {len(pairs)} pairs!")
+            return redirect('tournament_detail', pk=tournament.pk)
 
     def get(self, request, *args, **kwargs):
         self.object = None  # required for CreateView context

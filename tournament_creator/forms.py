@@ -4,6 +4,19 @@ from .models.base_models import Player, TournamentChart
 from .models.notifications import NotificationBackendSetting # Added import
 
 class TournamentCreationForm(forms.ModelForm):
+    TOURNAMENT_CATEGORY_CHOICES = [
+        ('', 'Select a tournament type'),
+        ('MOC', 'Monarch of the Court'),
+        ('PAIRS', 'Doubles (Pairs)'),
+    ]
+
+    tournament_category = forms.ChoiceField(
+        choices=TOURNAMENT_CATEGORY_CHOICES,
+        required=True,
+        label='Tournament Type',
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
     class Meta:
         model = TournamentChart
         fields = ['name', 'date', 'notify_by_email', 'notify_by_signal', 'notify_by_matrix']

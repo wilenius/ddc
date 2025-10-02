@@ -16,7 +16,7 @@ class NotificationBackendSetting(models.Model):
 
 class NotificationLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
-    backend_setting = models.ForeignKey(NotificationBackendSetting, on_delete=models.CASCADE)
+    backend_setting = models.ForeignKey(NotificationBackendSetting, on_delete=models.CASCADE, null=True, blank=True)
     success = models.BooleanField()
     details = models.TextField(blank=True)
     match_result_log = models.ForeignKey(
@@ -27,4 +27,5 @@ class NotificationLog(models.Model):
     )
 
     def __str__(self):
-        return f"{self.timestamp} - Backend: {self.backend_setting.backend_name} - Success: {self.success}"
+        backend_name = self.backend_setting.backend_name if self.backend_setting else "Unknown"
+        return f"{self.timestamp} - Backend: {backend_name} - Success: {self.success}"

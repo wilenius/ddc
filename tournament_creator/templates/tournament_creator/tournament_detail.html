@@ -363,20 +363,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Handle save score button
     document.getElementById('saveScore').addEventListener('click', function() {
+        const saveButton = this;
         const form = document.getElementById('scoreForm');
         const formData = new FormData();
-        
+
         // Add matchup ID
         formData.append('matchup_id', document.getElementById('matchupId').value);
-        
+
         // Winning team is calculated on the server based on set scores
-        
+
         // Add all set scores
         const team1Scores = Array.from(form.querySelectorAll('[name="team1_scores[]"]')).map(input => input.value);
         const team2Scores = Array.from(form.querySelectorAll('[name="team2_scores[]"]')).map(input => input.value);
-        
+
         formData.append('team1_scores', JSON.stringify(team1Scores));
         formData.append('team2_scores', JSON.stringify(team2Scores));
+
+        // Disable button and show loading state
+        saveButton.disabled = true;
+        const originalText = saveButton.textContent;
+        saveButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving...';
 
         fetch(`/tournaments/{{ tournament.id }}/matchup/${document.getElementById('matchupId').value}/record/`, {
             method: 'POST',
@@ -388,14 +394,28 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                location.reload();
+                // Show success state
+                saveButton.innerHTML = '✓ Saved!';
+                saveButton.classList.remove('btn-primary');
+                saveButton.classList.add('btn-success');
+
+                // Reload after short delay to show success message
+                setTimeout(() => {
+                    location.reload();
+                }, 800);
             } else {
+                // Re-enable button and restore text
+                saveButton.disabled = false;
+                saveButton.textContent = originalText;
                 alert('Error saving score: ' + (data.message || 'Unknown error'));
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Error saving score');
+            // Re-enable button and restore text
+            saveButton.disabled = false;
+            saveButton.textContent = originalText;
+            alert('Error saving score. Please try again.');
         });
     });
 });

@@ -9,29 +9,16 @@ class TournamentCreatorConfig(AppConfig):
         # Import models here to ensure they're registered
         from .models.tournament_types import MonarchOfTheCourt8, FourPairsSwedishFormat, EightPairsSwedishFormat
 
-        # Ensure tournament archetypes are populated
-        self._ensure_archetypes_exist()
+        # Connect signal to populate archetypes after migrations
+        from django.db.models.signals import post_migrate
+        post_migrate.connect(self._populate_archetypes, sender=self)
 
-    def _ensure_archetypes_exist(self):
+    def _populate_archetypes(self, sender, **kwargs):
         """
-        Ensure tournament archetypes are populated in the database.
-        This is idempotent and safe to run on every startup.
+        Populate tournament archetypes after migrations are complete.
+        This runs via post_migrate signal, avoiding database access during app initialization.
         """
-        from django.db import connection
-        from django.db.utils import OperationalError, ProgrammingError
         from .models import TournamentArchetype
-
-        # Check if the table exists before attempting to populate
-        # This prevents errors during makemigrations/migrate when tables don't exist yet
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='tournament_creator_tournamentarchetype'"
-                )
-                if not cursor.fetchone():
-                    return  # Table doesn't exist yet, skip
-        except (OperationalError, ProgrammingError):
-            return  # Database not ready, skip
 
         # Define archetypes based on get_implementation() mapping in tournament_types.py
         ARCHETYPES = [

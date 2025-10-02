@@ -115,24 +115,44 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance, 
     matchup_str = f"{team1_display} vs {team2_display} (Round {matchup.round_number}, Court {matchup.court_number})"
 
     scores_data = match_result_log_instance.details
-    team1_scores_str = ", ".join(map(str, scores_data.get('team1_scores', [])))
-    team2_scores_str = ", ".join(map(str, scores_data.get('team2_scores', [])))
-    winning_team_declared = scores_data.get('winning_team', 'N/A')
-    
-    scores_formatted_str = (
-        f"  Team 1 Scores: {team1_scores_str}\n"
-        f"  Team 2 Scores: {team2_scores_str}\n"
-        f"  Declared Winner: {winning_team_declared}"
-    )
+    team1_scores = scores_data.get('team1_scores', [])
+    team2_scores = scores_data.get('team2_scores', [])
+
+    # Format scores as "21-15" or "21-15, 18-21, 15-13" for multiple sets
+    score_pairs = []
+    for t1_score, t2_score in zip(team1_scores, team2_scores):
+        score_pairs.append(f"{t1_score}–{t2_score}")
+    scores_str = ", ".join(score_pairs) if score_pairs else "No scores"
+
+    # Use last names only for more compact display
+    def get_last_name(player):
+        if not player:
+            return "Unknown"
+        name = str(player).strip()
+        parts = name.split()
+        return parts[-1] if parts else name
+
+    # Format team names with last names only
+    if matchup.pair1:
+        team1_compact = str(matchup.pair1)
+        team2_compact = str(matchup.pair2) if matchup.pair2 else "Unknown"
+    elif matchup.pair1_player1:
+        team1_compact = f"{get_last_name(matchup.pair1_player1)} & {get_last_name(matchup.pair1_player2)}"
+        team2_compact = f"{get_last_name(matchup.pair2_player1)} & {get_last_name(matchup.pair2_player2)}"
+    else:
+        team1_compact = "Team 1"
+        team2_compact = "Team 2"
+
+    # Compact match result line
+    result_line = f"{team1_compact} {scores_str} {team2_compact}"
+
+    action_text = match_result_log_instance.action.lower()
 
     message_body = (
-        f"A match result was {match_result_log_instance.action.lower()} "
-        f"by {user_who_recorded.username}.\n\n"
-        f"Tournament: {tournament_name}\n"
-        f"Matchup: {matchup_str}\n"
-        f"Action: {match_result_log_instance.action}\n"
-        f"Scores Reported:\n{scores_formatted_str}\n\n"
-        f"Raw Score Details: {scores_data}"
+        f"Match result {action_text} – {tournament_name}\n"
+        f"Round {matchup.round_number}, Court {matchup.court_number}\n"
+        f"{result_line}\n"
+        f"(by {user_who_recorded.username})"
     )
 
     try:
@@ -266,23 +286,44 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
     matchup_str = f"{team1_display} vs {team2_display} (Round {matchup.round_number}, Court {matchup.court_number})"
 
     scores_data = match_result_log_instance.details
-    team1_scores_str = ", ".join(map(str, scores_data.get('team1_scores', [])))
-    team2_scores_str = ", ".join(map(str, scores_data.get('team2_scores', [])))
-    winning_team_declared = scores_data.get('winning_team', 'N/A')
-    
-    scores_formatted_str = (
-        f"  Team 1 Scores: {team1_scores_str}\n"
-        f"  Team 2 Scores: {team2_scores_str}\n"
-        f"  Declared Winner: {winning_team_declared}"
-    )
+    team1_scores = scores_data.get('team1_scores', [])
+    team2_scores = scores_data.get('team2_scores', [])
+
+    # Format scores as "21-15" or "21-15, 18-21, 15-13" for multiple sets
+    score_pairs = []
+    for t1_score, t2_score in zip(team1_scores, team2_scores):
+        score_pairs.append(f"{t1_score}–{t2_score}")
+    scores_str = ", ".join(score_pairs) if score_pairs else "No scores"
+
+    # Use last names only for more compact display
+    def get_last_name(player):
+        if not player:
+            return "Unknown"
+        name = str(player).strip()
+        parts = name.split()
+        return parts[-1] if parts else name
+
+    # Format team names with last names only
+    if matchup.pair1:
+        team1_compact = str(matchup.pair1)
+        team2_compact = str(matchup.pair2) if matchup.pair2 else "Unknown"
+    elif matchup.pair1_player1:
+        team1_compact = f"{get_last_name(matchup.pair1_player1)} & {get_last_name(matchup.pair1_player2)}"
+        team2_compact = f"{get_last_name(matchup.pair2_player1)} & {get_last_name(matchup.pair2_player2)}"
+    else:
+        team1_compact = "Team 1"
+        team2_compact = "Team 2"
+
+    # Compact match result line
+    result_line = f"{team1_compact} {scores_str} {team2_compact}"
+
+    action_text = match_result_log_instance.action.lower()
 
     message_body = (
-        f"Match Result Update - {tournament_name}\n"
-        f"Recorded by: {user_who_recorded.username}\n\n"
-        f"Matchup: {matchup_str}\n"
-        f"Action: {match_result_log_instance.action}\n"
-        f"Scores Reported:\n{scores_formatted_str}\n\n"
-        f"Raw Score Details: {scores_data}"
+        f"Match result {action_text} – {tournament_name}\n"
+        f"Round {matchup.round_number}, Court {matchup.court_number}\n"
+        f"{result_line}\n"
+        f"(by {user_who_recorded.username})"
     )
 
     payload = {

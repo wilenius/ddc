@@ -7,9 +7,11 @@
     <div class="col">
         <h2>Players</h2>
     </div>
+    {% if user.is_authenticated and user.is_admin %}
     <div class="col text-end">
         <a href="{% url 'player_create' %}" class="btn btn-primary">Add New Player</a>
     </div>
+    {% endif %}
 </div>
 
 {% if players %}
@@ -21,7 +23,9 @@
                         <tr>
                             <th>Ranking</th>
                             <th>Name</th>
+                            {% if user.is_authenticated and user.is_admin %}
                             <th>Actions</th>
+                            {% endif %}
                         </tr>
                     </thead>
                     <tbody>
@@ -29,10 +33,12 @@
                             <tr>
                                 <td>{{ player.ranking }}</td>
                                 <td>{{ player.first_name }} {{ player.last_name }}</td>
+                                {% if user.is_authenticated and user.is_admin %}
                                 <td>
                                     <a href="{% url 'player_update' player.id %}" class="btn btn-sm btn-primary">Edit</a>
                                     <a href="{% url 'player_delete' player.id %}" class="btn btn-sm btn-danger">Delete</a>
                                 </td>
+                                {% endif %}
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -42,7 +48,8 @@
     </div>
 {% else %}
     <div class="alert alert-info">
-        No players have been added yet. Click "Add New Player" to get started.
+        No players have been added yet.
+        {% if user.is_authenticated and user.is_admin %}Click "Add New Player" to get started.{% endif %}
     </div>
 {% endif %}
 {% endblock %}

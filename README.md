@@ -199,7 +199,7 @@ Once the `signal-cli-rest-api` is operational, configure the Signal backend in t
     *   **Signal Sender Phone Number**: Provide the full international phone number registered with the `signal-cli` instance that will send the messages (e.g., `+12345678901`).
     *   **Recipient Usernames**: A comma-separated list of Signal usernames (full international phone numbers) to which direct notifications will be sent (e.g., `+19876543210,+15551234567`). This field is optional if Recipient Group IDs are provided.
     *   **Recipient Group IDs**: A comma-separated list of Signal group IDs to which notifications will be sent. The sender phone number (bot) must be a member of these groups. This field is optional if Recipient Usernames are provided.
-        *   *Note*: You can usually obtain group IDs using `signal-cli` commands (e.g., `listGroups -g <group_name>`). They are typically base64 encoded strings.
+        *   *Note*: You can obtain group IDs from admin view, there's a button to query them from the API.
 
 5.  **Activation**:
     *   Ensure the **"Is active"** checkbox is ticked for the 'signal' backend to enable sending notifications.

@@ -1,6 +1,7 @@
 import smtplib # Still useful for SMTPException
 from django.core.mail import send_mail
 from django.core.mail.backends.smtp import EmailBackend as SMTPEmailBackend
+from django.core.cache import cache
 import json
 import requests
 from django.conf import settings
@@ -9,17 +10,81 @@ from tournament_creator.models.notifications import NotificationBackendSetting, 
 from tournament_creator.models.auth import User
 # from tournament_creator.models.logging import MatchResultLog # For type hinting if needed
 
-def get_player_name(player):
-    return str(player) if player else "Unknown Player"
+def get_signal_groups(force_refresh=False):
+    """
+    Fetch available Signal groups from the API and cache them permanently.
+    Use force_refresh=True to bypass cache and fetch fresh data.
+    Returns a list of dicts with 'id', 'name', and other group info.
+    Raises exceptions on errors for proper error reporting.
+    """
+    # Check cache first unless force refresh
+    if not force_refresh:
+        cached_groups = cache.get('signal_groups')
+        if cached_groups is not None:
+            return cached_groups
+
+    # Get Signal backend settings - will raise DoesNotExist if not found
+    signal_backend = NotificationBackendSetting.objects.get(backend_name='signal', is_active=True)
+    config = signal_backend.config
+    if not config:
+        raise ValueError("Signal backend has no configuration")
+
+    signal_cli_rest_api_url = config.get('signal_cli_rest_api_url')
+    signal_sender_phone_number = config.get('signal_sender_phone_number')
+
+    if not signal_cli_rest_api_url or not signal_sender_phone_number:
+        raise ValueError("Signal CLI URL or sender phone number not configured")
+
+    # Fetch groups from API - will raise RequestException if fails
+    groups_url = f"{signal_cli_rest_api_url.rstrip('/')}/v1/groups/{signal_sender_phone_number}"
+    response = requests.get(groups_url, timeout=10)
+    response.raise_for_status()
+
+    groups_data = response.json()
+
+    # Cache permanently (None = no expiration)
+    cache.set('signal_groups', groups_data, None)
+
+    return groups_data
+
+def get_player_name(player, tournament=None):
+    """
+    Get player name for display, respecting tournament name display preference.
+    Args:
+        player: Player instance
+        tournament: TournamentChart instance (optional)
+    Returns:
+        str: Player name formatted according to tournament preference
+    """
+    if not player:
+        return "Unknown Player"
+
+    # If no tournament specified or tournament uses first names
+    if not tournament or tournament.name_display_format == 'FIRST':
+        # Use first names with disambiguation (same logic as get_display_name)
+        if tournament:
+            all_players = list(tournament.players.all())
+            return player.get_display_name(all_players)
+        else:
+            # No tournament context, just return first name
+            return player.first_name
+
+    # Otherwise use last names with disambiguation
+    all_players = list(tournament.players.all())
+    return player.get_display_name_last_name_mode(all_players)
 
 def send_email_notification(user_who_recorded: User, match_result_log_instance, tournament_chart_instance: TournamentChart):
     """
     Sends an email notification based on a match result log using custom SMTP settings
     from NotificationBackendSetting. Checks both global and per-tournament notification settings.
     """
+    # Check per-tournament setting FIRST - if disabled, don't even try to fetch backend
+    if not tournament_chart_instance.notify_by_email:
+        return  # Silently skip if email notifications disabled for this tournament
+
     email_backend_setting = None
     try:
-        # Check global setting first
+        # Check global setting
         email_backend_setting = NotificationBackendSetting.objects.get(backend_name='email', is_active=True)
     except NotificationBackendSetting.DoesNotExist:
         NotificationLog.objects.create(
@@ -44,16 +109,6 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance, 
             backend_setting=email_backend_setting,
             success=False,
             details="Email backend 'email' is active but has no configuration.",
-            match_result_log=match_result_log_instance
-        )
-        return
-    
-    # Now check per-tournament setting
-    if not tournament_chart_instance.notify_by_email:
-        NotificationLog.objects.create(
-            backend_setting=email_backend_setting, # Global backend exists and is active
-            success=False, 
-            details=f"Email notification skipped for tournament '{tournament_chart_instance.name}' as per tournament settings (disabled).",
             match_result_log=match_result_log_instance
         )
         return
@@ -104,12 +159,12 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance, 
         team1_display = str(matchup.pair1)
         team2_display = str(matchup.pair2) if matchup.pair2 else "Unknown Opponent"
     elif matchup.pair1_player1:
-        p1_name = get_player_name(matchup.pair1_player1)
-        p2_name = get_player_name(matchup.pair1_player2)
+        p1_name = get_player_name(matchup.pair1_player1, tournament_chart_instance)
+        p2_name = get_player_name(matchup.pair1_player2, tournament_chart_instance)
         team1_display = f"{p1_name} & {p2_name}"
-        
-        p3_name = get_player_name(matchup.pair2_player1)
-        p4_name = get_player_name(matchup.pair2_player2)
+
+        p3_name = get_player_name(matchup.pair2_player1, tournament_chart_instance)
+        p4_name = get_player_name(matchup.pair2_player2, tournament_chart_instance)
         team2_display = f"{p3_name} & {p4_name}"
     
     matchup_str = f"{team1_display} vs {team2_display} (Round {matchup.round_number}, Court {matchup.court_number})"
@@ -124,21 +179,13 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance, 
         score_pairs.append(f"{t1_score}–{t2_score}")
     scores_str = ", ".join(score_pairs) if score_pairs else "No scores"
 
-    # Use last names only for more compact display
-    def get_last_name(player):
-        if not player:
-            return "Unknown"
-        name = str(player).strip()
-        parts = name.split()
-        return parts[-1] if parts else name
-
-    # Format team names with last names only
+    # Format team names according to tournament preference
     if matchup.pair1:
         team1_compact = str(matchup.pair1)
         team2_compact = str(matchup.pair2) if matchup.pair2 else "Unknown"
     elif matchup.pair1_player1:
-        team1_compact = f"{get_last_name(matchup.pair1_player1)} & {get_last_name(matchup.pair1_player2)}"
-        team2_compact = f"{get_last_name(matchup.pair2_player1)} & {get_last_name(matchup.pair2_player2)}"
+        team1_compact = f"{get_player_name(matchup.pair1_player1, tournament_chart_instance)} & {get_player_name(matchup.pair1_player2, tournament_chart_instance)}"
+        team2_compact = f"{get_player_name(matchup.pair2_player1, tournament_chart_instance)} & {get_player_name(matchup.pair2_player2, tournament_chart_instance)}"
     else:
         team1_compact = "Team 1"
         team2_compact = "Team 2"
@@ -192,9 +239,13 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
     Sends a Signal notification based on a match result log using settings
     from NotificationBackendSetting. Checks both global and per-tournament notification settings.
     """
+    # Check per-tournament setting FIRST - if disabled, don't even try to fetch backend
+    if not tournament_chart_instance.notify_by_signal:
+        return  # Silently skip if Signal notifications disabled for this tournament
+
     signal_backend_setting = None
     try:
-        # Check global setting first
+        # Check global setting
         signal_backend_setting = NotificationBackendSetting.objects.get(backend_name='signal', is_active=True)
     except NotificationBackendSetting.DoesNotExist:
         NotificationLog.objects.create(
@@ -223,21 +274,9 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
         )
         return
 
-    # Now check per-tournament setting
-    if not tournament_chart_instance.notify_by_signal:
-        NotificationLog.objects.create(
-            backend_setting=signal_backend_setting, # Global backend exists and is active
-            success=False, 
-            details=f"Signal notification skipped for tournament '{tournament_chart_instance.name}' as per tournament settings (disabled).",
-            match_result_log=match_result_log_instance
-        )
-        return
-
     # Proceed with sending Signal message if all checks passed
     signal_cli_rest_api_url = config.get('signal_cli_rest_api_url')
     signal_sender_phone_number = config.get('signal_sender_phone_number')
-    recipient_usernames_str = config.get('recipient_usernames', '')
-    recipient_group_ids_str = config.get('recipient_group_ids', '')
 
     if not signal_cli_rest_api_url or not signal_sender_phone_number:
         NotificationLog.objects.create(
@@ -247,12 +286,21 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
         )
         return
 
+    # Check for per-tournament recipients first, fall back to global settings
+    recipient_usernames_str = tournament_chart_instance.signal_recipient_usernames.strip() if tournament_chart_instance.signal_recipient_usernames else ''
+    recipient_group_ids_str = tournament_chart_instance.signal_recipient_group_ids.strip() if tournament_chart_instance.signal_recipient_group_ids else ''
+
+    # If no per-tournament recipients, use global settings
+    if not recipient_usernames_str and not recipient_group_ids_str:
+        recipient_usernames_str = config.get('recipient_usernames', '')
+        recipient_group_ids_str = config.get('recipient_group_ids', '')
+
     actual_recipient_usernames = []
     if isinstance(recipient_usernames_str, str) and recipient_usernames_str.strip():
         actual_recipient_usernames = [name.strip() for name in recipient_usernames_str.split(',') if name.strip()]
     elif isinstance(recipient_usernames_str, list):
         actual_recipient_usernames = [str(name).strip() for name in recipient_usernames_str if str(name).strip()]
-        
+
     actual_recipient_group_ids = []
     if isinstance(recipient_group_ids_str, str) and recipient_group_ids_str.strip():
         actual_recipient_group_ids = [gid.strip() for gid in recipient_group_ids_str.split(',') if gid.strip()]
@@ -262,7 +310,7 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
     if not actual_recipient_usernames and not actual_recipient_group_ids:
         NotificationLog.objects.create(
             backend_setting=signal_backend_setting, success=False,
-            details="Failed to send Signal message: No recipient usernames or group IDs found in configuration.",
+            details="Failed to send Signal message: No recipient usernames or group IDs found in tournament-specific or global configuration.",
             match_result_log=match_result_log_instance
         )
         return
@@ -276,11 +324,11 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
         team1_display = str(matchup.pair1)
         team2_display = str(matchup.pair2) if matchup.pair2 else "Unknown Opponent"
     elif matchup.pair1_player1:
-        p1_name = get_player_name(matchup.pair1_player1)
-        p2_name = get_player_name(matchup.pair1_player2)
+        p1_name = get_player_name(matchup.pair1_player1, tournament_chart_instance)
+        p2_name = get_player_name(matchup.pair1_player2, tournament_chart_instance)
         team1_display = f"{p1_name} & {p2_name}"
-        p3_name = get_player_name(matchup.pair2_player1)
-        p4_name = get_player_name(matchup.pair2_player2)
+        p3_name = get_player_name(matchup.pair2_player1, tournament_chart_instance)
+        p4_name = get_player_name(matchup.pair2_player2, tournament_chart_instance)
         team2_display = f"{p3_name} & {p4_name}"
     
     matchup_str = f"{team1_display} vs {team2_display} (Round {matchup.round_number}, Court {matchup.court_number})"
@@ -295,21 +343,13 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
         score_pairs.append(f"{t1_score}–{t2_score}")
     scores_str = ", ".join(score_pairs) if score_pairs else "No scores"
 
-    # Use last names only for more compact display
-    def get_last_name(player):
-        if not player:
-            return "Unknown"
-        name = str(player).strip()
-        parts = name.split()
-        return parts[-1] if parts else name
-
-    # Format team names with last names only
+    # Format team names according to tournament preference
     if matchup.pair1:
         team1_compact = str(matchup.pair1)
         team2_compact = str(matchup.pair2) if matchup.pair2 else "Unknown"
     elif matchup.pair1_player1:
-        team1_compact = f"{get_last_name(matchup.pair1_player1)} & {get_last_name(matchup.pair1_player2)}"
-        team2_compact = f"{get_last_name(matchup.pair2_player1)} & {get_last_name(matchup.pair2_player2)}"
+        team1_compact = f"{get_player_name(matchup.pair1_player1, tournament_chart_instance)} & {get_player_name(matchup.pair1_player2, tournament_chart_instance)}"
+        team2_compact = f"{get_player_name(matchup.pair2_player1, tournament_chart_instance)} & {get_player_name(matchup.pair2_player2, tournament_chart_instance)}"
     else:
         team1_compact = "Team 1"
         team2_compact = "Team 2"

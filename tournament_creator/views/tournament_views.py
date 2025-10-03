@@ -37,6 +37,9 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         # Preserve tournament category
         if 'tournament_category' in self.request.GET:
             initial['tournament_category'] = self.request.GET.get('tournament_category')
+        # Preserve name display format
+        if 'name_display_format' in self.request.GET:
+            initial['name_display_format'] = self.request.GET.get('name_display_format')
         # Preserve notification checkbox states from GET parameters if available
         if 'notify_by_email' in self.request.GET:
             initial['notify_by_email'] = self.request.GET.get('notify_by_email') == 'true'
@@ -211,20 +214,22 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         # Get all players in the tournament for name disambiguation
         all_players = list(tournament.players.all())
         context['all_players'] = all_players
-        
-        # Enhance the matchups and player_scores with display_names
+
+        # Enhance the matchups and player_scores with display_names based on tournament preference
+        use_last_names = tournament.name_display_format == 'LAST'
+
         for matchup in context['matchups']:
             if matchup.pair1_player1:
-                matchup.pair1_player1.display_name = matchup.pair1_player1.get_display_name(all_players)
+                matchup.pair1_player1.display_name = matchup.pair1_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player1.get_display_name(all_players)
             if matchup.pair1_player2:
-                matchup.pair1_player2.display_name = matchup.pair1_player2.get_display_name(all_players)
+                matchup.pair1_player2.display_name = matchup.pair1_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player2.get_display_name(all_players)
             if matchup.pair2_player1:
-                matchup.pair2_player1.display_name = matchup.pair2_player1.get_display_name(all_players)
+                matchup.pair2_player1.display_name = matchup.pair2_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player1.get_display_name(all_players)
             if matchup.pair2_player2:
-                matchup.pair2_player2.display_name = matchup.pair2_player2.get_display_name(all_players)
-                
+                matchup.pair2_player2.display_name = matchup.pair2_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player2.get_display_name(all_players)
+
         for score in context['player_scores']:
-            score.player.display_name = score.player.get_display_name(all_players)
+            score.player.display_name = score.player.get_display_name_last_name_mode(all_players) if use_last_names else score.player.get_display_name(all_players)
             
         return context
         

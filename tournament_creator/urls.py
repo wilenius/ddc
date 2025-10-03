@@ -11,6 +11,7 @@ from .views.autocomplete import PlayerAutocomplete
 from .views.rankings_views import (
     RankingsListView, update_rankings, check_update_status
 )
+from .views.notifications_views import refresh_signal_groups
 
 urlpatterns = [
     path('', RedirectView.as_view(pattern_name='tournament_list', permanent=False)),
@@ -31,4 +32,7 @@ urlpatterns = [
     path('rankings/', RankingsListView.as_view(), name='rankings_list'),
     path('rankings/update/', update_rankings, name='update_rankings'),
     path('rankings/status/', check_update_status, name='check_rankings_status'),
+
+    # Notifications URLs
+    path('api/refresh-signal-groups/', refresh_signal_groups, name='refresh_signal_groups'),
 ]

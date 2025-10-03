@@ -214,20 +214,22 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         # Get all players in the tournament for name disambiguation
         all_players = list(tournament.players.all())
         context['all_players'] = all_players
-        
-        # Enhance the matchups and player_scores with display_names
+
+        # Enhance the matchups and player_scores with display_names based on tournament preference
+        use_last_names = tournament.name_display_format == 'LAST'
+
         for matchup in context['matchups']:
             if matchup.pair1_player1:
-                matchup.pair1_player1.display_name = matchup.pair1_player1.get_display_name(all_players)
+                matchup.pair1_player1.display_name = matchup.pair1_player1.last_name if use_last_names else matchup.pair1_player1.get_display_name(all_players)
             if matchup.pair1_player2:
-                matchup.pair1_player2.display_name = matchup.pair1_player2.get_display_name(all_players)
+                matchup.pair1_player2.display_name = matchup.pair1_player2.last_name if use_last_names else matchup.pair1_player2.get_display_name(all_players)
             if matchup.pair2_player1:
-                matchup.pair2_player1.display_name = matchup.pair2_player1.get_display_name(all_players)
+                matchup.pair2_player1.display_name = matchup.pair2_player1.last_name if use_last_names else matchup.pair2_player1.get_display_name(all_players)
             if matchup.pair2_player2:
-                matchup.pair2_player2.display_name = matchup.pair2_player2.get_display_name(all_players)
-                
+                matchup.pair2_player2.display_name = matchup.pair2_player2.last_name if use_last_names else matchup.pair2_player2.get_display_name(all_players)
+
         for score in context['player_scores']:
-            score.player.display_name = score.player.get_display_name(all_players)
+            score.player.display_name = score.player.last_name if use_last_names else score.player.get_display_name(all_players)
             
         return context
         

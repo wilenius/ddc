@@ -59,9 +59,15 @@ def get_player_name(player, tournament=None):
     if not player:
         return "Unknown Player"
 
-    # If no tournament specified or tournament uses first names, use full name
+    # If no tournament specified or tournament uses first names
     if not tournament or tournament.name_display_format == 'FIRST':
-        return str(player)  # Returns "FirstName LastName"
+        # Use first names with disambiguation (same logic as get_display_name)
+        if tournament:
+            all_players = list(tournament.players.all())
+            return player.get_display_name(all_players)
+        else:
+            # No tournament context, just return first name
+            return player.first_name
 
     # Otherwise use last name only
     return player.last_name

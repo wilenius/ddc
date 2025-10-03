@@ -24,6 +24,8 @@ A Django-based tournament management system specifically designed for Double Dis
 
 ## Setup
 
+### Development Setup
+
 1. Clone the repository:
    ```bash
    git clone [repository-url]
@@ -41,30 +43,90 @@ A Django-based tournament management system specifically designed for Double Dis
    pip install -r requirements.txt
    ```
 
-4. Apply database migrations:
+4. **Configure environment variables:**
+   ```bash
+   # Copy the example environment file
+   cp .env.example .env
+
+   # Generate a new SECRET_KEY
+   python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+
+   # Edit .env and set your SECRET_KEY and other settings
+   # For development, the defaults in .env.example are usually fine
+   ```
+
+   **Required settings in `.env`:**
+   - `SECRET_KEY` - Generate a new one (see command above)
+   - `DEBUG` - Set to `True` for development, `False` for production
+   - `STATIC_ROOT` - Path where static files will be collected
+   - `ALLOWED_HOSTS` - Comma-separated list of allowed hostnames
+
+   See `.env.example` for all available options.
+
+5. Apply database migrations:
    ```bash
    python manage.py migrate
    ```
    *Note: Tournament archetypes are automatically populated after migrations*
 
-5. Collect static files:
+6. Collect static files:
    ```bash
    python manage.py collectstatic --noinput
    ```
 
-6. Create a superuser (admin account):
+7. Create a superuser (admin account):
    ```bash
    python manage.py createsuperuser
    ```
 
-7. Run the development server:
+8. Run the development server:
    ```bash
    python manage.py runserver 0.0.0.0:8000
    ```
 
-8. Access the application:
+9. Access the application:
    - Main site: http://127.0.0.1:8000/
    - Admin interface: http://127.0.0.1:8000/admin/
+
+### Production Deployment
+
+For production deployment, follow the development setup steps with these modifications:
+
+1. **Environment Configuration:**
+   ```bash
+   cp .env.example .env
+   ```
+
+   Edit `.env` with production values:
+   ```
+   SECRET_KEY=<generate-new-secret-key>
+   DEBUG=False
+   STATIC_ROOT=/var/www/ddc/staticfiles  # Or your production path
+   ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+   ```
+
+2. **Security Checklist:**
+   - Never commit your `.env` file to version control
+   - Use a strong, randomly generated `SECRET_KEY`
+   - Set `DEBUG=False` in production
+   - Configure proper `ALLOWED_HOSTS`
+   - Use a production-grade database (PostgreSQL recommended)
+   - Set up HTTPS/SSL
+   - Configure proper file permissions for `.env` (e.g., `chmod 600 .env`)
+
+3. **Static Files:**
+   Production deployments typically use a web server (like Nginx) to serve static files:
+   ```bash
+   python manage.py collectstatic --noinput
+   ```
+
+4. **Database:**
+   For production, consider using PostgreSQL instead of SQLite:
+   ```bash
+   # In .env:
+   DATABASE_URL=postgresql://user:password@localhost/dbname
+   ```
+   Then install: `pip install psycopg2-binary`
 
 ## Running Tests
 

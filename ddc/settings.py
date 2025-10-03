@@ -12,24 +12,25 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 import os
+from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ajax stuff needs this
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+STATIC_ROOT = config('STATIC_ROOT', default=os.path.join(BASE_DIR, "staticfiles"))
 STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-zk$2yw!!n#qk2eyf18fuu4#qthf3dz51%%+k#la$e9l9g+y7px'
+SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ['0.0.0.0', '127.0.0.1', 'localhost']
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 
 # Application definition
@@ -95,12 +96,12 @@ DATABASES = {
 
 # Email Configuration (placeholders - actual notification sending uses model-based config)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.example.com'  # Placeholder
-EMAIL_PORT = 587                   # Placeholder (standard for TLS)
-EMAIL_USE_TLS = True               # Placeholder
-EMAIL_HOST_USER = 'user@example.com'  # Placeholder
-EMAIL_HOST_PASSWORD = 'password'       # Placeholder
-DEFAULT_FROM_EMAIL = 'webmaster@localhost' # Placeholder
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.example.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='user@example.com')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='password')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='webmaster@localhost')
 
 
 # Password validation

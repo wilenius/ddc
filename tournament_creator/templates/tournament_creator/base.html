@@ -104,6 +104,9 @@
                             <span class="nav-link">{{ user.username }} ({{ user.get_role_display }})</span>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link" href="{% url 'password_change' %}">Change Password</a>
+                        </li>
+                        <li class="nav-item">
     <form method="post" action="{% url 'logout' %}" style="display:inline;">
         {% csrf_token %}
         <button class="nav-link btn btn-link" type="submit" style="padding: 0; color: #fff; text-decoration: none;">Logout</button>

@@ -249,6 +249,15 @@ When a match result is recorded or updated, and the Signal backend is active and
 4. Run the test suite
 5. Submit a pull request
 
+## TODO
+
+1. Tournament creator role
+2. Group support for individual pods
+3. per pod player / creator / admin rights
+4. Tournament types: doubles league (Helsinki winter), MoC league (Florida winter), dynamic MoC (German/Finnish style)
+5. Tournament sign-up system
+6. What else?
+
 ## License
 
 GPL

@@ -18,24 +18,50 @@ class Player(models.Model):
         # If no players list is provided or just one player, return first name
         if not players or len(players) <= 1:
             return self.first_name
-            
+
         # Find players with the same first name
         same_first_name = [p for p in players if p.first_name == self.first_name and p.id != self.id]
-        
+
         # If no duplicate first names, return just first name
         if not same_first_name:
             return self.first_name
-            
+
         # Find minimum length of last name needed for disambiguation
         for i in range(1, len(self.last_name) + 1):
             my_surname_prefix = self.last_name[:i]
             # Check if this prefix is unique among players with same first name
             if not any(p.last_name.startswith(my_surname_prefix) for p in same_first_name):
                 return f"{self.first_name} {my_surname_prefix}."
-        
+
         # If we need the full last name for disambiguation
         return f"{self.first_name} {self.last_name}"
-    
+
+    def get_display_name_last_name_mode(self, players=None):
+        """
+        Returns a name for display with last name and first name initial(s) for disambiguation.
+        If 'players' is provided, checks for duplicate last names and adds first name initial(s).
+        """
+        # If no players list is provided or just one player, return last name
+        if not players or len(players) <= 1:
+            return self.last_name
+
+        # Find players with the same last name
+        same_last_name = [p for p in players if p.last_name == self.last_name and p.id != self.id]
+
+        # If no duplicate last names, return just last name
+        if not same_last_name:
+            return self.last_name
+
+        # Find minimum length of first name needed for disambiguation
+        for i in range(1, len(self.first_name) + 1):
+            my_first_name_prefix = self.first_name[:i]
+            # Check if this prefix is unique among players with same last name
+            if not any(p.first_name.startswith(my_first_name_prefix) for p in same_last_name):
+                return f"{my_first_name_prefix}. {self.last_name}"
+
+        # If we need the full first name for disambiguation
+        return f"{self.first_name} {self.last_name}"
+
     class Meta:
         ordering = ['ranking']
 

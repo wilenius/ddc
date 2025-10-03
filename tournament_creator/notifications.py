@@ -69,8 +69,9 @@ def get_player_name(player, tournament=None):
             # No tournament context, just return first name
             return player.first_name
 
-    # Otherwise use last name only
-    return player.last_name
+    # Otherwise use last names with disambiguation
+    all_players = list(tournament.players.all())
+    return player.get_display_name_last_name_mode(all_players)
 
 def send_email_notification(user_who_recorded: User, match_result_log_instance, tournament_chart_instance: TournamentChart):
     """

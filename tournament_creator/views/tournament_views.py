@@ -192,7 +192,8 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         player_scores = self.apply_tiebreaks(tournament, player_scores)
         
         # Make sure all scores have tiebreak attributes (even if not in a tie)
-        for score in player_scores:
+        has_manual_resolution = False
+        for idx, score in enumerate(player_scores, start=1):
             if not hasattr(score, 'h2h_wins'):
                 score.h2h_wins = 0
                 score.h2h_losses = 0
@@ -200,8 +201,19 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
             if not hasattr(score, 'above_wins'):
                 score.above_wins = 0
                 score.above_pd = 0
-                
+            # Add position number
+            score.position = idx
+            # Check if any score is manually resolved
+            if hasattr(score, 'manually_resolved') and score.manually_resolved:
+                has_manual_resolution = True
+
         context['player_scores'] = player_scores
+        context['has_manual_resolution'] = has_manual_resolution
+
+        # Check if tournament is complete (all matchups have scores)
+        total_matchups = tournament.matchups.count()
+        matchups_with_scores = tournament.matchups.filter(scores__isnull=False).distinct().count()
+        context['tournament_complete'] = total_matchups > 0 and total_matchups == matchups_with_scores
         
         context['match_logs'] = MatchResultLog.objects.filter(
             matchup__tournament_chart=tournament
@@ -313,28 +325,18 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         
         # Process each group of tied players
         for group in groups_of_tied_players:
-            # Check if there's a manual resolution for this win level
             wins_level = group[0].wins
+            tied_player_ids = [score.player.id for score in group]
+
+            # Check if there's a manual resolution for this win level
+            manual_resolution = None
             try:
                 manual_resolution = ManualTiebreakResolution.objects.get(
                     tournament=tournament,
                     wins_tied_at=wins_level
                 )
-                # Apply manual resolution
-                player_order = {player_id: idx for idx, player_id in enumerate(manual_resolution.resolved_order)}
-                group.sort(key=lambda score: player_order.get(score.player.id, 999))
-                
-                # Mark as manually resolved for display
-                for score in group:
-                    score.manually_resolved = True
-                    score.manual_resolution_reason = manual_resolution.reason
-                continue
-                
             except ManualTiebreakResolution.DoesNotExist:
-                # No manual resolution, proceed with automatic tiebreak
                 pass
-                
-            tied_player_ids = [score.player.id for score in group]
             
             # Create a record structure to hold MoC tiebreak criteria
             tiebreak_records = {player_id: {
@@ -402,19 +404,38 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
                 )
             
             group.sort(key=moc_sort_key)
-            
+
             # Store the tiebreak info for display
             for score in group:
                 player_id = score.player.id
                 score.h2h_wins = tiebreak_records[player_id]['h2h_wins']
                 score.h2h_losses = tiebreak_records[player_id]['h2h_losses']
                 score.h2h_point_diff = tiebreak_records[player_id]['h2h_point_diff']
-                
+
                 # Calculate ratio for display
                 if score.h2h_losses == 0:
                     score.h2h_ratio = float('inf') if score.h2h_wins > 0 else 0
                 else:
                     score.h2h_ratio = score.h2h_wins / score.h2h_losses
+
+            # If manual resolution exists, apply it now (after tiebreak stats are calculated)
+            if manual_resolution:
+                # Get the automatic order before manual override
+                auto_order = [score.player.id for score in group]
+
+                # Apply manual order
+                player_order = {player_id: idx for idx, player_id in enumerate(manual_resolution.resolved_order)}
+                group.sort(key=lambda score: player_order.get(score.player.id, 999))
+
+                # Get manual order after sorting
+                manual_order = [score.player.id for score in group]
+
+                # Mark as manually resolved only if order differs from automatic
+                order_differs = auto_order != manual_order
+
+                for score in group:
+                    score.manually_resolved = order_differs
+                    score.manual_resolution_reason = manual_resolution.reason if order_differs else None
         
         # Rebuild the complete standings with tiebreak-sorted groups
         return self._rebuild_standings(sorted_scores, groups_of_tied_players)

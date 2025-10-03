@@ -127,13 +127,14 @@
         <!-- Standings -->
         <div class="card mb-4">
             <div class="card-header">
-                <h5 class="mb-0">Current Standings</h5>
+                <h5 class="mb-0">{% if tournament_complete %}Final Standings{% else %}Current Standings{% endif %}</h5>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-striped">
                         <thead>
                             <tr>
+                                <th>Pos</th>
                                 <th>Player</th>
                                 <th>Played</th>
                                 <th>Wins</th>
@@ -144,6 +145,7 @@
                         <tbody>
                             {% for score in player_scores %}
                                 <tr>
+                                    <td><strong>{{ score.position }}{% if score.manually_resolved %}*{% endif %}</strong></td>
                                     <td>{{ score.player.display_name }}</td>
                                     <td>{{ score.matches_played }}{% if score.automatic_wins > 0 %} <span class="text-success">+{{ score.automatic_wins }}</span>{% endif %}</td>
                                     <td>{{ score.wins }}{% if score.automatic_wins > 0 %} <span class="text-success">+{{ score.automatic_wins }}</span>{% endif %}</td>
@@ -152,11 +154,11 @@
                                         {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 or score.above_wins > 0 or score.above_pd != 0 %}
                                             <span title="H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L, {{ score.h2h_point_diff }}PD{% if score.above_wins > 0 or score.above_pd != 0 %}, VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD{% endif %}">
                                                 {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 %}
-                                                    H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L ({{ score.h2h_point_diff }}PD)
+                                                    H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L ({{ score.h2h_point_diff }}PD){% if score.manually_resolved %}*{% endif %}
                                                 {% endif %}
                                                 {% if score.above_wins > 0 or score.above_pd != 0 %}
                                                     {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 %}, {% endif %}
-                                                    VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD
+                                                    VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD{% if score.manually_resolved %}*{% endif %}
                                                 {% endif %}
                                             </span>
                                         {% else %}
@@ -167,6 +169,9 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                    {% if has_manual_resolution %}
+                        <div class="text-muted small mt-1">*) Resolved manually</div>
+                    {% endif %}
                 </div>
             </div>
         </div>

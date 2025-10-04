@@ -69,17 +69,22 @@ A Django-based tournament management system specifically designed for Double Dis
    ```
    *Note: Tournament archetypes are automatically populated after migrations*
 
-6. Collect static files:
+6. Populate default archetype notes:
+   ```bash
+   python manage.py populate_archetype_notes
+   ```
+
+7. Collect static files:
    ```bash
    python manage.py collectstatic --noinput
    ```
 
-7. Create a superuser (admin account):
+8. Create a superuser (admin account):
    ```bash
    python manage.py createsuperuser
    ```
 
-8. Run the development server:
+9. Run the development server:
    ```bash
    python manage.py runserver 0.0.0.0:8000
    ```

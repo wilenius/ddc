@@ -85,6 +85,7 @@ class TournamentChart(models.Model):
     date = models.DateField()
     number_of_rounds = models.IntegerField()
     number_of_courts = models.IntegerField()
+    archetype = models.ForeignKey('TournamentArchetype', on_delete=models.SET_NULL, null=True, blank=True, related_name='tournaments')
     # Consider relation by pairs or by players based on tournament type
     players = models.ManyToManyField(Player, through='TournamentPlayer', blank=True)
     pairs = models.ManyToManyField(Pair, through='TournamentPair', blank=True)
@@ -100,6 +101,7 @@ class TournamentChart(models.Model):
         ('LAST', 'Last names'),
     ]
     name_display_format = models.CharField(max_length=10, choices=NAME_DISPLAY_CHOICES, default='FIRST', help_text="How to display player names in notifications and tournament view")
+    show_structure = models.BooleanField(default=False, help_text="Show tournament structure in a separate block")
     def __str__(self):
         return self.name
     class Meta:
@@ -153,6 +155,7 @@ class TournamentArchetype(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     tournament_category = models.CharField(max_length=12, choices=TOURNAMENT_TYPES, default='PAIRS')
+    notes = models.TextField(blank=True, help_text="Explain the tournament structure and idiosyncrasies")
     
     def __str__(self):
         return self.name

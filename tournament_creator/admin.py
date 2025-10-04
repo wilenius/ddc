@@ -50,7 +50,9 @@ class MatchupAdmin(admin.ModelAdmin):
 
 @admin.register(TournamentArchetype)
 class TournamentArchetypeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'description')
+    list_display = ('name', 'description', 'tournament_category')
+    fields = ('name', 'description', 'tournament_category', 'notes')
+    list_filter = ('tournament_category',)
 
 @admin.register(MatchScore)
 class MatchScoreAdmin(admin.ModelAdmin):

@@ -125,6 +125,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         if tournament_category == 'MOC':
             # MoC tournaments use individual players
             tournament = form.save(commit=False)
+            tournament.archetype = archetype
             tournament.number_of_rounds = archetype.calculate_rounds(num_players)
             tournament.number_of_courts = archetype.calculate_courts(num_players)
             tournament.save()
@@ -146,6 +147,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                 pairs.append(pair)
 
             tournament = form.save(commit=False)
+            tournament.archetype = archetype
             from .models.tournament_types import get_implementation
             archetype_impl = get_implementation(archetype)
             tournament.number_of_rounds = archetype_impl.calculate_rounds(len(pairs))
@@ -184,6 +186,7 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         context = super().get_context_data(**kwargs)
         tournament = self.get_object()
         context['matchups'] = Matchup.objects.filter(tournament_chart=tournament).order_by('round_number', 'court_number')
+        context['archetype'] = tournament.archetype  # Include archetype for notes access
         
         # Get raw player scores - we'll sort with tiebreaks
         player_scores = list(PlayerScore.objects.filter(tournament=tournament))
@@ -242,7 +245,11 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
 
         for score in context['player_scores']:
             score.player.display_name = score.player.get_display_name_last_name_mode(all_players) if use_last_names else score.player.get_display_name(all_players)
-            
+
+        # Generate tournament structure if show_structure is enabled
+        if tournament.show_structure:
+            context['tournament_structure'] = self._generate_tournament_structure(tournament, all_players, use_last_names)
+
         return context
         
     def apply_tiebreaks(self, tournament, player_scores):
@@ -608,6 +615,77 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
                 final_standings.append(score)
         
         return final_standings
+
+    def _generate_tournament_structure(self, tournament, all_players, use_last_names):
+        """
+        Generate tournament structure data for display.
+        Returns a dict with court_numbers and rounds data.
+        """
+        # Get all matchups ordered by round and court
+        matchups = tournament.matchups.all().order_by('round_number', 'court_number')
+
+        if not matchups:
+            return {'court_numbers': [], 'rounds': []}
+
+        # Determine court numbers and round numbers
+        court_numbers = sorted(set(m.court_number for m in matchups))
+        round_numbers = sorted(set(m.round_number for m in matchups))
+
+        # Create player seeding map (rank -> seed number)
+        tournament_players = list(tournament.players.all().order_by('ranking'))
+        seed_map = {player.id: idx + 1 for idx, player in enumerate(tournament_players)}
+
+        # Build structure by rounds
+        rounds_data = []
+        for round_num in round_numbers:
+            round_matchups = matchups.filter(round_number=round_num).order_by('court_number')
+
+            # Create matchups for each court in this round
+            matchup_strings = []
+            for court_num in court_numbers:
+                matchup = round_matchups.filter(court_number=court_num).first()
+
+                if matchup:
+                    matchup_str = self._format_matchup_structure(matchup, seed_map, all_players, use_last_names)
+                    matchup_strings.append(matchup_str)
+                else:
+                    matchup_strings.append('-')
+
+            rounds_data.append({
+                'round_number': round_num,
+                'matchups': matchup_strings
+            })
+
+        return {
+            'court_numbers': court_numbers,
+            'rounds': rounds_data
+        }
+
+    def _format_matchup_structure(self, matchup, seed_map, all_players, use_last_names):
+        """
+        Format a single matchup for structure display showing seed numbers.
+        For MoC: "1&3 vs 6&8"
+        For Pairs: "Pair1 vs Pair2"
+        """
+        # Check if this is MoC (individual players) or Pairs tournament
+        if matchup.pair1_player1_id:
+            # MoC tournament - show seed numbers
+            p1_seed = seed_map.get(matchup.pair1_player1_id, '?')
+            p2_seed = seed_map.get(matchup.pair1_player2_id, '?') if matchup.pair1_player2_id else None
+            p3_seed = seed_map.get(matchup.pair2_player1_id, '?')
+            p4_seed = seed_map.get(matchup.pair2_player2_id, '?') if matchup.pair2_player2_id else None
+
+            if p2_seed and p4_seed:
+                return f"{p1_seed}&{p2_seed} vs {p3_seed}&{p4_seed}"
+            else:
+                return f"{p1_seed} vs {p3_seed}"
+        elif matchup.pair1_id:
+            # Pairs tournament - show pair names or seeds
+            pair1_name = str(matchup.pair1)
+            pair2_name = str(matchup.pair2)
+            return f"{pair1_name} vs {pair2_name}"
+        else:
+            return "-"
 
 class TournamentDeleteView(AdminRequiredMixin, DeleteView):
     model = TournamentChart

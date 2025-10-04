@@ -224,6 +224,47 @@
                 </div>
             </div>
         </div>
+
+        {% if tournament.show_structure %}
+        <!-- Tournament Structure -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Tournament Structure</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm">
+                        <thead>
+                            <tr>
+                                <th>Round</th>
+                                {% for court_num in tournament_structure.court_numbers %}
+                                    <th>Court {{ court_num }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for round_data in tournament_structure.rounds %}
+                                <tr>
+                                    <td><strong>{{ round_data.round_number }}</strong></td>
+                                    {% for matchup_str in round_data.matchups %}
+                                        <td>{{ matchup_str }}</td>
+                                    {% endfor %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if archetype.notes %}
+                <div class="card-footer">
+                    <small class="text-muted">
+                        <strong>Notes:</strong><br>
+                        {{ archetype.notes|linebreaksbr }}
+                    </small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 

@@ -42,6 +42,15 @@
                     </div>
 
                     <div class="mb-3 form-check">
+                        {{ form.show_structure }}
+                        <label class="form-check-label" for="{{ form.show_structure.id_for_label }}">
+                            {{ form.show_structure.label }}
+                        </label>
+                        {% if form.show_structure.help_text %}<small class="form-text text-muted d-block">{{ form.show_structure.help_text }}</small>{% endif %}
+                        {% if form.show_structure.errors %}<div class="invalid-feedback d-block">{{ form.show_structure.errors|join:", " }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3 form-check">
                         {{ form.notify_by_email }}
                         <label class="form-check-label" for="{{ form.notify_by_email.id_for_label }}">
                             {{ form.notify_by_email.label }}
@@ -94,13 +103,15 @@ document.addEventListener('DOMContentLoaded', function() {
             var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
             var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
             var notifyByMatrix = document.querySelector('input[name="notify_by_matrix"]').checked;
+            var showStructure = document.querySelector('input[name="show_structure"]').checked;
             var url = "{% url 'tournament_create' %}?tournament_category=" + this.value +
                       "&name=" + encodeURIComponent(name) +
                       "&date=" + encodeURIComponent(date) +
                       "&name_display_format=" + encodeURIComponent(nameDisplayFormat) +
                       "&notify_by_email=" + notifyByEmail +
                       "&notify_by_signal=" + notifyBySignal +
-                      "&notify_by_matrix=" + notifyByMatrix;
+                      "&notify_by_matrix=" + notifyByMatrix +
+                      "&show_structure=" + showStructure;
             window.location = url;
         });
     }

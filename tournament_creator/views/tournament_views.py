@@ -1,8 +1,8 @@
-from django.views.generic import ListView, CreateView, DetailView, DeleteView
+from django.views.generic import ListView, CreateView, DetailView, DeleteView, View
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.db import models
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
@@ -687,11 +687,55 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         else:
             return "-"
 
+class TournamentDownloadResultsView(SpectatorAccessMixin, View):
+    """Download tournament results as a text file."""
+
+    def get(self, request, pk):
+        tournament = get_object_or_404(TournamentChart, pk=pk)
+
+        # Get all players for name display
+        all_players = list(Player.objects.all())
+
+        # Get player scores with tiebreaks applied
+        player_scores = list(PlayerScore.objects.filter(tournament=tournament))
+
+        # Get detail view instance to reuse tiebreak logic
+        detail_view = TournamentDetailView()
+        detail_view.apply_tiebreaks(tournament, player_scores)
+
+        # Add position numbers
+        for idx, score in enumerate(player_scores, start=1):
+            score.position = idx
+
+        # Build the text content
+        lines = []
+        lines.append(f"Tournament: {tournament.name}")
+        lines.append(f"Date: {tournament.date.strftime('%B %d, %Y')}")
+        lines.append("")
+        lines.append("Final Standings:")
+        lines.append("-" * 60)
+
+        for score in player_scores:
+            # Use full name (first + last)
+            player = score.player
+            full_name = f"{player.first_name} {player.last_name}".strip()
+            if not full_name:
+                full_name = player.username
+
+            lines.append(f"{score.position}. {full_name} - {score.wins}W {score.total_point_difference:+d}PD")
+
+        # Create response with text file
+        response = HttpResponse('\n'.join(lines), content_type='text/plain')
+        filename = f"{tournament.name.replace(' ', '_')}_{tournament.date.strftime('%Y%m%d')}.txt"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        return response
+
 class TournamentDeleteView(AdminRequiredMixin, DeleteView):
     model = TournamentChart
     template_name = 'tournament_creator/tournamentchart_confirm_delete.html'
     success_url = reverse_lazy('tournament_list')
-    
+
     def delete(self, request, *args, **kwargs):
         tournament = self.get_object()
         messages.success(request, f'Tournament "{tournament.name}" has been deleted successfully.')

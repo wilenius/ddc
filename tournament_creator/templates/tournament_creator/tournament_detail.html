@@ -173,6 +173,13 @@
                         <div class="text-muted small mt-1">*) Resolved manually</div>
                     {% endif %}
                 </div>
+                {% if tournament_complete %}
+                <div class="card-footer text-center">
+                    <a href="{% url 'tournament_download_results' tournament.pk %}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-download"></i> Download Tournament Results
+                    </a>
+                </div>
+                {% endif %}
             </div>
         </div>
 

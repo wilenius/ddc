@@ -701,7 +701,7 @@ class TournamentDownloadResultsView(SpectatorAccessMixin, View):
 
         # Get detail view instance to reuse tiebreak logic
         detail_view = TournamentDetailView()
-        detail_view.apply_tiebreaks(tournament, player_scores)
+        player_scores = detail_view.apply_tiebreaks(tournament, player_scores)
 
         # Add position numbers
         for idx, score in enumerate(player_scores, start=1):

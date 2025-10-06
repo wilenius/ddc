@@ -89,7 +89,10 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             context['moc_player_form'] = moc_player_form
             return render(request, self.template_name, context)
 
-        players = list(moc_player_form.cleaned_data['players'])
+        # Get players in the order they were selected (from POST data)
+        # The form widget submits player IDs in selection order
+        player_ids = request.POST.getlist('players')
+        players = [Player.objects.get(id=pid) for pid in player_ids]
         num_players = len(players)
 
         # Find the matching archetype

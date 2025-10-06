@@ -240,23 +240,59 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
 
         # Get all matchups and stages
         from ..models.base_models import Stage
-        all_matchups = Matchup.objects.filter(tournament_chart=tournament).order_by('stage__stage_number', 'round_number', 'court_number')
+        all_matchups = list(Matchup.objects.filter(tournament_chart=tournament).select_related(
+            'pair1', 'pair2', 'pair1__player1', 'pair1__player2', 'pair2__player1', 'pair2__player2',
+            'pair1_player1', 'pair1_player2', 'pair2_player1', 'pair2_player2', 'stage'
+        ).order_by('stage__stage_number', 'round_number', 'court_number'))
         stages = list(Stage.objects.filter(tournament=tournament).order_by('stage_number'))
 
-        # Group matchups by stage
-        matchups_by_stage = {}
-        for stage in stages:
-            matchups_by_stage[stage.id] = list(all_matchups.filter(stage=stage))
-
-        context['matchups'] = all_matchups  # Keep for backward compatibility
-        context['matchups_by_stage'] = matchups_by_stage
-        context['stages'] = stages
-        context['has_multiple_stages'] = len(stages) > 1
         context['archetype'] = tournament.archetype  # Include archetype for notes access
 
         # Determine if this is a pairs or MoC tournament
         is_pairs_tournament = tournament.archetype and tournament.archetype.tournament_category == 'PAIRS'
         context['is_pairs_tournament'] = is_pairs_tournament
+
+        # Get all players for name disambiguation BEFORE setting display names
+        if is_pairs_tournament:
+            # For pairs tournaments, get players from the pairs
+            all_players = []
+            for pair in tournament.pairs.all():
+                all_players.extend([pair.player1, pair.player2])
+        else:
+            # For MoC tournaments, get players from the tournament
+            all_players = list(tournament.players.all())
+        context['all_players'] = all_players
+
+        # Set display names on matchups based on tournament preference
+        use_last_names = tournament.name_display_format == 'LAST'
+        for matchup in all_matchups:
+            # For MoC tournaments (individual player fields)
+            if matchup.pair1_player1:
+                matchup.pair1_player1.display_name = matchup.pair1_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player1.get_display_name(all_players)
+            if matchup.pair1_player2:
+                matchup.pair1_player2.display_name = matchup.pair1_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player2.get_display_name(all_players)
+            if matchup.pair2_player1:
+                matchup.pair2_player1.display_name = matchup.pair2_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player1.get_display_name(all_players)
+            if matchup.pair2_player2:
+                matchup.pair2_player2.display_name = matchup.pair2_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player2.get_display_name(all_players)
+
+            # For Pairs tournaments (Pair objects)
+            if matchup.pair1:
+                matchup.pair1.player1.display_name = matchup.pair1.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1.player1.get_display_name(all_players)
+                matchup.pair1.player2.display_name = matchup.pair1.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1.player2.get_display_name(all_players)
+            if matchup.pair2:
+                matchup.pair2.player1.display_name = matchup.pair2.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player1.get_display_name(all_players)
+                matchup.pair2.player2.display_name = matchup.pair2.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player2.get_display_name(all_players)
+
+        # NOW group matchups by stage (after display names are set)
+        matchups_by_stage = {}
+        for stage in stages:
+            matchups_by_stage[stage.id] = [m for m in all_matchups if m.stage_id == stage.id]
+
+        context['matchups'] = all_matchups  # Keep for backward compatibility
+        context['matchups_by_stage'] = matchups_by_stage
+        context['stages'] = stages
+        context['has_multiple_stages'] = len(stages) > 1
 
         if is_pairs_tournament:
             # For doubles tournaments, use PairScore
@@ -310,40 +346,8 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
             getattr(self.request.user, 'is_admin', lambda: False)()
             or getattr(self.request.user, 'is_player', lambda: False)()
         )
-        
-        # Get all players in the tournament for name disambiguation
-        if is_pairs_tournament:
-            # For pairs tournaments, get players from the pairs
-            all_players = []
-            for pair in tournament.pairs.all():
-                all_players.extend([pair.player1, pair.player2])
-        else:
-            # For MoC tournaments, get players from the tournament
-            all_players = list(tournament.players.all())
-        context['all_players'] = all_players
 
-        # Enhance the matchups and player_scores with display_names based on tournament preference
-        use_last_names = tournament.name_display_format == 'LAST'
-
-        for matchup in context['matchups']:
-            # For MoC tournaments (individual player fields)
-            if matchup.pair1_player1:
-                matchup.pair1_player1.display_name = matchup.pair1_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player1.get_display_name(all_players)
-            if matchup.pair1_player2:
-                matchup.pair1_player2.display_name = matchup.pair1_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player2.get_display_name(all_players)
-            if matchup.pair2_player1:
-                matchup.pair2_player1.display_name = matchup.pair2_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player1.get_display_name(all_players)
-            if matchup.pair2_player2:
-                matchup.pair2_player2.display_name = matchup.pair2_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player2.get_display_name(all_players)
-
-            # For Pairs tournaments (Pair objects)
-            if matchup.pair1:
-                matchup.pair1.player1.display_name = matchup.pair1.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1.player1.get_display_name(all_players)
-                matchup.pair1.player2.display_name = matchup.pair1.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1.player2.get_display_name(all_players)
-            if matchup.pair2:
-                matchup.pair2.player1.display_name = matchup.pair2.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player1.get_display_name(all_players)
-                matchup.pair2.player2.display_name = matchup.pair2.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player2.get_display_name(all_players)
-
+        # Set display names for player scores
         if not is_pairs_tournament:
             for score in context['player_scores']:
                 score.player.display_name = score.player.get_display_name_last_name_mode(all_players) if use_last_names else score.player.get_display_name(all_players)

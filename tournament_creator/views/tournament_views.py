@@ -196,31 +196,50 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         tournament = self.get_object()
         context['matchups'] = Matchup.objects.filter(tournament_chart=tournament).order_by('round_number', 'court_number')
         context['archetype'] = tournament.archetype  # Include archetype for notes access
-        
-        # Get raw player scores - we'll sort with tiebreaks
-        player_scores = list(PlayerScore.objects.filter(tournament=tournament))
-        
-        # Apply advanced tiebreak sorting
-        player_scores = self.apply_tiebreaks(tournament, player_scores)
-        
-        # Make sure all scores have tiebreak attributes (even if not in a tie)
-        has_manual_resolution = False
-        for idx, score in enumerate(player_scores, start=1):
-            if not hasattr(score, 'h2h_wins'):
-                score.h2h_wins = 0
-                score.h2h_losses = 0
-                score.h2h_point_diff = 0
-            if not hasattr(score, 'above_wins'):
-                score.above_wins = 0
-                score.above_pd = 0
-            # Add position number
-            score.position = idx
-            # Check if any score is manually resolved
-            if hasattr(score, 'manually_resolved') and score.manually_resolved:
-                has_manual_resolution = True
 
-        context['player_scores'] = player_scores
-        context['has_manual_resolution'] = has_manual_resolution
+        # Determine if this is a pairs or MoC tournament
+        is_pairs_tournament = tournament.archetype and tournament.archetype.tournament_category == 'PAIRS'
+        context['is_pairs_tournament'] = is_pairs_tournament
+
+        if is_pairs_tournament:
+            # For doubles tournaments, use PairScore
+            from ..models.scoring import PairScore
+            pair_scores = list(PairScore.objects.filter(tournament=tournament))
+
+            # Sort by wins (descending) then point difference (descending)
+            pair_scores.sort(key=lambda s: (s.wins, s.total_point_difference), reverse=True)
+
+            # Add position numbers
+            for idx, score in enumerate(pair_scores, start=1):
+                score.position = idx
+
+            context['pair_scores'] = pair_scores
+            context['has_manual_resolution'] = False  # Tiebreaks not implemented for pairs yet
+        else:
+            # For MoC tournaments, use PlayerScore
+            player_scores = list(PlayerScore.objects.filter(tournament=tournament))
+
+            # Apply advanced tiebreak sorting
+            player_scores = self.apply_tiebreaks(tournament, player_scores)
+
+            # Make sure all scores have tiebreak attributes (even if not in a tie)
+            has_manual_resolution = False
+            for idx, score in enumerate(player_scores, start=1):
+                if not hasattr(score, 'h2h_wins'):
+                    score.h2h_wins = 0
+                    score.h2h_losses = 0
+                    score.h2h_point_diff = 0
+                if not hasattr(score, 'above_wins'):
+                    score.above_wins = 0
+                    score.above_pd = 0
+                # Add position number
+                score.position = idx
+                # Check if any score is manually resolved
+                if hasattr(score, 'manually_resolved') and score.manually_resolved:
+                    has_manual_resolution = True
+
+            context['player_scores'] = player_scores
+            context['has_manual_resolution'] = has_manual_resolution
 
         # Check if tournament is complete (all matchups have scores)
         total_matchups = tournament.matchups.count()
@@ -261,8 +280,14 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
                 matchup.pair2.player1.display_name = matchup.pair2.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player1.get_display_name(all_players)
                 matchup.pair2.player2.display_name = matchup.pair2.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player2.get_display_name(all_players)
 
-        for score in context['player_scores']:
-            score.player.display_name = score.player.get_display_name_last_name_mode(all_players) if use_last_names else score.player.get_display_name(all_players)
+        if not is_pairs_tournament:
+            for score in context['player_scores']:
+                score.player.display_name = score.player.get_display_name_last_name_mode(all_players) if use_last_names else score.player.get_display_name(all_players)
+        else:
+            # Set display names for pairs
+            for score in context['pair_scores']:
+                score.pair.player1.display_name = score.pair.player1.get_display_name_last_name_mode(all_players) if use_last_names else score.pair.player1.get_display_name(all_players)
+                score.pair.player2.display_name = score.pair.player2.get_display_name_last_name_mode(all_players) if use_last_names else score.pair.player2.get_display_name(all_players)
 
         # Generate tournament structure if show_structure is enabled
         if tournament.show_structure:
@@ -882,10 +907,15 @@ def record_match_result(request, tournament_id, matchup_id):
         if team1_total == team2_total and team1_sets_won == team2_sets_won and team1_scores and team2_scores:
             winning_team = 1 if team1_scores[0] > team2_scores[0] else 2
         
-        # Get all players involved in the matchup
-        if getattr(matchup, 'pair1', None) and getattr(matchup, 'pair2', None):
+        # Check if this is a pairs tournament
+        is_pairs_tournament = getattr(matchup, 'pair1', None) and getattr(matchup, 'pair2', None)
+
+        # Get all players/pairs involved in the matchup
+        if is_pairs_tournament:
+            pairs = [matchup.pair1, matchup.pair2]
             players = [matchup.pair1.player1, matchup.pair1.player2, matchup.pair2.player1, matchup.pair2.player2]
         else:
+            pairs = []
             players = [
                 getattr(matchup, 'pair1_player1', None),
                 getattr(matchup, 'pair1_player2', None),
@@ -1017,7 +1047,66 @@ def record_match_result(request, tournament_id, matchup_id):
             # Add automatic wins to total wins
             player_score.wins += player_score.automatic_wins
             player_score.save()
-            
+
+        # Update pair scores for doubles tournaments
+        if is_pairs_tournament:
+            from ..models.scoring import PairScore
+            for pair in pairs:
+                pair_score, _ = PairScore.objects.get_or_create(
+                    tournament=tournament,
+                    pair=pair
+                )
+
+                # Get all matchups this pair has played
+                all_played = Matchup.objects.filter(
+                    tournament_chart=tournament
+                ).filter(
+                    models.Q(pair1=pair) | models.Q(pair2=pair)
+                ).annotate(
+                    has_scores=models.Count('scores')
+                ).filter(
+                    has_scores__gt=0
+                ).distinct()
+
+                pair_score.matches_played = all_played.count()
+                pair_score.wins = 0
+                pair_score.total_point_difference = 0
+
+                for m in all_played:
+                    scores = list(m.scores.order_by('set_number'))
+                    if not scores:
+                        continue
+
+                    # Determine if pair won the match
+                    sets_won_by_pair = 0
+                    sets_won_by_opponent = 0
+                    total_pd = 0
+
+                    for s in scores:
+                        on_team1 = (pair == m.pair1)
+                        if on_team1:
+                            if s.winning_team == 1:
+                                sets_won_by_pair += 1
+                                total_pd += s.point_difference
+                            else:
+                                sets_won_by_opponent += 1
+                                total_pd -= s.point_difference
+                        else:  # pair is team2
+                            if s.winning_team == 2:
+                                sets_won_by_pair += 1
+                                total_pd += s.point_difference
+                            else:
+                                sets_won_by_opponent += 1
+                                total_pd -= s.point_difference
+
+                    # Pair wins if they won more sets
+                    if sets_won_by_pair > sets_won_by_opponent:
+                        pair_score.wins += 1
+
+                    pair_score.total_point_difference += total_pd
+
+                pair_score.save()
+
         return JsonResponse({'status': 'success'})
         
     except Exception as e:

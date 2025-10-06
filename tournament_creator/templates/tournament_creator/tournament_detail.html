@@ -149,38 +149,50 @@
                         <thead>
                             <tr>
                                 <th>Pos</th>
-                                <th>Player</th>
+                                <th>{% if is_pairs_tournament %}Pair{% else %}Player{% endif %}</th>
                                 <th>Played</th>
                                 <th>Wins</th>
                                 <th>Point Diff</th>
-                                <th>Tiebreak</th>
+                                {% if not is_pairs_tournament %}<th>Tiebreak</th>{% endif %}
                             </tr>
                         </thead>
                         <tbody>
-                            {% for score in player_scores %}
-                                <tr>
-                                    <td><strong>{{ score.position }}{% if score.manually_resolved %}*{% endif %}</strong></td>
-                                    <td>{{ score.player.display_name }}</td>
-                                    <td>{{ score.matches_played }}{% if score.automatic_wins > 0 %} <span class="text-success">+{{ score.automatic_wins }}</span>{% endif %}</td>
-                                    <td>{{ score.wins }}{% if score.automatic_wins > 0 %} <span class="text-success">+{{ score.automatic_wins }}</span>{% endif %}</td>
-                                    <td>{{ score.total_point_difference }}</td>
-                                    <td>
-                                        {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 or score.above_wins > 0 or score.above_pd != 0 %}
-                                            <span title="H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L, {{ score.h2h_point_diff }}PD{% if score.above_wins > 0 or score.above_pd != 0 %}, VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD{% endif %}">
-                                                {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 %}
-                                                    H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L ({{ score.h2h_point_diff }}PD){% if score.manually_resolved %}*{% endif %}
-                                                {% endif %}
-                                                {% if score.above_wins > 0 or score.above_pd != 0 %}
-                                                    {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 %}, {% endif %}
-                                                    VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD{% if score.manually_resolved %}*{% endif %}
-                                                {% endif %}
-                                            </span>
-                                        {% else %}
-                                            -
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                            {% endfor %}
+                            {% if is_pairs_tournament %}
+                                {% for score in pair_scores %}
+                                    <tr>
+                                        <td><strong>{{ score.position }}</strong></td>
+                                        <td>{{ score.pair.player1.display_name }} &<br>{{ score.pair.player2.display_name }}</td>
+                                        <td>{{ score.matches_played }}</td>
+                                        <td>{{ score.wins }}</td>
+                                        <td>{{ score.total_point_difference }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                {% for score in player_scores %}
+                                    <tr>
+                                        <td><strong>{{ score.position }}{% if score.manually_resolved %}*{% endif %}</strong></td>
+                                        <td>{{ score.player.display_name }}</td>
+                                        <td>{{ score.matches_played }}{% if score.automatic_wins > 0 %} <span class="text-success">+{{ score.automatic_wins }}</span>{% endif %}</td>
+                                        <td>{{ score.wins }}{% if score.automatic_wins > 0 %} <span class="text-success">+{{ score.automatic_wins }}</span>{% endif %}</td>
+                                        <td>{{ score.total_point_difference }}</td>
+                                        <td>
+                                            {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 or score.above_wins > 0 or score.above_pd != 0 %}
+                                                <span title="H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L, {{ score.h2h_point_diff }}PD{% if score.above_wins > 0 or score.above_pd != 0 %}, VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD{% endif %}">
+                                                    {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 %}
+                                                        H2H: {{ score.h2h_wins }}W/{{ score.h2h_losses }}L ({{ score.h2h_point_diff }}PD){% if score.manually_resolved %}*{% endif %}
+                                                    {% endif %}
+                                                    {% if score.above_wins > 0 or score.above_pd != 0 %}
+                                                        {% if score.h2h_wins > 0 or score.h2h_losses > 0 or score.h2h_point_diff != 0 %}, {% endif %}
+                                                        VS Above: {{ score.above_wins }}W/{{ score.above_pd }}PD{% if score.manually_resolved %}*{% endif %}
+                                                    {% endif %}
+                                                </span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% endif %}
                         </tbody>
                     </table>
                     {% if has_manual_resolution %}
@@ -219,27 +231,36 @@
             </div>
         </div>
 
-        <!-- Player List -->
+        <!-- Player/Pair List -->
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0">Players</h5>
+                <h5 class="mb-0">{% if is_pairs_tournament %}Pairs{% else %}Players{% endif %}</h5>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-striped">
                         <thead>
                             <tr>
-                                <th>Rank</th>
+                                <th>{% if is_pairs_tournament %}Seed{% else %}Rank{% endif %}</th>
                                 <th>Name</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for player in tournament.players.all|dictsort:"ranking" %}
-                                <tr>
-                                    <td>{{ player.ranking }}</td>
-                                    <td>{{ player.first_name }} {{ player.last_name }}</td>
-                                </tr>
-                            {% endfor %}
+                            {% if is_pairs_tournament %}
+                                {% for pair in tournament.pairs.all|dictsort:"seed" %}
+                                    <tr>
+                                        <td>{{ pair.seed }}</td>
+                                        <td>{{ pair.player1.first_name }} {{ pair.player1.last_name }} &<br>{{ pair.player2.first_name }} {{ pair.player2.last_name }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                {% for player in tournament.players.all|dictsort:"ranking" %}
+                                    <tr>
+                                        <td>{{ player.ranking }}</td>
+                                        <td>{{ player.first_name }} {{ player.last_name }}</td>
+                                    </tr>
+                                {% endfor %}
+                            {% endif %}
                         </tbody>
                     </table>
                 </div>

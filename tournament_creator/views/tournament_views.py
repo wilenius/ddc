@@ -34,6 +34,9 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             initial['name'] = self.request.GET.get('name')
         if 'date' in self.request.GET:
             initial['date'] = self.request.GET.get('date')
+        # Preserve number of stages
+        if 'number_of_stages' in self.request.GET:
+            initial['number_of_stages'] = self.request.GET.get('number_of_stages')
         # Preserve tournament category
         if 'tournament_category' in self.request.GET:
             initial['tournament_category'] = self.request.GET.get('tournament_category')

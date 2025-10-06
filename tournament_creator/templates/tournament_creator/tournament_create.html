@@ -35,6 +35,13 @@
                     </div>
 
                     <div class="mb-3">
+                        {{ form.number_of_stages.label_tag }}
+                        {{ form.number_of_stages }}
+                        {% if form.number_of_stages.errors %}<div class="invalid-feedback d-block">{{ form.number_of_stages.errors|join:", " }}</div>{% endif %}
+                        {% if form.number_of_stages.help_text %}<small class="form-text text-muted">{{ form.number_of_stages.help_text }}</small>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
                         {{ form.name_display_format.label_tag }}
                         {{ form.name_display_format }}
                         {% if form.name_display_format.errors %}<div class="invalid-feedback d-block">{{ form.name_display_format.errors|join:", " }}</div>{% endif %}
@@ -99,6 +106,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Collect form values
             var name = document.querySelector('input[name="name"]').value;
             var date = document.querySelector('input[name="date"]').value;
+            var numberOfStages = document.querySelector('input[name="number_of_stages"]').value;
             var nameDisplayFormat = document.querySelector('select[name="name_display_format"]').value;
             var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
             var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
@@ -107,6 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var url = "{% url 'tournament_create' %}?tournament_category=" + this.value +
                       "&name=" + encodeURIComponent(name) +
                       "&date=" + encodeURIComponent(date) +
+                      "&number_of_stages=" + encodeURIComponent(numberOfStages) +
                       "&name_display_format=" + encodeURIComponent(nameDisplayFormat) +
                       "&notify_by_email=" + notifyByEmail +
                       "&notify_by_signal=" + notifyBySignal +

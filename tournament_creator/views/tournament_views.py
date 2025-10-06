@@ -47,6 +47,9 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             initial['notify_by_signal'] = self.request.GET.get('notify_by_signal') == 'true'
         if 'notify_by_matrix' in self.request.GET:
             initial['notify_by_matrix'] = self.request.GET.get('notify_by_matrix') == 'true'
+        # Preserve show_structure checkbox state
+        if 'show_structure' in self.request.GET:
+            initial['show_structure'] = self.request.GET.get('show_structure') == 'true'
         return initial
 
     def get_context_data(self, **kwargs):
@@ -240,6 +243,7 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         use_last_names = tournament.name_display_format == 'LAST'
 
         for matchup in context['matchups']:
+            # For MoC tournaments (individual player fields)
             if matchup.pair1_player1:
                 matchup.pair1_player1.display_name = matchup.pair1_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player1.get_display_name(all_players)
             if matchup.pair1_player2:
@@ -248,6 +252,14 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
                 matchup.pair2_player1.display_name = matchup.pair2_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player1.get_display_name(all_players)
             if matchup.pair2_player2:
                 matchup.pair2_player2.display_name = matchup.pair2_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player2.get_display_name(all_players)
+
+            # For Pairs tournaments (Pair objects)
+            if matchup.pair1:
+                matchup.pair1.player1.display_name = matchup.pair1.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1.player1.get_display_name(all_players)
+                matchup.pair1.player2.display_name = matchup.pair1.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1.player2.get_display_name(all_players)
+            if matchup.pair2:
+                matchup.pair2.player1.display_name = matchup.pair2.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player1.get_display_name(all_players)
+                matchup.pair2.player2.display_name = matchup.pair2.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player2.get_display_name(all_players)
 
         for score in context['player_scores']:
             score.player.display_name = score.player.get_display_name_last_name_mode(all_players) if use_last_names else score.player.get_display_name(all_players)
@@ -686,10 +698,10 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
             else:
                 return f"{p1_seed} vs {p3_seed}"
         elif matchup.pair1_id:
-            # Pairs tournament - show pair names or seeds
-            pair1_name = str(matchup.pair1)
-            pair2_name = str(matchup.pair2)
-            return f"{pair1_name} vs {pair2_name}"
+            # Pairs tournament - show seed numbers
+            pair1_seed = matchup.pair1.seed if matchup.pair1.seed else '?'
+            pair2_seed = matchup.pair2.seed if matchup.pair2.seed else '?'
+            return f"{pair1_seed} vs {pair2_seed}"
         else:
             return "-"
 

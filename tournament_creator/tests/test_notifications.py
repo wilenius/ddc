@@ -19,7 +19,12 @@ class TestSendEmailNotification(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='testuser', password='password')
         # Tournament created here will be updated in tests for notification flags
-        self.tournament = TournamentChart.objects.create(name='Test Tournament', date='2024-01-01')
+        self.tournament = TournamentChart.objects.create(
+            name='Test Tournament',
+            date='2024-01-01',
+            number_of_rounds=3,
+            number_of_courts=1
+        )
         
         self.player1 = Player.objects.create(first_name='Alice', last_name='Smith', ranking=1)
         self.player2 = Player.objects.create(first_name='Bob', last_name='Johnson', ranking=2)
@@ -160,7 +165,12 @@ class TestSendEmailNotification(TestCase):
 class TestSendSignalNotification(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='signaluser', password='password')
-        self.tournament = TournamentChart.objects.create(name='Signal Test Tournament', date='2024-03-01')
+        self.tournament = TournamentChart.objects.create(
+            name='Signal Test Tournament',
+            date='2024-03-01',
+            number_of_rounds=3,
+            number_of_courts=1
+        )
         
         self.player1 = Player.objects.create(first_name='SignalP1', last_name='UserA', ranking=10)
         self.player2 = Player.objects.create(first_name='SignalP2', last_name='UserB', ranking=11)
@@ -272,9 +282,14 @@ class TestNotificationTriggerInView(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='testadmin', password='password', role=User.Role.ADMIN)
         self.client.force_login(self.user)
-        
+
         # Tournament will have default notification flags (False) unless explicitly set
-        self.tournament = TournamentChart.objects.create(name='Trigger Test Tournament', date='2024-01-02')
+        self.tournament = TournamentChart.objects.create(
+            name='Trigger Test Tournament',
+            date='2024-01-02',
+            number_of_rounds=3,
+            number_of_courts=1
+        )
         self.player1 = Player.objects.create(first_name='P1', last_name='Test', ranking=1)
         self.player2 = Player.objects.create(first_name='P2', last_name='Test', ranking=2)
         self.player3 = Player.objects.create(first_name='P3', last_name='Test', ranking=3)
@@ -435,7 +450,12 @@ class TestNotificationAdminViews(TestCase):
 
     def test_notificationlog_change_view_accessible(self):
         setting = NotificationBackendSetting.objects.create(backend_name='log_email', is_active=True)
-        tournament = TournamentChart.objects.create(name='Log Test Tournament', date='2024-01-03')
+        tournament = TournamentChart.objects.create(
+            name='Log Test Tournament',
+            date='2024-01-03',
+            number_of_rounds=3,
+            number_of_courts=1
+        )
         matchup = Matchup.objects.create(tournament_chart=tournament, round_number=1, court_number=1)
         # MatchResultLog is required for NotificationLog if it's not nullable
         mr_log = MatchResultLog.objects.create(matchup=matchup, recorded_by=self.admin_user, action="CREATE", details={})

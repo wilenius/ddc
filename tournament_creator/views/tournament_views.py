@@ -34,6 +34,9 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             initial['name'] = self.request.GET.get('name')
         if 'date' in self.request.GET:
             initial['date'] = self.request.GET.get('date')
+        # Preserve number of stages
+        if 'number_of_stages' in self.request.GET:
+            initial['number_of_stages'] = self.request.GET.get('number_of_stages')
         # Preserve tournament category
         if 'tournament_category' in self.request.GET:
             initial['tournament_category'] = self.request.GET.get('tournament_category')
@@ -136,7 +139,35 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             tournament.number_of_courts = archetype.calculate_courts(num_players)
             tournament.save()
             tournament.players.set(players)
-            archetype.generate_matchups(tournament, players)
+
+            # Create a single default stage for MoC tournaments
+            from ..models.base_models import Stage
+            from ..models.tournament_types import get_implementation
+
+            # Get the archetype implementation for matchup generation
+            archetype_impl = get_implementation(archetype)
+
+            if tournament.number_of_stages == 1:
+                stage = Stage.objects.create(
+                    tournament=tournament,
+                    stage_number=1,
+                    stage_type='ROUND_ROBIN',
+                    name="Main Stage",
+                    scoring_mode='CUMULATIVE'
+                )
+                archetype_impl.generate_matchups(tournament, players, stage=stage)
+            else:
+                # Multi-stage MoC (future feature)
+                for stage_num in range(1, tournament.number_of_stages + 1):
+                    stage = Stage.objects.create(
+                        tournament=tournament,
+                        stage_number=stage_num,
+                        stage_type='ROUND_ROBIN',
+                        name=f"Stage {stage_num}",
+                        scoring_mode='CUMULATIVE'
+                    )
+                    archetype_impl.generate_matchups(tournament, players, stage=stage)
+
             messages.success(request, f"Tournament created successfully with {num_players} players!")
             return redirect('tournament_detail', pk=tournament.pk)
 
@@ -161,13 +192,27 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             tournament = form.save(commit=False)
             tournament.archetype = archetype
             from ..models.tournament_types import get_implementation
+            from ..models.base_models import Stage
             archetype_impl = get_implementation(archetype)
             tournament.number_of_rounds = archetype_impl.calculate_rounds(len(pairs))
             tournament.number_of_courts = archetype_impl.calculate_courts(len(pairs))
             tournament.save()
             tournament.pairs.set(pairs)
-            archetype_impl.generate_matchups(tournament, pairs)
-            messages.success(request, f"Tournament created successfully with {len(pairs)} pairs!")
+
+            # Create stages and generate matchups for each stage
+            num_stages = tournament.number_of_stages
+            for stage_num in range(1, num_stages + 1):
+                stage = Stage.objects.create(
+                    tournament=tournament,
+                    stage_number=stage_num,
+                    stage_type='POOL',
+                    name=f"Stage {stage_num}",
+                    scoring_mode='CUMULATIVE'
+                )
+                # Generate matchups for this stage
+                archetype_impl.generate_matchups(tournament, pairs, stage=stage)
+
+            messages.success(request, f"Tournament created successfully with {len(pairs)} pairs and {num_stages} stage(s)!")
             return redirect('tournament_detail', pk=tournament.pk)
 
     def get(self, request, *args, **kwargs):
@@ -197,12 +242,62 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         tournament = self.get_object()
-        context['matchups'] = Matchup.objects.filter(tournament_chart=tournament).order_by('round_number', 'court_number')
+
+        # Get all matchups and stages
+        from ..models.base_models import Stage
+        all_matchups = list(Matchup.objects.filter(tournament_chart=tournament).select_related(
+            'pair1', 'pair2', 'pair1__player1', 'pair1__player2', 'pair2__player1', 'pair2__player2',
+            'pair1_player1', 'pair1_player2', 'pair2_player1', 'pair2_player2', 'stage'
+        ).order_by('stage__stage_number', 'round_number', 'court_number'))
+        stages = list(Stage.objects.filter(tournament=tournament).order_by('stage_number'))
+
         context['archetype'] = tournament.archetype  # Include archetype for notes access
 
         # Determine if this is a pairs or MoC tournament
         is_pairs_tournament = tournament.archetype and tournament.archetype.tournament_category == 'PAIRS'
         context['is_pairs_tournament'] = is_pairs_tournament
+
+        # Get all players for name disambiguation BEFORE setting display names
+        if is_pairs_tournament:
+            # For pairs tournaments, get players from the pairs
+            all_players = []
+            for pair in tournament.pairs.all():
+                all_players.extend([pair.player1, pair.player2])
+        else:
+            # For MoC tournaments, get players from the tournament
+            all_players = list(tournament.players.all())
+        context['all_players'] = all_players
+
+        # Set display names on matchups based on tournament preference
+        use_last_names = tournament.name_display_format == 'LAST'
+        for matchup in all_matchups:
+            # For MoC tournaments (individual player fields)
+            if matchup.pair1_player1:
+                matchup.pair1_player1.display_name = matchup.pair1_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player1.get_display_name(all_players)
+            if matchup.pair1_player2:
+                matchup.pair1_player2.display_name = matchup.pair1_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player2.get_display_name(all_players)
+            if matchup.pair2_player1:
+                matchup.pair2_player1.display_name = matchup.pair2_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player1.get_display_name(all_players)
+            if matchup.pair2_player2:
+                matchup.pair2_player2.display_name = matchup.pair2_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player2.get_display_name(all_players)
+
+            # For Pairs tournaments (Pair objects)
+            if matchup.pair1:
+                matchup.pair1.player1.display_name = matchup.pair1.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1.player1.get_display_name(all_players)
+                matchup.pair1.player2.display_name = matchup.pair1.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1.player2.get_display_name(all_players)
+            if matchup.pair2:
+                matchup.pair2.player1.display_name = matchup.pair2.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player1.get_display_name(all_players)
+                matchup.pair2.player2.display_name = matchup.pair2.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player2.get_display_name(all_players)
+
+        # NOW group matchups by stage (after display names are set)
+        matchups_by_stage = {}
+        for stage in stages:
+            matchups_by_stage[stage.id] = [m for m in all_matchups if m.stage_id == stage.id]
+
+        context['matchups'] = all_matchups  # Keep for backward compatibility
+        context['matchups_by_stage'] = matchups_by_stage
+        context['stages'] = stages
+        context['has_multiple_stages'] = len(stages) > 1
 
         if is_pairs_tournament:
             # For doubles tournaments, use PairScore
@@ -256,33 +351,8 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
             getattr(self.request.user, 'is_admin', lambda: False)()
             or getattr(self.request.user, 'is_player', lambda: False)()
         )
-        
-        # Get all players in the tournament for name disambiguation
-        all_players = list(tournament.players.all())
-        context['all_players'] = all_players
 
-        # Enhance the matchups and player_scores with display_names based on tournament preference
-        use_last_names = tournament.name_display_format == 'LAST'
-
-        for matchup in context['matchups']:
-            # For MoC tournaments (individual player fields)
-            if matchup.pair1_player1:
-                matchup.pair1_player1.display_name = matchup.pair1_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player1.get_display_name(all_players)
-            if matchup.pair1_player2:
-                matchup.pair1_player2.display_name = matchup.pair1_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1_player2.get_display_name(all_players)
-            if matchup.pair2_player1:
-                matchup.pair2_player1.display_name = matchup.pair2_player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player1.get_display_name(all_players)
-            if matchup.pair2_player2:
-                matchup.pair2_player2.display_name = matchup.pair2_player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2_player2.get_display_name(all_players)
-
-            # For Pairs tournaments (Pair objects)
-            if matchup.pair1:
-                matchup.pair1.player1.display_name = matchup.pair1.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1.player1.get_display_name(all_players)
-                matchup.pair1.player2.display_name = matchup.pair1.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair1.player2.get_display_name(all_players)
-            if matchup.pair2:
-                matchup.pair2.player1.display_name = matchup.pair2.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player1.get_display_name(all_players)
-                matchup.pair2.player2.display_name = matchup.pair2.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player2.get_display_name(all_players)
-
+        # Set display names for player scores
         if not is_pairs_tournament:
             for score in context['player_scores']:
                 score.player.display_name = score.player.get_display_name_last_name_mode(all_players) if use_last_names else score.player.get_display_name(all_players)
@@ -739,19 +809,8 @@ class TournamentDownloadResultsView(SpectatorAccessMixin, View):
     def get(self, request, pk):
         tournament = get_object_or_404(TournamentChart, pk=pk)
 
-        # Get all players for name display
-        all_players = list(Player.objects.all())
-
-        # Get player scores with tiebreaks applied
-        player_scores = list(PlayerScore.objects.filter(tournament=tournament))
-
-        # Get detail view instance to reuse tiebreak logic
-        detail_view = TournamentDetailView()
-        player_scores = detail_view.apply_tiebreaks(tournament, player_scores)
-
-        # Add position numbers
-        for idx, score in enumerate(player_scores, start=1):
-            score.position = idx
+        # Determine if this is a pairs or MoC tournament
+        is_pairs_tournament = tournament.archetype and tournament.archetype.tournament_category == 'PAIRS'
 
         # Build the text content
         lines = []
@@ -761,14 +820,38 @@ class TournamentDownloadResultsView(SpectatorAccessMixin, View):
         lines.append("Final Standings:")
         lines.append("-" * 60)
 
-        for score in player_scores:
-            # Use full name (first + last)
-            player = score.player
-            full_name = f"{player.first_name} {player.last_name}".strip()
-            if not full_name:
-                full_name = player.username
+        if is_pairs_tournament:
+            # For doubles tournaments, use PairScore
+            from ..models.scoring import PairScore
+            pair_scores = list(PairScore.objects.filter(tournament=tournament))
 
-            lines.append(f"{score.position}. {full_name} - {score.wins}W {score.total_point_difference:+d}PD")
+            # Sort by wins (descending) then point difference (descending)
+            pair_scores.sort(key=lambda s: (s.wins, s.total_point_difference), reverse=True)
+
+            # Add position numbers and format output
+            for idx, score in enumerate(pair_scores, start=1):
+                player1 = score.pair.player1
+                player2 = score.pair.player2
+                full_name1 = f"{player1.first_name} {player1.last_name}".strip()
+                full_name2 = f"{player2.first_name} {player2.last_name}".strip()
+
+                lines.append(f"{idx}. {full_name1} & {full_name2} - {score.wins}W {score.total_point_difference:+d}PD")
+        else:
+            # For MoC tournaments, use PlayerScore
+            player_scores = list(PlayerScore.objects.filter(tournament=tournament))
+
+            # Get detail view instance to reuse tiebreak logic
+            detail_view = TournamentDetailView()
+            player_scores = detail_view.apply_tiebreaks(tournament, player_scores)
+
+            # Add position numbers and format output
+            for idx, score in enumerate(player_scores, start=1):
+                player = score.player
+                full_name = f"{player.first_name} {player.last_name}".strip()
+                if not full_name:
+                    full_name = player.username
+
+                lines.append(f"{idx}. {full_name} - {score.wins}W {score.total_point_difference:+d}PD")
 
         # Create response with text file
         response = HttpResponse('\n'.join(lines), content_type='text/plain')

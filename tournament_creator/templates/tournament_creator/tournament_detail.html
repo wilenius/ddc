@@ -1,4 +1,5 @@
 {% extends 'tournament_creator/base.html' %}
+{% load tournament_filters %}
 
 {% block title %}Tournament Details - DDC Tournament Manager{% endblock %}
 
@@ -31,108 +32,57 @@
                 <h5 class="mb-0">Match Schedule</h5>
             </div>
             <div class="card-body">
-                {% regroup matchups by round_number as round_list %}
-                {% for round in round_list %}
-                    <div class="mb-4">
-                        <h5 class="border-bottom pb-2">Round {{ round.grouper }}</h5>
-                        <div class="row">
-                            {% for matchup in round.list %}
-                                <div class="col-md-6 mb-3">
-                                    <div class="card h-100">
-                                        <div class="card-header">
-                                            Court {{ matchup.court_number }}
-                                        </div>
-                                        <div class="card-body">
-                                            <div class="row align-items-center text-center">
-                                                <div class="col">
-                                                    {% with scores=matchup.scores.all %}
-                                                        <div class="mb-2">
-                                                            <strong {% if scores.exists and scores.first.winning_team == 1 %}class="text-primary"{% endif %}>
-                                                                {% if matchup.pair1 %}
-                                                                    {# Pairs tournament #}
-                                                                    {{ matchup.pair1.player1.display_name }} &<br>
-                                                                    {{ matchup.pair1.player2.display_name }}
-                                                                {% else %}
-                                                                    {# MoC tournament #}
-                                                                    {{ matchup.pair1_player1.display_name }} &<br>
-                                                                    {{ matchup.pair1_player2.display_name }}
-                                                                {% endif %}
-                                                            </strong>
-                                                        </div>
-                                                    {% endwith %}
-                                                </div>
-                                                <div class="col-auto">
-                                                    <h4>VS</h4>
-                                                </div>
-                                                <div class="col">
-                                                    {% with scores=matchup.scores.all %}
-                                                        <div class="mb-2">
-                                                            <strong {% if scores.exists and scores.first.winning_team == 2 %}class="text-primary"{% endif %}>
-                                                                {% if matchup.pair2 %}
-                                                                    {# Pairs tournament #}
-                                                                    {{ matchup.pair2.player1.display_name }} &<br>
-                                                                    {{ matchup.pair2.player2.display_name }}
-                                                                {% else %}
-                                                                    {# MoC tournament #}
-                                                                    {{ matchup.pair2_player1.display_name }} &<br>
-                                                                    {{ matchup.pair2_player2.display_name }}
-                                                                {% endif %}
-                                                            </strong>
-                                                        </div>
-                                                    {% endwith %}
-                                                </div>
-                                            </div>
-                                            {% if matchup.scores.exists %}
-                                                {% for score in matchup.scores.all %}
-                                                    <div class="row text-center" style="font-size: 1.3em">
-                                                        <div class="col">
-                                                            {% if score.winning_team == 1 %}
-                                                                <strong>{{ score.team1_score }}</strong>
-                                                            {% else %}
-                                                                {{ score.team1_score }}
-                                                            {% endif %}
-                                                        </div>
-                                                        <div class="col-auto">
-                                                            -
-                                                        </div>
-                                                        <div class="col">
-                                                            {% if score.winning_team == 2 %}
-                                                                <strong>{{ score.team2_score }}</strong>
-                                                            {% else %}
-                                                                {{ score.team2_score }}
-                                                            {% endif %}
-                                                        </div>
-                                                    </div>
-                                                {% endfor %}
-                                                <div class="text-center mt-3">
-                                                    {% if can_record_scores %}
-                                                        <button class="btn btn-outline-primary btn-sm record-result" 
-                                                                data-matchup-id="{{ matchup.id }}"
-                                                                data-bs-toggle="modal" 
-                                                                data-bs-target="#recordScoreModal">
-                                                            Edit Result
-                                                        </button>
-                                                    {% endif %}
-                                                </div>
-                                            {% else %}
-                                                <div class="text-center mt-3">
-                                                    {% if can_record_scores %}
-                                                        <button class="btn btn-primary btn-sm record-result" 
-                                                                data-matchup-id="{{ matchup.id }}"
-                                                                data-bs-toggle="modal" 
-                                                                data-bs-target="#recordScoreModal">
-                                                            Record Result
-                                                        </button>
-                                                    {% endif %}
-                                                </div>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        </div>
+                {% if has_multiple_stages %}
+                    {# Show tabs for multi-stage tournaments #}
+                    <ul class="nav nav-tabs" role="tablist">
+                        {% for stage in stages %}
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link {% if forloop.first %}active{% endif %}"
+                                        id="stage-{{ stage.id }}-tab"
+                                        data-bs-toggle="tab"
+                                        data-bs-target="#stage-{{ stage.id }}"
+                                        type="button"
+                                        role="tab">
+                                    {{ stage.name }}
+                                </button>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    <div class="tab-content mt-3">
+                        {% for stage in stages %}
+                            <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
+                                 id="stage-{{ stage.id }}"
+                                 role="tabpanel">
+                                {% regroup matchups_by_stage|dict_get:stage.id by round_number as round_list %}
+                                {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores %}
+                            </div>
+                        {% endfor %}
                     </div>
-                {% endfor %}
+                    <script>
+                    // Restore the active stage tab after page reload
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const activeStageTab = sessionStorage.getItem('activeStageTab');
+                        if (activeStageTab) {
+                            const tabElement = document.querySelector(`button[data-bs-target="${activeStageTab}"]`);
+                            if (tabElement) {
+                                const tab = new bootstrap.Tab(tabElement);
+                                tab.show();
+                            }
+                        }
+                    });
+
+                    // Save active tab when user clicks on tabs
+                    document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(tab => {
+                        tab.addEventListener('shown.bs.tab', function(e) {
+                            sessionStorage.setItem('activeStageTab', e.target.getAttribute('data-bs-target'));
+                        });
+                    });
+                    </script>
+                {% else %}
+                    {# Single stage - show matchups directly without tabs #}
+                    {% regroup matchups by round_number as round_list %}
+                    {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores %}
+                {% endif %}
             </div>
         </div>
     </div>
@@ -271,7 +221,7 @@
         <!-- Tournament Structure -->
         <div class="card mt-4">
             <div class="card-header">
-                <h5 class="mb-0">Tournament Structure</h5>
+                <h5 class="mb-0">{% if has_multiple_stages %}Stage Structure{% else %}Tournament Structure{% endif %}</h5>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -486,6 +436,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 saveButton.innerHTML = '✓ Saved!';
                 saveButton.classList.remove('btn-primary');
                 saveButton.classList.add('btn-success');
+
+                // Save the currently active stage before reload
+                const activeTab = document.querySelector('.nav-link.active');
+                if (activeTab) {
+                    sessionStorage.setItem('activeStageTab', activeTab.getAttribute('data-bs-target'));
+                }
 
                 // Reload after short delay to show success message
                 setTimeout(() => {

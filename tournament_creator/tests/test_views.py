@@ -71,8 +71,10 @@ class ViewTests(TestCase):
         data = {
             'name': 'New Tournament',
             'date': timezone.now().date(),
-            'archetype': self.archetype.id,
-            'players': [player.id for player in self.players[:8]]
+            'tournament_category': 'MOC',
+            'number_of_stages': 1,
+            'name_display_format': 'FIRST',
+            'players': [player.id for player in self.players[:5]]  # 5 players for MOC
         }
 
         # Spectator should not have access
@@ -114,10 +116,11 @@ class ViewTests(TestCase):
             'winning_team': '1'
         }
 
-        # Spectator should not have access
+        # Any logged-in user can record scores (including spectators)
         self.client.login(username='spectator_test', password='test123')
         response = self.client.post(url, data)
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'success')
 
         # Player should have access
         self.client.login(username='player_test', password='test123')
@@ -195,7 +198,9 @@ class ViewTests(TestCase):
         post_data = {
             'name': 'Notify Test Tournament',
             'date': timezone.now().date().isoformat(),
-            'archetype': self.archetype.id, # MOC archetype
+            'tournament_category': 'MOC',
+            'number_of_stages': 1,
+            'name_display_format': 'FIRST',
             'players': [p.id for p in self.moc_players], # For MOC player selection
             'notify_by_email': 'on', # Checkbox value for True
             # notify_by_signal is not sent, so it should be False
@@ -225,15 +230,13 @@ class ViewTests(TestCase):
         response_initial = self.client.get(reverse('tournament_create'))
         self.assertEqual(response_initial.status_code, 200)
 
-        # Step 2: Simulate selecting an archetype with initial name and date
+        # Step 2: Simulate selecting a tournament category with initial name and date
         test_name = "My Preserved Tournament"
         test_date_str = "2024-08-15" # Use ISO format string
-        
-        # Ensure self.archetype is the one created in setUp
-        self.assertIsNotNone(self.archetype, "Archetype not created in setUp")
+        test_category = "MOC"
 
-        archetype_selection_url = f"{reverse('tournament_create')}?archetype={self.archetype.id}&name={test_name}&date={test_date_str}"
-        response = self.client.get(archetype_selection_url)
+        category_selection_url = f"{reverse('tournament_create')}?tournament_category={test_category}&name={test_name}&date={test_date_str}"
+        response = self.client.get(category_selection_url)
         self.assertEqual(response.status_code, 200)
 
         # Assertions for form initial values
@@ -243,10 +246,9 @@ class ViewTests(TestCase):
         self.assertEqual(form.initial.get('name'), test_name)
         self.assertEqual(form.initial.get('date'), test_date_str)
 
-        # Assertions for archetype in context
-        selected_archetype_in_context = response.context.get('archetype')
-        self.assertIsNotNone(selected_archetype_in_context, "Archetype not found in context")
-        self.assertEqual(selected_archetype_in_context.id, self.archetype.id)
+        # Assertions for selected category in context
+        selected_category_in_context = response.context.get('selected_category')
+        self.assertEqual(selected_category_in_context, test_category)
 
         # Assertions for HTML content (as a cross-check)
         # Ensure the name and date input fields are correctly populated.
@@ -254,8 +256,6 @@ class ViewTests(TestCase):
         # Django's default widgets for CharField and DateField will have `value="..."`.
         self.assertContains(response, f'value="{test_name}"')
         self.assertContains(response, f'value="{test_date_str}"')
-        
-        # Check if the correct archetype option is selected in the dropdown
-        # The select element's name is 'archetype' and id is 'archetype-select'
-        # The options are populated from context['archetypes']
-        self.assertContains(response, f'<option value="{self.archetype.id}" selected')
+
+        # Check if the correct category option is selected in the dropdown
+        self.assertContains(response, f'<option value="{test_category}" selected')

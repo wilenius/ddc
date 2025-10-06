@@ -65,6 +65,27 @@ class PlayerScore(models.Model):
         return f"{self.player.first_name} - Wins: {self.wins}, Points: {self.total_point_difference}"
 
 
+class PairScore(models.Model):
+    """
+    Aggregates a pair's results in a doubles tournament: total wins, matches played, and point difference.
+    """
+    tournament = models.ForeignKey(TournamentChart, on_delete=models.CASCADE)
+    pair = models.ForeignKey('Pair', on_delete=models.CASCADE)
+    wins = models.IntegerField(default=0)
+    matches_played = models.IntegerField(default=0)
+    total_point_difference = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ['tournament', 'pair']
+        ordering = ['-wins', '-total_point_difference']
+
+    def __str__(self) -> str:
+        """
+        String summary of the pair's score record for listing/ranking.
+        """
+        return f"{self.pair} - Wins: {self.wins}, Points: {self.total_point_difference}"
+
+
 class ManualTiebreakResolution(models.Model):
     """
     Stores manual tiebreak resolutions made by tournament directors.

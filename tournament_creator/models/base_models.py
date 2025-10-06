@@ -71,6 +71,7 @@ class Pair(models.Model):
     player2 = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='pair_player2')
     ranking_points_sum = models.FloatField()
     seed = models.IntegerField(null=True, blank=True)
+    entry_order = models.IntegerField(null=True, blank=True, help_text="Order in which this pair was entered (1-based)")
     def calculate_points_sum(self):
         return self.player1.ranking_points + self.player2.ranking_points
     def save(self, *args, **kwargs):

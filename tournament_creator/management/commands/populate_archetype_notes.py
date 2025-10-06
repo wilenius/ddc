@@ -7,6 +7,44 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         archetype_notes = {
+            # Doubles/Pairs tournaments
+            "2 pairs doubles tournament": (
+                "Best-of-5 format with a single match between two pairs.\n"
+                "Each set is played to 15 points (win by 2). Best of 5 sets wins the match."
+            ),
+            "3 pairs doubles tournament": (
+                "Round-robin format where each pair plays every other pair once.\n"
+                "3 rounds total on 1 court. Each pair plays 2 matches."
+            ),
+            "4 pairs doubles tournament": (
+                "Round-robin format where each pair plays every other pair once.\n"
+                "3 rounds total on 2 courts. Each pair plays 3 matches."
+            ),
+            "5 pairs doubles tournament": (
+                "Round-robin format where each pair plays every other pair once.\n"
+                "5 rounds total on 2 courts. Each pair plays 4 matches."
+            ),
+            "6 pairs doubles tournament": (
+                "Round-robin format where each pair plays every other pair once.\n"
+                "5 rounds total on 3 courts. Each pair plays 5 matches."
+            ),
+            "7 pairs doubles tournament": (
+                "Round-robin format where each pair plays every other pair once.\n"
+                "7 rounds total on 3 courts. Each pair plays 6 matches."
+            ),
+            "8 pairs doubles tournament": (
+                "Round-robin format where each pair plays every other pair once.\n"
+                "7 rounds total on 4 courts. Each pair plays 7 matches."
+            ),
+            "9 pairs doubles tournament": (
+                "Round-robin format where each pair plays every other pair once.\n"
+                "9 rounds total on 4 courts. Each pair plays 8 matches."
+            ),
+            "10 pairs doubles tournament": (
+                "Round-robin format where each pair plays every other pair once.\n"
+                "9 rounds total on 5 courts. Each pair plays 9 matches."
+            ),
+            # Monarch of the Court tournaments
             "5-player Monarch of the Court": (
                 "Three format options available (Simple, Double Your Fun, Full Permutation).\n"
                 "Because Option A contains all the even-matchup possibilities, some pairings are repeated in Options B & C."

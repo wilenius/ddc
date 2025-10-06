@@ -58,6 +58,26 @@
                             </div>
                         {% endfor %}
                     </div>
+                    <script>
+                    // Restore the active stage tab after page reload
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const activeStageTab = sessionStorage.getItem('activeStageTab');
+                        if (activeStageTab) {
+                            const tabElement = document.querySelector(`button[data-bs-target="${activeStageTab}"]`);
+                            if (tabElement) {
+                                const tab = new bootstrap.Tab(tabElement);
+                                tab.show();
+                            }
+                        }
+                    });
+
+                    // Save active tab when user clicks on tabs
+                    document.querySelectorAll('.nav-link[data-bs-toggle="tab"]').forEach(tab => {
+                        tab.addEventListener('shown.bs.tab', function(e) {
+                            sessionStorage.setItem('activeStageTab', e.target.getAttribute('data-bs-target'));
+                        });
+                    });
+                    </script>
                 {% else %}
                     {# Single stage - show matchups directly without tabs #}
                     {% regroup matchups by round_number as round_list %}
@@ -416,6 +436,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 saveButton.innerHTML = '✓ Saved!';
                 saveButton.classList.remove('btn-primary');
                 saveButton.classList.add('btn-success');
+
+                // Save the currently active stage before reload
+                const activeTab = document.querySelector('.nav-link.active');
+                if (activeTab) {
+                    sessionStorage.setItem('activeStageTab', activeTab.getAttribute('data-bs-target'));
+                }
 
                 // Reload after short delay to show success message
                 setTimeout(() => {

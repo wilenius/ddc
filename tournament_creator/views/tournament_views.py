@@ -804,19 +804,8 @@ class TournamentDownloadResultsView(SpectatorAccessMixin, View):
     def get(self, request, pk):
         tournament = get_object_or_404(TournamentChart, pk=pk)
 
-        # Get all players for name display
-        all_players = list(Player.objects.all())
-
-        # Get player scores with tiebreaks applied
-        player_scores = list(PlayerScore.objects.filter(tournament=tournament))
-
-        # Get detail view instance to reuse tiebreak logic
-        detail_view = TournamentDetailView()
-        player_scores = detail_view.apply_tiebreaks(tournament, player_scores)
-
-        # Add position numbers
-        for idx, score in enumerate(player_scores, start=1):
-            score.position = idx
+        # Determine if this is a pairs or MoC tournament
+        is_pairs_tournament = tournament.archetype and tournament.archetype.tournament_category == 'PAIRS'
 
         # Build the text content
         lines = []
@@ -826,14 +815,38 @@ class TournamentDownloadResultsView(SpectatorAccessMixin, View):
         lines.append("Final Standings:")
         lines.append("-" * 60)
 
-        for score in player_scores:
-            # Use full name (first + last)
-            player = score.player
-            full_name = f"{player.first_name} {player.last_name}".strip()
-            if not full_name:
-                full_name = player.username
+        if is_pairs_tournament:
+            # For doubles tournaments, use PairScore
+            from ..models.scoring import PairScore
+            pair_scores = list(PairScore.objects.filter(tournament=tournament))
 
-            lines.append(f"{score.position}. {full_name} - {score.wins}W {score.total_point_difference:+d}PD")
+            # Sort by wins (descending) then point difference (descending)
+            pair_scores.sort(key=lambda s: (s.wins, s.total_point_difference), reverse=True)
+
+            # Add position numbers and format output
+            for idx, score in enumerate(pair_scores, start=1):
+                player1 = score.pair.player1
+                player2 = score.pair.player2
+                full_name1 = f"{player1.first_name} {player1.last_name}".strip()
+                full_name2 = f"{player2.first_name} {player2.last_name}".strip()
+
+                lines.append(f"{idx}. {full_name1} & {full_name2} - {score.wins}W {score.total_point_difference:+d}PD")
+        else:
+            # For MoC tournaments, use PlayerScore
+            player_scores = list(PlayerScore.objects.filter(tournament=tournament))
+
+            # Get detail view instance to reuse tiebreak logic
+            detail_view = TournamentDetailView()
+            player_scores = detail_view.apply_tiebreaks(tournament, player_scores)
+
+            # Add position numbers and format output
+            for idx, score in enumerate(player_scores, start=1):
+                player = score.player
+                full_name = f"{player.first_name} {player.last_name}".strip()
+                if not full_name:
+                    full_name = player.username
+
+                lines.append(f"{idx}. {full_name} - {score.wins}W {score.total_point_difference:+d}PD")
 
         # Create response with text file
         response = HttpResponse('\n'.join(lines), content_type='text/plain')

@@ -312,7 +312,14 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         )
         
         # Get all players in the tournament for name disambiguation
-        all_players = list(tournament.players.all())
+        if is_pairs_tournament:
+            # For pairs tournaments, get players from the pairs
+            all_players = []
+            for pair in tournament.pairs.all():
+                all_players.extend([pair.player1, pair.player2])
+        else:
+            # For MoC tournaments, get players from the tournament
+            all_players = list(tournament.players.all())
         context['all_players'] = all_players
 
         # Enhance the matchups and player_scores with display_names based on tournament preference

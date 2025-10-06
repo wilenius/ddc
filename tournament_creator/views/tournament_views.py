@@ -142,6 +142,11 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
 
             # Create a single default stage for MoC tournaments
             from ..models.base_models import Stage
+            from ..models.tournament_types import get_implementation
+
+            # Get the archetype implementation for matchup generation
+            archetype_impl = get_implementation(archetype)
+
             if tournament.number_of_stages == 1:
                 stage = Stage.objects.create(
                     tournament=tournament,
@@ -150,7 +155,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                     name="Main Stage",
                     scoring_mode='CUMULATIVE'
                 )
-                archetype.generate_matchups(tournament, players, stage=stage)
+                archetype_impl.generate_matchups(tournament, players, stage=stage)
             else:
                 # Multi-stage MoC (future feature)
                 for stage_num in range(1, tournament.number_of_stages + 1):
@@ -161,7 +166,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                         name=f"Stage {stage_num}",
                         scoring_mode='CUMULATIVE'
                     )
-                    archetype.generate_matchups(tournament, players, stage=stage)
+                    archetype_impl.generate_matchups(tournament, players, stage=stage)
 
             messages.success(request, f"Tournament created successfully with {num_players} players!")
             return redirect('tournament_detail', pk=tournament.pk)

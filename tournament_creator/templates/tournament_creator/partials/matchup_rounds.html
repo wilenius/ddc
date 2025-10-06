@@ -1,0 +1,101 @@
+{% for round in round_list %}
+    <div class="mb-4">
+        <h5 class="border-bottom pb-2">Round {{ round.grouper }}</h5>
+        <div class="row">
+            {% for matchup in round.list %}
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            Court {{ matchup.court_number }}
+                        </div>
+                        <div class="card-body">
+                            <div class="row align-items-center text-center">
+                                <div class="col">
+                                    {% with scores=matchup.scores.all %}
+                                        <div class="mb-2">
+                                            <strong {% if scores.exists and scores.first.winning_team == 1 %}class="text-primary"{% endif %}>
+                                                {% if matchup.pair1 %}
+                                                    {# Pairs tournament #}
+                                                    {{ matchup.pair1.player1.display_name }} &<br>
+                                                    {{ matchup.pair1.player2.display_name }}
+                                                {% else %}
+                                                    {# MoC tournament #}
+                                                    {{ matchup.pair1_player1.display_name }} &<br>
+                                                    {{ matchup.pair1_player2.display_name }}
+                                                {% endif %}
+                                            </strong>
+                                        </div>
+                                    {% endwith %}
+                                </div>
+                                <div class="col-auto">
+                                    <h4>VS</h4>
+                                </div>
+                                <div class="col">
+                                    {% with scores=matchup.scores.all %}
+                                        <div class="mb-2">
+                                            <strong {% if scores.exists and scores.first.winning_team == 2 %}class="text-primary"{% endif %}>
+                                                {% if matchup.pair2 %}
+                                                    {# Pairs tournament #}
+                                                    {{ matchup.pair2.player1.display_name }} &<br>
+                                                    {{ matchup.pair2.player2.display_name }}
+                                                {% else %}
+                                                    {# MoC tournament #}
+                                                    {{ matchup.pair2_player1.display_name }} &<br>
+                                                    {{ matchup.pair2_player2.display_name }}
+                                                {% endif %}
+                                            </strong>
+                                        </div>
+                                    {% endwith %}
+                                </div>
+                            </div>
+                            {% if matchup.scores.exists %}
+                                {% for score in matchup.scores.all %}
+                                    <div class="row text-center" style="font-size: 1.3em">
+                                        <div class="col">
+                                            {% if score.winning_team == 1 %}
+                                                <strong>{{ score.team1_score }}</strong>
+                                            {% else %}
+                                                {{ score.team1_score }}
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-auto">
+                                            -
+                                        </div>
+                                        <div class="col">
+                                            {% if score.winning_team == 2 %}
+                                                <strong>{{ score.team2_score }}</strong>
+                                            {% else %}
+                                                {{ score.team2_score }}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                                <div class="text-center mt-3">
+                                    {% if can_record_scores %}
+                                        <button class="btn btn-outline-primary btn-sm record-result"
+                                                data-matchup-id="{{ matchup.id }}"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#recordScoreModal">
+                                            Edit Result
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <div class="text-center mt-3">
+                                    {% if can_record_scores %}
+                                        <button class="btn btn-primary btn-sm record-result"
+                                                data-matchup-id="{{ matchup.id }}"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#recordScoreModal">
+                                            Record Result
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endfor %}

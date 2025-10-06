@@ -51,7 +51,7 @@ class PairsTournamentArchetype(TournamentArchetype):
     def calculate_courts(self, num_pairs: int):
         return self.number_of_fields
 
-    def generate_matchups(self, tournament_chart, pairs: List[Pair]):
+    def generate_matchups(self, tournament_chart, pairs: List[Pair], stage=None):
         # Map pairs to seeds 1-based
         if len(pairs) != self.number_of_pairs:
             raise ValueError(f"This tournament format requires exactly {self.number_of_pairs} pairs")
@@ -60,6 +60,7 @@ class PairsTournamentArchetype(TournamentArchetype):
             for field_idx, (seed1, seed2) in enumerate(round_matches, 1):
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1=pairs_by_seed[seed1],
                     pair2=pairs_by_seed[seed2],
                     round_number=round_idx,
@@ -214,7 +215,7 @@ class MonarchOfTheCourt8(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 2
 
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 8:
             raise ValueError("This tournament type requires exactly 8 players")
 
@@ -245,6 +246,7 @@ class MonarchOfTheCourt8(MoCTournamentArchetype):
                 p1, p2, p3, p4, court = match
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -266,13 +268,13 @@ class MonarchOfTheCourt5(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 1
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 5:
             raise ValueError("This tournament type requires exactly 5 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 5-player Option A format
         schedule = [
             # Round 1: 1&2 vs 3&5 (3 v 8)
@@ -286,12 +288,13 @@ class MonarchOfTheCourt5(MoCTournamentArchetype):
             # Round 5: 1&4 vs 2&3 (5 v 5)
             [(0, 3, 1, 2)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for field_idx, (p1, p2, p3, p4) in enumerate(round_matches, 1):
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -313,13 +316,13 @@ class MonarchOfTheCourt6(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 1
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 6:
             raise ValueError("This tournament type requires exactly 6 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 6-player Option A format
         schedule = [
             # Round 1: 1&3 vs 5&6 (4 v 11)
@@ -337,12 +340,13 @@ class MonarchOfTheCourt6(MoCTournamentArchetype):
             # Round 7: 1&4 vs 2&3 (5 v 5)
             [(0, 3, 1, 2)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for field_idx, (p1, p2, p3, p4) in enumerate(round_matches, 1):
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -364,13 +368,13 @@ class MonarchOfTheCourt7(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 1
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 7:
             raise ValueError("This tournament type requires exactly 7 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 7-player format
         schedule = [
             # Round 1: 4&6 vs 3&7 (10 v 10)
@@ -394,12 +398,13 @@ class MonarchOfTheCourt7(MoCTournamentArchetype):
             # Round 10: 1&4 vs 2&3 (5 v 5)
             [(0, 3, 1, 2)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for field_idx, (p1, p2, p3, p4) in enumerate(round_matches, 1):
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -421,13 +426,13 @@ class MonarchOfTheCourt9(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 2
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 9:
             raise ValueError("This tournament type requires exactly 9 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 9-player format
         # Note: "X" in the markdown means no match on that court
         schedule = [
@@ -452,13 +457,14 @@ class MonarchOfTheCourt9(MoCTournamentArchetype):
             # Round 10: Court 1: 1&6 vs 3&5 (7 v 8), Court 2: X
             [(0, 5, 2, 4, 1)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for match in round_matches:
                 p1, p2, p3, p4, court = match
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -480,13 +486,13 @@ class MonarchOfTheCourt10(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 2
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 10:
             raise ValueError("This tournament type requires exactly 10 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 10-player format
         schedule = [
             # Round 1: Court 1: 1&3 vs 6&9 (4 v 15), Court 2: 2&5 vs 8&10 (7 v 18)
@@ -512,13 +518,14 @@ class MonarchOfTheCourt10(MoCTournamentArchetype):
             # Round 11: Court 1: 1&4 vs 2&3 (5 v 5), Court 2: 6&10 vs 7&9 (16 v 16)
             [(0, 3, 1, 2, 1), (5, 9, 6, 8, 2)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for match in round_matches:
                 p1, p2, p3, p4, court = match
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -547,13 +554,13 @@ class MonarchOfTheCourt11(MoCTournamentArchetype):
         """
         return {0: 1, 1: 1}  # Seeds 1 & 2 (0-indexed) get +1 automatic win
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 11:
             raise ValueError("This tournament type requires exactly 11 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 11-player format
         # Note: "X" in the markdown means no match on that court
         schedule = [
@@ -586,13 +593,14 @@ class MonarchOfTheCourt11(MoCTournamentArchetype):
             # Round 14: Court 1: 6&11 vs 7&9 (17 v 16), Court 2: 1&4 vs 2&3 (5 v 5)
             [(5, 10, 6, 8, 1), (0, 3, 1, 2, 2)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for match in round_matches:
                 p1, p2, p3, p4, court = match
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -614,13 +622,13 @@ class MonarchOfTheCourt12(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 3
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 12:
             raise ValueError("This tournament type requires exactly 12 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 12-player format
         # Note: "X" in the markdown means no match on that court
         schedule = [
@@ -649,13 +657,14 @@ class MonarchOfTheCourt12(MoCTournamentArchetype):
             # Round 12: Court 1: 1&5 vs 2&4 (6 v 6), Court 2: X, Court 3: 7&11 vs 8&10 (18 v 18)
             [(0, 4, 1, 3, 1), (6, 10, 7, 9, 3)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for match in round_matches:
                 p1, p2, p3, p4, court = match
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -677,13 +686,13 @@ class MonarchOfTheCourt13(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 3
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 13:
             raise ValueError("This tournament type requires exactly 13 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 13-player format
         schedule = [
             # Round 1: Court 1: 1&6 vs 2&5 (7 v 7), Court 2: 7&13 vs 9&11 (20 v 20), Court 3: 3&4 vs 8&12 (7 v 20)
@@ -713,13 +722,14 @@ class MonarchOfTheCourt13(MoCTournamentArchetype):
             # Round 13: Court 1: 5&13 vs 7&11 (18 v 18), Court 2: 6&12 vs 8&10 (18 v 18), Court 3: 1&4 vs 2&3 (5 v 5)
             [(4, 12, 6, 10, 1), (5, 11, 7, 9, 2), (0, 3, 1, 2, 3)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for match in round_matches:
                 p1, p2, p3, p4, court = match
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -741,13 +751,13 @@ class MonarchOfTheCourt14(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 3
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 14:
             raise ValueError("This tournament type requires exactly 14 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 14-player format
         # Note: "X" in the markdown means no match on that court
         schedule = [
@@ -782,13 +792,14 @@ class MonarchOfTheCourt14(MoCTournamentArchetype):
             # Round 15: Court 1: 2&14 vs 4&12 (16 v 16), Court 2: 3&13 vs 7&9 (16 v 16), Court 3: 5&11 vs 6&10 (16 v 16)
             [(1, 13, 3, 11, 1), (2, 12, 6, 8, 2), (4, 10, 5, 9, 3)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for match in round_matches:
                 p1, p2, p3, p4, court = match
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -810,13 +821,13 @@ class MonarchOfTheCourt15(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 3
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 15:
             raise ValueError("This tournament type requires exactly 15 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 15-player format
         # Note: "X" in the markdown means no match on that court
         schedule = [
@@ -857,13 +868,14 @@ class MonarchOfTheCourt15(MoCTournamentArchetype):
             # Round 18: Court 1: 1&4 vs 2&3 (5 v 5), Court 2: 8&14 vs 7&15 (22 v 22), Court 3: 9&13 vs 10&12 (22 v 22)
             [(0, 3, 1, 2, 1), (7, 13, 6, 14, 2), (8, 12, 9, 11, 3)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for match in round_matches:
                 p1, p2, p3, p4, court = match
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],
@@ -885,13 +897,13 @@ class MonarchOfTheCourt16(MoCTournamentArchetype):
     def calculate_courts(self, num_players):
         return 4
     
-    def generate_matchups(self, tournament_chart, players: List[Player]):
+    def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 16:
             raise ValueError("This tournament type requires exactly 16 players")
-            
+
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        
+
         # Define schedule according to the 16-player format
         # Note: "X" in the markdown means no match on that court
         schedule = [
@@ -930,13 +942,14 @@ class MonarchOfTheCourt16(MoCTournamentArchetype):
             # Round 17: Court 1: 1&4 vs 2&3 (5 v 5), Court 2: 5&16 vs 7&14 (21 v 21), Court 3: 6&15 vs 8&13 (21 v 21), Court 4: 9&12 vs 10&11 (21 v 21)
             [(0, 3, 1, 2, 1), (4, 15, 6, 13, 2), (5, 14, 7, 12, 3), (8, 11, 9, 10, 4)],
         ]
-        
+
         # Create matchups
         for round_idx, round_matches in enumerate(schedule, 1):
             for match in round_matches:
                 p1, p2, p3, p4, court = match
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
+                    stage=stage,
                     pair1_player1=sorted_players[p1],
                     pair1_player2=sorted_players[p2],
                     pair2_player1=sorted_players[p3],

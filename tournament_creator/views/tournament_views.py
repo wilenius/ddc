@@ -136,7 +136,30 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             tournament.number_of_courts = archetype.calculate_courts(num_players)
             tournament.save()
             tournament.players.set(players)
-            archetype.generate_matchups(tournament, players)
+
+            # Create a single default stage for MoC tournaments
+            from ..models.base_models import Stage
+            if tournament.number_of_stages == 1:
+                stage = Stage.objects.create(
+                    tournament=tournament,
+                    stage_number=1,
+                    stage_type='ROUND_ROBIN',
+                    name="Main Stage",
+                    scoring_mode='CUMULATIVE'
+                )
+                archetype.generate_matchups(tournament, players, stage=stage)
+            else:
+                # Multi-stage MoC (future feature)
+                for stage_num in range(1, tournament.number_of_stages + 1):
+                    stage = Stage.objects.create(
+                        tournament=tournament,
+                        stage_number=stage_num,
+                        stage_type='ROUND_ROBIN',
+                        name=f"Stage {stage_num}",
+                        scoring_mode='CUMULATIVE'
+                    )
+                    archetype.generate_matchups(tournament, players, stage=stage)
+
             messages.success(request, f"Tournament created successfully with {num_players} players!")
             return redirect('tournament_detail', pk=tournament.pk)
 
@@ -161,13 +184,27 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             tournament = form.save(commit=False)
             tournament.archetype = archetype
             from ..models.tournament_types import get_implementation
+            from ..models.base_models import Stage
             archetype_impl = get_implementation(archetype)
             tournament.number_of_rounds = archetype_impl.calculate_rounds(len(pairs))
             tournament.number_of_courts = archetype_impl.calculate_courts(len(pairs))
             tournament.save()
             tournament.pairs.set(pairs)
-            archetype_impl.generate_matchups(tournament, pairs)
-            messages.success(request, f"Tournament created successfully with {len(pairs)} pairs!")
+
+            # Create stages and generate matchups for each stage
+            num_stages = tournament.number_of_stages
+            for stage_num in range(1, num_stages + 1):
+                stage = Stage.objects.create(
+                    tournament=tournament,
+                    stage_number=stage_num,
+                    stage_type='POOL',
+                    name=f"Stage {stage_num}",
+                    scoring_mode='CUMULATIVE'
+                )
+                # Generate matchups for this stage
+                archetype_impl.generate_matchups(tournament, pairs, stage=stage)
+
+            messages.success(request, f"Tournament created successfully with {len(pairs)} pairs and {num_stages} stage(s)!")
             return redirect('tournament_detail', pk=tournament.pk)
 
     def get(self, request, *args, **kwargs):
@@ -197,7 +234,21 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         tournament = self.get_object()
-        context['matchups'] = Matchup.objects.filter(tournament_chart=tournament).order_by('round_number', 'court_number')
+
+        # Get all matchups and stages
+        from ..models.base_models import Stage
+        all_matchups = Matchup.objects.filter(tournament_chart=tournament).order_by('stage__stage_number', 'round_number', 'court_number')
+        stages = list(Stage.objects.filter(tournament=tournament).order_by('stage_number'))
+
+        # Group matchups by stage
+        matchups_by_stage = {}
+        for stage in stages:
+            matchups_by_stage[stage.id] = list(all_matchups.filter(stage=stage))
+
+        context['matchups'] = all_matchups  # Keep for backward compatibility
+        context['matchups_by_stage'] = matchups_by_stage
+        context['stages'] = stages
+        context['has_multiple_stages'] = len(stages) > 1
         context['archetype'] = tournament.archetype  # Include archetype for notes access
 
         # Determine if this is a pairs or MoC tournament

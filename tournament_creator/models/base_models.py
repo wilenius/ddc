@@ -86,6 +86,7 @@ class TournamentChart(models.Model):
     date = models.DateField()
     number_of_rounds = models.IntegerField()
     number_of_courts = models.IntegerField()
+    number_of_stages = models.IntegerField(default=1, help_text="Number of stages in this tournament (1 for single-stage, 2+ for multi-stage)")
     archetype = models.ForeignKey('TournamentArchetype', on_delete=models.SET_NULL, null=True, blank=True, related_name='tournaments')
     # Consider relation by pairs or by players based on tournament type
     players = models.ManyToManyField(Player, through='TournamentPlayer', blank=True)
@@ -119,6 +120,35 @@ class TournamentPair(models.Model):
     pair = models.ForeignKey(Pair, on_delete=models.CASCADE)
     seed = models.IntegerField(null=True, blank=True)
 
+class Stage(models.Model):
+    """
+    Represents a stage within a tournament (e.g., Pool Play Stage 1, Pool Play Stage 2, Finals).
+    Allows for multi-stage tournaments with different structures and scoring approaches.
+    """
+    STAGE_TYPE_CHOICES = [
+        ('POOL', 'Pool Play'),
+        ('PLAYOFF', 'Playoff/Finals'),
+        ('ROUND_ROBIN', 'Round Robin'),
+    ]
+
+    SCORING_MODE_CHOICES = [
+        ('CUMULATIVE', 'Cumulative - Scores carry over from previous stages'),
+        ('RESET', 'Reset - Scores start fresh for this stage'),
+    ]
+
+    tournament = models.ForeignKey(TournamentChart, on_delete=models.CASCADE, related_name='stages')
+    stage_number = models.IntegerField(help_text="Order of this stage (1-based)")
+    stage_type = models.CharField(max_length=20, choices=STAGE_TYPE_CHOICES, default='POOL')
+    name = models.CharField(max_length=100, help_text="Display name for this stage (e.g., 'Stage 1', 'Pool A', 'Finals')")
+    scoring_mode = models.CharField(max_length=20, choices=SCORING_MODE_CHOICES, default='CUMULATIVE')
+
+    class Meta:
+        ordering = ['tournament', 'stage_number']
+        unique_together = ['tournament', 'stage_number']
+
+    def __str__(self):
+        return f"{self.tournament.name} - {self.name}"
+
 def pair_or_player_str(obj):
     if hasattr(obj, 'pair1') and hasattr(obj, 'pair2'):
         return f"{obj.pair1} vs {obj.pair2}"
@@ -132,6 +162,7 @@ class Matchup(models.Model):
     For MoC: use player fields. At most fields for one purpose for a given tournament.
     """
     tournament_chart = models.ForeignKey(TournamentChart, on_delete=models.CASCADE, related_name='matchups')
+    stage = models.ForeignKey(Stage, on_delete=models.CASCADE, related_name='matchups', null=True, blank=True)
     # Fields for pairs tournaments
     pair1 = models.ForeignKey(Pair, on_delete=models.CASCADE, related_name='as_pair1', null=True, blank=True)
     pair2 = models.ForeignKey(Pair, on_delete=models.CASCADE, related_name='as_pair2', null=True, blank=True)
@@ -145,7 +176,7 @@ class Matchup(models.Model):
     def __str__(self):
         return pair_or_player_str(self)
     class Meta:
-        ordering = ['round_number', 'court_number']
+        ordering = ['stage__stage_number', 'round_number', 'court_number']
 
 class TournamentArchetype(models.Model):
     """Base for tournament formats stored in the database."""

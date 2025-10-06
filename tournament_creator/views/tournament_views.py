@@ -135,20 +135,26 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             return redirect('tournament_detail', pk=tournament.pk)
 
         elif tournament_category == 'PAIRS':
-            # For pairs tournaments, create pairs from consecutive players (ranked)
-            # Sort players by ranking
-            sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
+            # For pairs tournaments, create pairs from consecutive players in entry order
+            # Keep players in the order they were entered (not sorted by ranking)
             pairs = []
-            for i in range(0, len(sorted_players), 2):
+            for i in range(0, len(players), 2):
                 pair = Pair.objects.create(
-                    player1=sorted_players[i],
-                    player2=sorted_players[i+1]
+                    player1=players[i],
+                    player2=players[i+1],
+                    entry_order=len(pairs) + 1  # 1-based entry order
                 )
                 pairs.append(pair)
 
+            # Now assign seeds based on combined ranking points (higher points = lower seed number)
+            pairs_sorted_by_ranking = sorted(pairs, key=lambda p: p.ranking_points_sum, reverse=True)
+            for idx, pair in enumerate(pairs_sorted_by_ranking, start=1):
+                pair.seed = idx
+                pair.save()
+
             tournament = form.save(commit=False)
             tournament.archetype = archetype
-            from .models.tournament_types import get_implementation
+            from ..models.tournament_types import get_implementation
             archetype_impl = get_implementation(archetype)
             tournament.number_of_rounds = archetype_impl.calculate_rounds(len(pairs))
             tournament.number_of_courts = archetype_impl.calculate_courts(len(pairs))

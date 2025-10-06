@@ -9,12 +9,21 @@ def get_implementation(archetype: TournamentArchetype) -> Optional[Any]:
     """
     # For now we use a simple name-based mapping
     implementations = {
-        "8-player Monarch of the Court": MonarchOfTheCourt8(),
+        # Doubles/Pairs tournaments
+        "2 pairs doubles tournament": TwoPairsFormat(),
+        "3 pairs doubles tournament": ThreePairsFormat(),
         "4 pairs doubles tournament": FourPairsSwedishFormat(),
+        "5 pairs doubles tournament": FivePairsFormat(),
+        "6 pairs doubles tournament": SixPairsFormat(),
+        "7 pairs doubles tournament": SevenPairsFormat(),
         "8 pairs doubles tournament": EightPairsSwedishFormat(),
+        "9 pairs doubles tournament": NinePairsFormat(),
+        "10 pairs doubles tournament": TenPairsFormat(),
+        # Monarch of the Court tournaments
         "5-player Monarch of the Court": MonarchOfTheCourt5(),
         "6-player Monarch of the Court": MonarchOfTheCourt6(),
         "7-player Monarch of the Court": MonarchOfTheCourt7(),
+        "8-player Monarch of the Court": MonarchOfTheCourt8(),
         "9-player Monarch of the Court": MonarchOfTheCourt9(),
         "10-player Monarch of the Court": MonarchOfTheCourt10(),
         "11-player Monarch of the Court": MonarchOfTheCourt11(),
@@ -57,6 +66,26 @@ class PairsTournamentArchetype(TournamentArchetype):
                     court_number=field_idx
                 )
 
+class TwoPairsFormat(PairsTournamentArchetype):
+    number_of_pairs = 2
+    number_of_fields = 1
+    schedule = [
+        [(1, 2)],
+    ]
+    name = "2 pairs doubles tournament"
+    description = "Best-of-5 format: 1 match with 2 pairs."
+
+class ThreePairsFormat(PairsTournamentArchetype):
+    number_of_pairs = 3
+    number_of_fields = 1
+    schedule = [
+        [(1, 3)],
+        [(2, 3)],
+        [(1, 2)],
+    ]
+    name = "3 pairs doubles tournament"
+    description = "Round robin: 3 rounds on 1 court with 3 pairs."
+
 class FourPairsSwedishFormat(PairsTournamentArchetype):
     number_of_pairs = 4
     number_of_fields = 2
@@ -66,22 +95,97 @@ class FourPairsSwedishFormat(PairsTournamentArchetype):
         [(1, 2), (3, 4)],
     ]
     name = "4 pairs doubles tournament"
-    description = "Round robin: 3 rounds on 2 fields with 4 pairs."
+    description = "Round robin: 3 rounds on 2 courts with 4 pairs."
+
+class FivePairsFormat(PairsTournamentArchetype):
+    number_of_pairs = 5
+    number_of_fields = 2
+    schedule = [
+        [(1, 5), (2, 4)],
+        [(1, 3), (4, 5)],
+        [(2, 5), (3, 4)],
+        [(1, 4), (2, 3)],
+        [(1, 2), (3, 5)],
+    ]
+    name = "5 pairs doubles tournament"
+    description = "Round robin: 5 rounds on 2 courts with 5 pairs."
+
+class SixPairsFormat(PairsTournamentArchetype):
+    number_of_pairs = 6
+    number_of_fields = 3
+    schedule = [
+        [(1, 5), (2, 4), (3, 6)],
+        [(1, 6), (2, 5), (3, 4)],
+        [(1, 3), (2, 6), (4, 5)],
+        [(1, 4), (2, 3), (5, 6)],
+        [(1, 2), (3, 5), (4, 6)],
+    ]
+    name = "6 pairs doubles tournament"
+    description = "Round robin: 5 rounds on 3 courts with 6 pairs."
+
+class SevenPairsFormat(PairsTournamentArchetype):
+    number_of_pairs = 7
+    number_of_fields = 3
+    schedule = [
+        [(1, 5), (2, 6), (3, 7)],
+        [(1, 6), (2, 5), (4, 7)],
+        [(1, 7), (3, 5), (4, 6)],
+        [(2, 7), (3, 6), (4, 5)],
+        [(1, 4), (2, 3), (6, 7)],
+        [(1, 3), (2, 4), (5, 7)],
+        [(1, 2), (3, 4), (5, 6)],
+    ]
+    name = "7 pairs doubles tournament"
+    description = "Round robin: 7 rounds on 3 courts with 7 pairs."
 
 class EightPairsSwedishFormat(PairsTournamentArchetype):
     number_of_pairs = 8
     number_of_fields = 4
     schedule = [
-        [(1,5), (2,6), (3,7), (4,8)],
-        [(1,6), (2,5), (3,8), (4,7)],
-        [(1,7), (2,8), (3,5), (4,6)],
-        [(1,8), (2,7), (3,6), (4,5)],
-        [(1,3), (2,4), (5,7), (6,8)],
-        [(1,4), (2,3), (5,8), (6,7)],
-        [(1,2), (3,4), (5,6), (7,8)],
+        [(1, 5), (2, 6), (3, 7), (4, 8)],
+        [(1, 6), (2, 5), (3, 8), (4, 7)],
+        [(1, 7), (2, 8), (3, 5), (4, 6)],
+        [(1, 8), (2, 7), (3, 6), (4, 5)],
+        [(1, 3), (2, 4), (5, 7), (6, 8)],
+        [(1, 4), (2, 3), (5, 8), (6, 7)],
+        [(1, 2), (3, 4), (5, 6), (7, 8)],
     ]
     name = "8 pairs doubles tournament"
-    description = "Round robin: 7 rounds on 4 fields with 8 pairs."
+    description = "Round robin: 7 rounds on 4 courts with 8 pairs."
+
+class NinePairsFormat(PairsTournamentArchetype):
+    number_of_pairs = 9
+    number_of_fields = 4
+    schedule = [
+        [(1, 9), (2, 8), (3, 7), (4, 6)],
+        [(2, 9), (3, 8), (4, 7), (5, 6)],
+        [(1, 8), (2, 7), (3, 6), (4, 5)],
+        [(1, 7), (2, 6), (3, 5), (8, 9)],
+        [(1, 6), (2, 5), (3, 4), (7, 9)],
+        [(1, 5), (2, 4), (6, 9), (7, 8)],
+        [(1, 4), (2, 3), (5, 9), (6, 8)],
+        [(1, 3), (4, 9), (5, 8), (6, 7)],
+        [(1, 2), (4, 8), (3, 9), (5, 7)],
+    ]
+    name = "9 pairs doubles tournament"
+    description = "Round robin: 9 rounds on 4 courts with 9 pairs."
+
+class TenPairsFormat(PairsTournamentArchetype):
+    number_of_pairs = 10
+    number_of_fields = 5
+    schedule = [
+        [(1, 9), (2, 8), (3, 7), (4, 6), (5, 10)],
+        [(1, 10), (2, 9), (3, 8), (4, 7), (5, 6)],
+        [(1, 8), (2, 7), (3, 6), (4, 5), (9, 10)],
+        [(1, 7), (2, 6), (3, 5), (4, 10), (8, 9)],
+        [(1, 6), (2, 5), (3, 4), (7, 9), (8, 10)],
+        [(1, 5), (2, 4), (3, 10), (6, 9), (7, 8)],
+        [(1, 4), (2, 3), (5, 9), (6, 8), (7, 10)],
+        [(1, 3), (2, 10), (4, 9), (5, 8), (6, 7)],
+        [(1, 2), (4, 8), (3, 9), (5, 7), (6, 10)],
+    ]
+    name = "10 pairs doubles tournament"
+    description = "Round robin: 9 rounds on 5 courts with 10 pairs."
 
 # -- Monarch of the Court base --
 class MoCTournamentArchetype(TournamentArchetype):

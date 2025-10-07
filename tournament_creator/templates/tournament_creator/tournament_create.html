@@ -27,18 +27,19 @@
                         {% if form.name.errors %}<div class="invalid-feedback d-block">{{ form.name.errors|join:", " }}</div>{% endif %}
                         {% if form.name.help_text %}<small class="form-text text-muted">{{ form.name.help_text }}</small>{% endif %}
                     </div>
-                    <div class="mb-3">
-                        {{ form.date.label_tag }}
-                        {{ form.date }}
-                        {% if form.date.errors %}<div class="invalid-feedback d-block">{{ form.date.errors|join:", " }}</div>{% endif %}
-                        {% if form.date.help_text %}<small class="form-text text-muted">{{ form.date.help_text }}</small>{% endif %}
-                    </div>
-
-                    <div class="mb-3">
-                        {{ form.end_date.label_tag }}
-                        {{ form.end_date }}
-                        {% if form.end_date.errors %}<div class="invalid-feedback d-block">{{ form.end_date.errors|join:", " }}</div>{% endif %}
-                        {% if form.end_date.help_text %}<small class="form-text text-muted">{{ form.end_date.help_text }}</small>{% endif %}
+                    <div class="row mb-3">
+                        <div class="col-12 col-md-6">
+                            {{ form.date.label_tag }}
+                            {{ form.date }}
+                            {% if form.date.errors %}<div class="invalid-feedback d-block">{{ form.date.errors|join:", " }}</div>{% endif %}
+                            {% if form.date.help_text %}<small class="form-text text-muted">{{ form.date.help_text }}</small>{% endif %}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            {{ form.end_date.label_tag }}
+                            {{ form.end_date }}
+                            {% if form.end_date.errors %}<div class="invalid-feedback d-block">{{ form.end_date.errors|join:", " }}</div>{% endif %}
+                            {% if form.end_date.help_text %}<small class="form-text text-muted">{{ form.end_date.help_text }}</small>{% endif %}
+                        </div>
                     </div>
 
                     <div class="mb-3">

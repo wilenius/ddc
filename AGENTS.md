@@ -55,6 +55,88 @@ The application is built on Django 5.1. Check exact requirements from requiremen
 
 The application follows a modular design:
 
+## UI/UX Design Guidelines
+
+### Frontend Dependencies
+
+The application uses the following CDN-hosted libraries (see `tournament_creator/templates/tournament_creator/base.html`):
+
+- **Bootstrap 5.3.0** - Primary CSS framework for layout and components
+- **Bootstrap Icons 1.11.3** - Icon library for UI elements
+- **jQuery 3.6.0** - JavaScript library (required by Select2)
+- **Select2 4.0.13** - Enhanced select boxes with autocomplete
+- **Django Autocomplete Light** - Integration layer for Select2
+
+### Form Design Patterns
+
+**Consistent left alignment**: All form elements (inputs, checkboxes, labels) must be aligned to the left edge. Override Bootstrap's default indentation where needed:
+```html
+<div class="form-check" style="padding-left: 0;">
+    {{ form.checkbox_field }}
+    <label class="form-check-label" for="..." style="padding-left: 1.5em;">
+        Label text
+    </label>
+</div>
+```
+
+**Help text with info icons**: Use tooltips with Bootstrap Icons instead of inline or below-field help text:
+```html
+<label for="...">
+    Field Name
+    <i class="bi bi-info-circle text-muted"
+       data-bs-toggle="tooltip"
+       data-bs-placement="right"
+       title="Help text appears on hover"></i>
+</label>
+```
+
+Always initialize tooltips in JavaScript:
+```javascript
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+```
+
+**Optional fields**: Mark with inline `<span class="text-muted">(optional)</span>` in the label. Add explanatory tooltip if the optional field needs context.
+
+**Vertical stacking**: Prefer vertically stacked form fields over side-by-side layouts for consistency and mobile responsiveness.
+
+**Section organization**: Use `<hr class="my-4">` and `<h6 class="mb-3">` headings to create visual sections within forms.
+
+**Placeholder text**: Use meaningful placeholder examples (e.g., `'e.g., Summer League 2025'`) instead of generic text.
+
+**Field sizing**: Apply appropriate width constraints where sensible:
+- Date fields: `style="max-width: 200px;"`
+- Number inputs: `style="width: 60px;"`
+- Text areas: Use `rows` attribute to control height
+
+### Visual Hierarchy
+
+- Card headers for major sections: `<div class="card-header">Section Name</div>`
+- Small gray text for secondary info: `<small class="form-text text-muted">`
+- Error messages: `<div class="invalid-feedback d-block">` (with d-block to show without validation state)
+- Warning alerts: `<div class="alert alert-warning">`
+
+### Bootstrap Class Conventions
+
+**Spacing**:
+- `mb-3` - Default margin-bottom for form fields
+- `my-4` - Vertical margin for section dividers
+- `mt-1` - Small top margin for alerts/warnings
+
+**Forms**:
+- `form-control` - Standard text inputs, selects, textareas
+- `form-select` - Styled select dropdowns
+- `form-check` - Checkbox/radio wrapper
+- `form-check-label` - Checkbox/radio labels
+
+**Layout**:
+- `row` / `col-md-*` - Grid layout (use sparingly, prefer vertical stacking)
+- `offset-md-*` - Center content in grid
+
 ### Core Data Model
 
 1. **Players and Pairs**

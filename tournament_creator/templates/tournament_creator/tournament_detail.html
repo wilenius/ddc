@@ -428,7 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     team1Players = parts[0].trim();
                     team2Players = parts[1].trim();
                 } else {
-                    console.error('Could not parse matchup text:', matchupText);
+                    // Fallback if parsing fails
                     team1Players = 'Team 1';
                     team2Players = 'Team 2';
                 }
@@ -448,10 +448,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             // Update labels with player names
-            console.log('Team 1:', team1Players);
-            console.log('Team 2:', team2Players);
-            console.log('Existing scores:', existingScoresText);
-
             document.getElementById('team1Label').value = team1Players;
             document.getElementById('team2Label').value = team2Players;
 
@@ -461,7 +457,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // If there are existing scores, populate them
             if (existingScoresText === 'card') {
-                console.log('Using card format score parsing');
                 // Standard format - parse from card structure
                 const matchupCard = this.closest('.card');
                 const scoreElements = matchupCard.querySelectorAll('.col:first-of-type');
@@ -487,12 +482,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             } else if (existingScoresText) {
                 // League format - parse scores like "11–9, 11–7"
-                console.log('Using league format score parsing');
                 const scorePairs = existingScoresText.split(',').map(s => s.trim());
-                console.log('Score pairs:', scorePairs);
                 scorePairs.forEach(pair => {
                     const scores = pair.split('–');
-                    console.log('Adding set with scores:', scores);
                     addNewSet();
                     const lastSetContainer = document.querySelector('.set-container:last-child');
                     if (lastSetContainer) {
@@ -502,11 +494,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             } else {
                 // Add one empty set for new scores
-                console.log('Adding empty set for new score');
                 addNewSet();
             }
-
-            console.log('Modal setup complete, sets added:', currentSets);
         });
     });
 

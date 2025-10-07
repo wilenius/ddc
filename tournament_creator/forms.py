@@ -64,8 +64,8 @@ class TournamentCreationForm(forms.ModelForm):
         }
         help_texts = {
             'name': '',
-            'number_of_stages': '1 for single-stage, 2+ for multi-stage',
-            'name_display_format': 'How to display names in notifications and tournament view',
+            'number_of_stages': '',
+            'name_display_format': '',
             'show_structure': '',
         }
 

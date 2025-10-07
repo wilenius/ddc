@@ -36,23 +36,39 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="{{ form.end_date.id_for_label }}">End Date <span class="text-muted">(optional, for multi-day tournaments)</span></label>
+                        <label for="{{ form.end_date.id_for_label }}">
+                            End Date <span class="text-muted">(optional)</span>
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="For multi-day tournaments, set an end date different from the start date"></i>
+                        </label>
                         {{ form.end_date }}
                         {% if form.end_date.errors %}<div class="invalid-feedback d-block">{{ form.end_date.errors|join:", " }}</div>{% endif %}
                     </div>
 
                     <div class="mb-3">
-                        {{ form.number_of_stages.label_tag }}
+                        <label for="{{ form.number_of_stages.id_for_label }}">
+                            Stages
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="1 for single-stage tournament, 2+ for multi-stage tournaments with pools/playoffs"></i>
+                        </label>
                         {{ form.number_of_stages }}
                         {% if form.number_of_stages.errors %}<div class="invalid-feedback d-block">{{ form.number_of_stages.errors|join:", " }}</div>{% endif %}
-                        {% if form.number_of_stages.help_text %}<small class="form-text text-muted">{{ form.number_of_stages.help_text }}</small>{% endif %}
                     </div>
 
                     <div class="mb-3">
-                        {{ form.name_display_format.label_tag }}
+                        <label for="{{ form.name_display_format.id_for_label }}">
+                            Player Names
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="How to display player names in tournament view and notifications"></i>
+                        </label>
                         {{ form.name_display_format }}
                         {% if form.name_display_format.errors %}<div class="invalid-feedback d-block">{{ form.name_display_format.errors|join:", " }}</div>{% endif %}
-                        {% if form.name_display_format.help_text %}<small class="form-text text-muted">{{ form.name_display_format.help_text }}</small>{% endif %}
                     </div>
 
                     <div class="mb-3">
@@ -271,6 +287,13 @@ document.addEventListener('DOMContentLoaded', function() {
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+
     // Date synchronization logic
     const startDateField = document.querySelector('input[name="date"]');
     const endDateField = document.querySelector('input[name="end_date"]');

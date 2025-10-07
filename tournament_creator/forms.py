@@ -45,6 +45,7 @@ class TournamentCreationForm(forms.ModelForm):
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control', 'style': 'max-width: 200px;'}),
             'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control', 'style': 'max-width: 200px;'}),
             'number_of_stages': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 60px;', 'min': '1', 'max': '9'}),
+            'name_display_format': forms.Select(attrs={'class': 'form-select'}),
             'signal_recipient_usernames': forms.Textarea(attrs={
                 'rows': 2,
                 'placeholder': 'Optional: +358401234567, +358409876543 (leave empty to use global settings)',

@@ -2,7 +2,8 @@ from django.urls import path
 from django.views.generic import RedirectView
 from .views.tournament_views import (
     TournamentListView, TournamentCreateView, TournamentDetailView,
-    TournamentDeleteView, TournamentDownloadResultsView, record_match_result, manual_tiebreak_resolution
+    TournamentDeleteView, TournamentDownloadResultsView, record_match_result,
+    manual_tiebreak_resolution, tournament_settings
 )
 from .views.player_views import (
     PlayerListView, PlayerCreateView, PlayerUpdateView, PlayerDeleteView
@@ -20,6 +21,7 @@ urlpatterns = [
     path('tournaments/<int:pk>/', TournamentDetailView.as_view(), name='tournament_detail'),
     path('tournaments/<int:pk>/delete/', TournamentDeleteView.as_view(), name='tournament_delete'),
     path('tournaments/<int:pk>/download/', TournamentDownloadResultsView.as_view(), name='tournament_download_results'),
+    path('tournaments/<int:tournament_id>/settings/', tournament_settings, name='tournament_settings'),
     path('tournaments/<int:tournament_id>/matchup/<int:matchup_id>/record/',
          record_match_result, name='record_match_result'),
     path('tournaments/<int:tournament_id>/tiebreak/', manual_tiebreak_resolution, name='manual_tiebreak_resolution'),

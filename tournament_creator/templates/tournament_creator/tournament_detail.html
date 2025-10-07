@@ -36,9 +36,61 @@
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Match Schedule</h5>
+                {% if is_league_format %}
+                    <a href="{% url 'tournament_settings' tournament_id=tournament.id %}" class="btn btn-sm btn-primary">
+                        <i class="bi bi-calendar"></i> Assign Dates
+                    </a>
+                {% endif %}
             </div>
             <div class="card-body">
-                {% if has_multiple_stages %}
+                {% if is_league_format %}
+                    {# League format - display by date #}
+                    {% if not all_matches_have_dates %}
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Some matches don't have dates assigned yet.
+                            <a href="{% url 'tournament_settings' tournament_id=tournament.id %}">Assign dates</a> to display them properly.
+                        </div>
+                    {% endif %}
+
+                    {% for date in sorted_dates %}
+                        <h6 class="mt-3 mb-2">{{ date|date:"l, F j, Y" }}</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <tbody>
+                                    {% for matchup in matchups_by_date|dict_get:date %}
+                                        <tr>
+                                            <td style="width: 60%;">
+                                                {% if matchup.pair1 %}
+                                                    {{ matchup.pair1.player1.display_name }} & {{ matchup.pair1.player2.display_name }}
+                                                    vs
+                                                    {{ matchup.pair2.player1.display_name }} & {{ matchup.pair2.player2.display_name }}
+                                                {% else %}
+                                                    {{ matchup.pair1_player1.display_name }} & {{ matchup.pair1_player2.display_name }}
+                                                    vs
+                                                    {{ matchup.pair2_player1.display_name }} & {{ matchup.pair2_player2.display_name }}
+                                                {% endif %}
+                                            </td>
+                                            <td style="width: 40%;">
+                                                {% if matchup.scores.all %}
+                                                    {% for score in matchup.scores.all %}
+                                                        {{ score.pair1_score }}–{{ score.pair2_score }}{% if not forloop.last %}, {% endif %}
+                                                    {% endfor %}
+                                                {% else %}
+                                                    {% if can_record_scores %}
+                                                        <a href="{% url 'record_match_result' tournament_id=tournament.id matchup_id=matchup.id %}" class="btn btn-sm btn-outline-primary">Record Score</a>
+                                                    {% else %}
+                                                        <span class="text-muted">Not played</span>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endfor %}
+                {% elif has_multiple_stages %}
                     {# Show tabs for multi-stage tournaments #}
                     <ul class="nav nav-tabs" role="tablist">
                         {% for stage in stages %}

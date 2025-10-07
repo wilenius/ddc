@@ -32,7 +32,7 @@ class TournamentCreationForm(forms.ModelForm):
     class Meta:
         model = TournamentChart
         fields = [
-            'name', 'date', 'end_date', 'number_of_stages',
+            'name', 'date', 'end_date', 'number_of_stages', 'format_type',
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
             'signal_recipient_usernames', 'signal_recipient_group_ids',
             'name_display_format', 'show_structure'
@@ -45,6 +45,7 @@ class TournamentCreationForm(forms.ModelForm):
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control', 'style': 'max-width: 200px;'}),
             'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control', 'style': 'max-width: 200px;'}),
             'number_of_stages': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 60px;', 'min': '1', 'max': '9'}),
+            'format_type': forms.Select(attrs={'class': 'form-select'}),
             'name_display_format': forms.Select(attrs={'class': 'form-select'}),
             'signal_recipient_usernames': forms.Textarea(attrs={
                 'rows': 2,
@@ -61,11 +62,13 @@ class TournamentCreationForm(forms.ModelForm):
             'date': 'Start Date',
             'end_date': 'End Date',
             'number_of_stages': 'Stages',
+            'format_type': 'Format',
             'name_display_format': 'Player Names',
         }
         help_texts = {
             'name': '',
             'number_of_stages': '',
+            'format_type': '',
             'name_display_format': '',
             'show_structure': '',
         }

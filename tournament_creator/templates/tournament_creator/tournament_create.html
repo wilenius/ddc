@@ -99,6 +99,18 @@
                     </div>
 
                     <div class="mb-3">
+                        <label for="{{ form.format_type.id_for_label }}" class="d-block">
+                            Format
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="Standard: Matches organized by round/court. League: Matches assigned specific dates"></i>
+                        </label>
+                        {{ form.format_type }}
+                        {% if form.format_type.errors %}<div class="invalid-feedback d-block">{{ form.format_type.errors|join:", " }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
                         <label for="{{ form.name_display_format.id_for_label }}" class="d-block">
                             Player Names
                             <i class="bi bi-info-circle text-muted"

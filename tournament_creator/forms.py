@@ -32,7 +32,7 @@ class TournamentCreationForm(forms.ModelForm):
     class Meta:
         model = TournamentChart
         fields = [
-            'name', 'date', 'number_of_stages',
+            'name', 'date', 'end_date', 'number_of_stages',
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
             'signal_recipient_usernames', 'signal_recipient_group_ids',
             'name_display_format', 'show_structure'
@@ -41,7 +41,8 @@ class TournamentCreationForm(forms.ModelForm):
             'notify_by_email': forms.CheckboxInput,
             'notify_by_signal': forms.CheckboxInput,
             'notify_by_matrix': forms.CheckboxInput,
-            'date': forms.DateInput(attrs={'type': 'date'}),
+            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'signal_recipient_usernames': forms.Textarea(attrs={
                 'rows': 2,
                 'placeholder': 'Optional: +358401234567, +358409876543 (leave empty to use global settings)',
@@ -53,9 +54,22 @@ class TournamentCreationForm(forms.ModelForm):
                 'class': 'form-control'
             }),
         }
+        labels = {
+            'date': 'Start Date',
+            'end_date': 'End Date',
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Set default dates to today for new tournaments
+        from datetime import date
+        if not self.instance.pk:  # Only for new tournaments
+            today = date.today()
+            if 'initial' not in kwargs or not kwargs['initial'].get('date'):
+                self.fields['date'].initial = today
+            if 'initial' not in kwargs or not kwargs['initial'].get('end_date'):
+                self.fields['end_date'].initial = today
 
         # Make tournament_category not required when editing (only needed during creation)
         if self.instance and self.instance.pk:

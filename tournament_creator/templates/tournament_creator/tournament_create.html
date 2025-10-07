@@ -35,6 +35,13 @@
                     </div>
 
                     <div class="mb-3">
+                        {{ form.end_date.label_tag }}
+                        {{ form.end_date }}
+                        {% if form.end_date.errors %}<div class="invalid-feedback d-block">{{ form.end_date.errors|join:", " }}</div>{% endif %}
+                        {% if form.end_date.help_text %}<small class="form-text text-muted">{{ form.end_date.help_text }}</small>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
                         {{ form.number_of_stages.label_tag }}
                         {{ form.number_of_stages }}
                         {% if form.number_of_stages.errors %}<div class="invalid-feedback d-block">{{ form.number_of_stages.errors|join:", " }}</div>{% endif %}
@@ -106,6 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Collect form values
             var name = document.querySelector('input[name="name"]').value;
             var date = document.querySelector('input[name="date"]').value;
+            var endDate = document.querySelector('input[name="end_date"]').value;
             var numberOfStages = document.querySelector('input[name="number_of_stages"]').value;
             var nameDisplayFormat = document.querySelector('select[name="name_display_format"]').value;
             var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
@@ -115,6 +123,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var url = "{% url 'tournament_create' %}?tournament_category=" + this.value +
                       "&name=" + encodeURIComponent(name) +
                       "&date=" + encodeURIComponent(date) +
+                      "&end_date=" + encodeURIComponent(endDate) +
                       "&number_of_stages=" + encodeURIComponent(numberOfStages) +
                       "&name_display_format=" + encodeURIComponent(nameDisplayFormat) +
                       "&notify_by_email=" + notifyByEmail +
@@ -251,6 +260,22 @@ document.addEventListener('DOMContentLoaded', function() {
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Date synchronization logic
+    const startDateField = document.querySelector('input[name="date"]');
+    const endDateField = document.querySelector('input[name="end_date"]');
+
+    if (startDateField && endDateField) {
+        startDateField.addEventListener('change', function() {
+            const startDate = new Date(startDateField.value);
+            const endDate = endDateField.value ? new Date(endDateField.value) : null;
+
+            // If end date is not set or is before start date, set it to start date
+            if (!endDate || endDate < startDate) {
+                endDateField.value = startDateField.value;
+            }
+        });
+    }
+
     const notificationBackendSettings = {
         email: {{ notification_backend_settings.email|default_if_none:False|yesno:"true,false,false" }},
         signal: {{ notification_backend_settings.signal|default_if_none:False|yesno:"true,false,false" }},

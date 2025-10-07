@@ -34,6 +34,8 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             initial['name'] = self.request.GET.get('name')
         if 'date' in self.request.GET:
             initial['date'] = self.request.GET.get('date')
+        if 'end_date' in self.request.GET:
+            initial['end_date'] = self.request.GET.get('end_date')
         # Preserve number of stages
         if 'number_of_stages' in self.request.GET:
             initial['number_of_stages'] = self.request.GET.get('number_of_stages')

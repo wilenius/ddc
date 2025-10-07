@@ -83,7 +83,8 @@ class Pair(models.Model):
 class TournamentChart(models.Model):
     """Model storing tournament-level information, including participants and structure."""
     name = models.CharField(max_length=255, default="Unnamed Tournament")
-    date = models.DateField()
+    date = models.DateField()  # Start date (kept for backward compatibility)
+    end_date = models.DateField(null=True, blank=True, help_text="End date for multi-day tournaments. Leave blank for single-day tournaments.")
     number_of_rounds = models.IntegerField()
     number_of_courts = models.IntegerField()
     number_of_stages = models.IntegerField(default=1, help_text="Number of stages in this tournament (1 for single-stage, 2+ for multi-stage)")

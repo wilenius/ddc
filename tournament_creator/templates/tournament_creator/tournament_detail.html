@@ -73,9 +73,11 @@
                                             </td>
                                             <td style="width: 40%;">
                                                 {% if matchup.scores.all %}
-                                                    {% for score in matchup.scores.all %}
-                                                        {{ score.team1_score }}–{{ score.team2_score }}{% if not forloop.last %}, {% endif %}
-                                                    {% endfor %}
+                                                    <span class="match-scores">
+                                                        {% for score in matchup.scores.all %}
+                                                            {{ score.team1_score }}–{{ score.team2_score }}{% if not forloop.last %}, {% endif %}
+                                                        {% endfor %}
+                                                    </span>
                                                     {% if can_record_scores %}
                                                         <button class="btn btn-outline-primary btn-sm record-result ms-2"
                                                                 data-matchup-id="{{ matchup.id }}"
@@ -418,15 +420,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 // League format - extract from table cells
                 const cells = tableRow.querySelectorAll('td');
                 const matchupText = cells[0].textContent.trim();
-                const scoreText = cells[1].textContent.trim();
 
                 // Parse "Player1 & Player2 vs Player3 & Player4"
                 const parts = matchupText.split(' vs ');
                 team1Players = parts[0].trim();
                 team2Players = parts[1].trim();
 
-                // Check if there are existing scores
-                existingScoresText = scoreText.includes('–') ? scoreText : null;
+                // Check if there are existing scores - look for the span with class 'match-scores'
+                const scoresSpan = cells[1].querySelector('.match-scores');
+                existingScoresText = scoresSpan ? scoresSpan.textContent.trim() : null;
             } else {
                 // Standard format - extract from card
                 const matchupCard = this.closest('.card');

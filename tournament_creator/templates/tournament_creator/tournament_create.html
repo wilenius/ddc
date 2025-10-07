@@ -322,6 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var date = document.querySelector('input[name="date"]').value;
             var endDate = document.querySelector('input[name="end_date"]').value;
             var numberOfStages = document.querySelector('input[name="number_of_stages"]').value;
+            var formatType = document.querySelector('select[name="format_type"]').value;
             var nameDisplayFormat = document.querySelector('select[name="name_display_format"]').value;
             var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
             var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
@@ -332,6 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
                       "&date=" + encodeURIComponent(date) +
                       "&end_date=" + encodeURIComponent(endDate) +
                       "&number_of_stages=" + encodeURIComponent(numberOfStages) +
+                      "&format_type=" + encodeURIComponent(formatType) +
                       "&name_display_format=" + encodeURIComponent(nameDisplayFormat) +
                       "&notify_by_email=" + notifyByEmail +
                       "&notify_by_signal=" + notifyBySignal +

@@ -45,6 +45,9 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         # Preserve name display format
         if 'name_display_format' in self.request.GET:
             initial['name_display_format'] = self.request.GET.get('name_display_format')
+        # Preserve format type
+        if 'format_type' in self.request.GET:
+            initial['format_type'] = self.request.GET.get('format_type')
         # Preserve notification checkbox states from GET parameters if available
         if 'notify_by_email' in self.request.GET:
             initial['notify_by_email'] = self.request.GET.get('notify_by_email') == 'true'

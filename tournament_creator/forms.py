@@ -38,6 +38,7 @@ class TournamentCreationForm(forms.ModelForm):
             'name_display_format', 'show_structure'
         ]
         widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Summer League 2025'}),
             'notify_by_email': forms.CheckboxInput,
             'notify_by_signal': forms.CheckboxInput,
             'notify_by_matrix': forms.CheckboxInput,
@@ -58,6 +59,14 @@ class TournamentCreationForm(forms.ModelForm):
         labels = {
             'date': 'Start Date',
             'end_date': 'End Date',
+            'number_of_stages': 'Stages',
+            'name_display_format': 'Player Names',
+        }
+        help_texts = {
+            'name': '',
+            'number_of_stages': '1 for single-stage, 2+ for multi-stage',
+            'name_display_format': 'How to display names in notifications and tournament view',
+            'show_structure': '',
         }
 
     def __init__(self, *args, **kwargs):

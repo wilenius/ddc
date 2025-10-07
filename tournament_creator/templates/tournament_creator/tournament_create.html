@@ -41,33 +41,37 @@
                         {% if form.end_date.errors %}<div class="invalid-feedback d-block">{{ form.end_date.errors|join:", " }}</div>{% endif %}
                     </div>
 
-                    <div class="mb-3">
-                        {{ form.number_of_stages.label_tag }}
-                        {{ form.number_of_stages }}
-                        {% if form.number_of_stages.errors %}<div class="invalid-feedback d-block">{{ form.number_of_stages.errors|join:", " }}</div>{% endif %}
-                        {% if form.number_of_stages.help_text %}<small class="form-text text-muted">{{ form.number_of_stages.help_text }}</small>{% endif %}
-                    </div>
-
-                    <div class="mb-3">
-                        {{ form.name_display_format.label_tag }}
-                        {{ form.name_display_format }}
-                        {% if form.name_display_format.errors %}<div class="invalid-feedback d-block">{{ form.name_display_format.errors|join:", " }}</div>{% endif %}
-                        {% if form.name_display_format.help_text %}<small class="form-text text-muted">{{ form.name_display_format.help_text }}</small>{% endif %}
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            {{ form.number_of_stages.label_tag }}
+                            {{ form.number_of_stages }}
+                            {% if form.number_of_stages.errors %}<div class="invalid-feedback d-block">{{ form.number_of_stages.errors|join:", " }}</div>{% endif %}
+                            {% if form.number_of_stages.help_text %}<small class="form-text text-muted">{{ form.number_of_stages.help_text }}</small>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            {{ form.name_display_format.label_tag }}
+                            {{ form.name_display_format }}
+                            {% if form.name_display_format.errors %}<div class="invalid-feedback d-block">{{ form.name_display_format.errors|join:", " }}</div>{% endif %}
+                            {% if form.name_display_format.help_text %}<small class="form-text text-muted">{{ form.name_display_format.help_text }}</small>{% endif %}
+                        </div>
                     </div>
 
                     <div class="mb-3 form-check">
                         {{ form.show_structure }}
                         <label class="form-check-label" for="{{ form.show_structure.id_for_label }}">
-                            {{ form.show_structure.label }}
+                            Show tournament structure in a separate block
                         </label>
-                        {% if form.show_structure.help_text %}<small class="form-text text-muted d-block">{{ form.show_structure.help_text }}</small>{% endif %}
                         {% if form.show_structure.errors %}<div class="invalid-feedback d-block">{{ form.show_structure.errors|join:", " }}</div>{% endif %}
                     </div>
+
+                    <hr class="my-4">
+
+                    <h6 class="mb-3">Notifications</h6>
 
                     <div class="mb-3 form-check">
                         {{ form.notify_by_email }}
                         <label class="form-check-label" for="{{ form.notify_by_email.id_for_label }}">
-                            {{ form.notify_by_email.label }}
+                            Send email notifications for match results
                         </label>
                         <div id="warning_notify_by_email" class="alert alert-warning mt-1" style="display: none;">
                             The 'email' notification backend is not active globally. No emails will be sent until an admin activates it.
@@ -79,7 +83,7 @@
                     <div class="mb-3 form-check">
                         {{ form.notify_by_signal }}
                         <label class="form-check-label" for="{{ form.notify_by_signal.id_for_label }}">
-                            {{ form.notify_by_signal.label }}
+                            Send Signal notifications for match results
                         </label>
                         <div id="warning_notify_by_signal" class="alert alert-warning mt-1" style="display: none;">
                             The 'Signal' notification backend is not active globally. No Signal messages will be sent until an admin activates it.
@@ -91,7 +95,7 @@
                     <div class="mb-3 form-check">
                         {{ form.notify_by_matrix }}
                         <label class="form-check-label" for="{{ form.notify_by_matrix.id_for_label }}">
-                            {{ form.notify_by_matrix.label }}
+                            Send Matrix notifications for match results
                         </label>
                         <div id="warning_notify_by_matrix" class="alert alert-warning mt-1" style="display: none;">
                             The 'Matrix' notification backend is not active globally. No Matrix messages will be sent until an admin activates it.

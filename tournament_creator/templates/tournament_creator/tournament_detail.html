@@ -409,12 +409,35 @@ document.addEventListener('DOMContentLoaded', function() {
         button.addEventListener('click', function() {
             const matchupId = this.dataset.matchupId;
             document.getElementById('matchupId').value = matchupId;
-            
-            // Find the matchup card to get player names
-            const matchupCard = this.closest('.card');
-            const team1Players = matchupCard.querySelectorAll('.col:first-child strong')[0].textContent.trim();
-            const team2Players = matchupCard.querySelectorAll('.col:last-child strong')[0].textContent.trim();
-            
+
+            let team1Players, team2Players, existingScoresText;
+
+            // Check if we're in a table row (league format) or card (standard format)
+            const tableRow = this.closest('tr');
+            if (tableRow) {
+                // League format - extract from table cells
+                const cells = tableRow.querySelectorAll('td');
+                const matchupText = cells[0].textContent.trim();
+                const scoreText = cells[1].textContent.trim();
+
+                // Parse "Player1 & Player2 vs Player3 & Player4"
+                const parts = matchupText.split(' vs ');
+                team1Players = parts[0].trim();
+                team2Players = parts[1].trim();
+
+                // Check if there are existing scores
+                existingScoresText = scoreText.includes('–') ? scoreText : null;
+            } else {
+                // Standard format - extract from card
+                const matchupCard = this.closest('.card');
+                team1Players = matchupCard.querySelectorAll('.col:first-child strong')[0].textContent.trim();
+                team2Players = matchupCard.querySelectorAll('.col:last-child strong')[0].textContent.trim();
+
+                // Check for existing scores in the card
+                const scoreElements = matchupCard.querySelectorAll('.col:first-of-type');
+                existingScoresText = scoreElements.length > 1 ? 'card' : null;
+            }
+
             // Update labels with player names
             document.getElementById('team1Label').value = team1Players;
             document.getElementById('team2Label').value = team2Players;
@@ -424,32 +447,39 @@ document.addEventListener('DOMContentLoaded', function() {
             currentSets = 0;
 
             // If there are existing scores, populate them
-            const scoreElements = matchupCard.querySelectorAll('.col:first-of-type');
-            if (scoreElements.length > 1) {  // First element is the team name, rest are scores
-                // Get scores for both teams
+            if (existingScoresText === 'card') {
+                // Standard format - parse from card structure
+                const matchupCard = this.closest('.card');
+                const scoreElements = matchupCard.querySelectorAll('.col:first-of-type');
                 const team1Scores = [];
                 const team2Scores = [];
-                let foundWinningTeam = false;
-                
+
                 // Skip first element (team names) and process score elements
                 for (let i = 1; i < scoreElements.length; i++) {
                     const team1Score = scoreElements[i].textContent.trim();
                     const team2ScoreElement = matchupCard.querySelectorAll('.col:last-of-type')[i];
                     const team2Score = team2ScoreElement.textContent.trim();
-                    
+
                     team1Scores.push(team1Score);
                     team2Scores.push(team2Score);
-                    
-                    // No need to determine winning team as it's calculated from scores now
-                    foundWinningTeam = true;
                 }
-                
+
                 // Create set inputs and populate with scores
                 team1Scores.forEach((score1, index) => {
                     addNewSet();
                     const lastSetContainer = document.querySelector('.set-container:last-child');
                     lastSetContainer.querySelector('[name="team1_scores[]"]').value = score1;
                     lastSetContainer.querySelector('[name="team2_scores[]"]').value = team2Scores[index];
+                });
+            } else if (existingScoresText) {
+                // League format - parse scores like "11–9, 11–7"
+                const scorePairs = existingScoresText.split(',').map(s => s.trim());
+                scorePairs.forEach(pair => {
+                    const scores = pair.split('–');
+                    addNewSet();
+                    const lastSetContainer = document.querySelector('.set-container:last-child');
+                    lastSetContainer.querySelector('[name="team1_scores[]"]').value = scores[0].trim();
+                    lastSetContainer.querySelector('[name="team2_scores[]"]').value = scores[1].trim();
                 });
             } else {
                 // Add one empty set for new scores

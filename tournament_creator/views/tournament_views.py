@@ -45,6 +45,9 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         # Preserve name display format
         if 'name_display_format' in self.request.GET:
             initial['name_display_format'] = self.request.GET.get('name_display_format')
+        # Preserve format type
+        if 'format_type' in self.request.GET:
+            initial['format_type'] = self.request.GET.get('format_type')
         # Preserve notification checkbox states from GET parameters if available
         if 'notify_by_email' in self.request.GET:
             initial['notify_by_email'] = self.request.GET.get('notify_by_email') == 'true'
@@ -300,6 +303,26 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         context['matchups_by_stage'] = matchups_by_stage
         context['stages'] = stages
         context['has_multiple_stages'] = len(stages) > 1
+
+        # Handle league format - organize by date instead of round/court
+        context['is_league_format'] = tournament.format_type == 'LEAGUE'
+        if tournament.format_type == 'LEAGUE':
+            # Group matchups by date for league format
+            matchups_by_date = {}
+            for matchup in all_matchups:
+                if matchup.match_date:
+                    date_key = matchup.match_date
+                    if date_key not in matchups_by_date:
+                        matchups_by_date[date_key] = []
+                    matchups_by_date[date_key].append(matchup)
+
+            # Sort dates
+            sorted_dates = sorted(matchups_by_date.keys())
+            context['matchups_by_date'] = matchups_by_date
+            context['sorted_dates'] = sorted_dates
+
+            # Check if all matches have dates assigned
+            context['all_matches_have_dates'] = all(m.match_date for m in all_matchups)
 
         if is_pairs_tournament:
             # For doubles tournaments, use PairScore
@@ -871,6 +894,39 @@ class TournamentDeleteView(AdminRequiredMixin, DeleteView):
         tournament = self.get_object()
         messages.success(request, f'Tournament "{tournament.name}" has been deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+@login_required
+def tournament_settings(request, tournament_id):
+    """
+    View for assigning dates to matchups in league-format tournaments.
+    """
+    tournament = get_object_or_404(TournamentChart, id=tournament_id)
+
+    # Only allow for league format tournaments
+    if tournament.format_type != 'LEAGUE':
+        messages.error(request, 'Date assignment is only available for league-format tournaments.')
+        return redirect('tournament_detail', pk=tournament_id)
+
+    matchups = Matchup.objects.filter(tournament_chart=tournament).order_by('stage__stage_number', 'round_number', 'court_number')
+
+    if request.method == 'POST':
+        # Process the date assignments
+        for matchup in matchups:
+            date_key = f'match_date_{matchup.id}'
+            if date_key in request.POST:
+                date_value = request.POST.get(date_key)
+                if date_value:
+                    matchup.match_date = date_value
+                    matchup.save()
+
+        messages.success(request, 'Match dates have been updated successfully.')
+        return redirect('tournament_detail', pk=tournament_id)
+
+    context = {
+        'tournament': tournament,
+        'matchups': matchups,
+    }
+    return render(request, 'tournament_creator/tournament_settings.html', context)
 
 @login_required
 def manual_tiebreak_resolution(request, tournament_id):

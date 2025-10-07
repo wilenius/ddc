@@ -99,6 +99,18 @@
                     </div>
 
                     <div class="mb-3">
+                        <label for="{{ form.format_type.id_for_label }}" class="d-block">
+                            Format
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="Standard: Matches organized by round/court. League: Matches assigned specific dates"></i>
+                        </label>
+                        {{ form.format_type }}
+                        {% if form.format_type.errors %}<div class="invalid-feedback d-block">{{ form.format_type.errors|join:", " }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
                         <label for="{{ form.name_display_format.id_for_label }}" class="d-block">
                             Player Names
                             <i class="bi bi-info-circle text-muted"
@@ -310,6 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var date = document.querySelector('input[name="date"]').value;
             var endDate = document.querySelector('input[name="end_date"]').value;
             var numberOfStages = document.querySelector('input[name="number_of_stages"]').value;
+            var formatType = document.querySelector('select[name="format_type"]').value;
             var nameDisplayFormat = document.querySelector('select[name="name_display_format"]').value;
             var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
             var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
@@ -320,6 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
                       "&date=" + encodeURIComponent(date) +
                       "&end_date=" + encodeURIComponent(endDate) +
                       "&number_of_stages=" + encodeURIComponent(numberOfStages) +
+                      "&format_type=" + encodeURIComponent(formatType) +
                       "&name_display_format=" + encodeURIComponent(nameDisplayFormat) +
                       "&notify_by_email=" + notifyByEmail +
                       "&notify_by_signal=" + notifyBySignal +

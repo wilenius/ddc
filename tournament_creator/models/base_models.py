@@ -105,6 +105,12 @@ class TournamentChart(models.Model):
     ]
     name_display_format = models.CharField(max_length=10, choices=NAME_DISPLAY_CHOICES, default='FIRST', help_text="How to display player names in notifications and tournament view")
     show_structure = models.BooleanField(default=False, help_text="Show tournament structure in a separate block")
+    # Tournament format type
+    FORMAT_TYPE_CHOICES = [
+        ('STANDARD', 'Standard (round/court based)'),
+        ('LEAGUE', 'League (date-based matches)'),
+    ]
+    format_type = models.CharField(max_length=20, choices=FORMAT_TYPE_CHOICES, default='STANDARD', help_text="How matches are organized - by round/court or by date")
     def __str__(self):
         return self.name
     class Meta:
@@ -174,6 +180,7 @@ class Matchup(models.Model):
     pair2_player2 = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='pair2_player2_matchups', null=True, blank=True)
     round_number = models.IntegerField()
     court_number = models.IntegerField()
+    match_date = models.DateField(null=True, blank=True, help_text="For league-format tournaments, the date this match will be played")
     def __str__(self):
         return pair_or_player_str(self)
     class Meta:

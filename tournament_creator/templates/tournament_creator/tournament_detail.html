@@ -36,9 +36,76 @@
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Match Schedule</h5>
+                {% if is_league_format %}
+                    <a href="{% url 'tournament_settings' tournament_id=tournament.id %}" class="btn btn-sm btn-primary">
+                        <i class="bi bi-calendar"></i> Assign Dates
+                    </a>
+                {% endif %}
             </div>
             <div class="card-body">
-                {% if has_multiple_stages %}
+                {% if is_league_format %}
+                    {# League format - display by date #}
+                    {% if not all_matches_have_dates %}
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Some matches don't have dates assigned yet.
+                            <a href="{% url 'tournament_settings' tournament_id=tournament.id %}">Assign dates</a> to display them properly.
+                        </div>
+                    {% endif %}
+
+                    {% for date in sorted_dates %}
+                        <h6 class="mt-3 mb-2">{{ date|date:"l, F j, Y" }}</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <tbody>
+                                    {% for matchup in matchups_by_date|dict_get:date %}
+                                        <tr>
+                                            <td style="width: 60%;">
+                                                {% if matchup.pair1 %}
+                                                    {{ matchup.pair1.player1.display_name }} & {{ matchup.pair1.player2.display_name }}
+                                                    vs
+                                                    {{ matchup.pair2.player1.display_name }} & {{ matchup.pair2.player2.display_name }}
+                                                {% else %}
+                                                    {{ matchup.pair1_player1.display_name }} & {{ matchup.pair1_player2.display_name }}
+                                                    vs
+                                                    {{ matchup.pair2_player1.display_name }} & {{ matchup.pair2_player2.display_name }}
+                                                {% endif %}
+                                            </td>
+                                            <td style="width: 40%;">
+                                                {% if matchup.scores.all %}
+                                                    <span class="match-scores">
+                                                        {% for score in matchup.scores.all %}
+                                                            {{ score.team1_score }}–{{ score.team2_score }}{% if not forloop.last %}, {% endif %}
+                                                        {% endfor %}
+                                                    </span>
+                                                    {% if can_record_scores %}
+                                                        <button class="btn btn-outline-primary btn-sm record-result ms-2"
+                                                                data-matchup-id="{{ matchup.id }}"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#recordScoreModal">
+                                                            Edit
+                                                        </button>
+                                                    {% endif %}
+                                                {% else %}
+                                                    {% if can_record_scores %}
+                                                        <button class="btn btn-primary btn-sm record-result"
+                                                                data-matchup-id="{{ matchup.id }}"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#recordScoreModal">
+                                                            Record Score
+                                                        </button>
+                                                    {% else %}
+                                                        <span class="text-muted">Not played</span>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endfor %}
+                {% elif has_multiple_stages %}
                     {# Show tabs for multi-stage tournaments #}
                     <ul class="nav nav-tabs" role="tablist">
                         {% for stage in stages %}
@@ -344,12 +411,42 @@ document.addEventListener('DOMContentLoaded', function() {
         button.addEventListener('click', function() {
             const matchupId = this.dataset.matchupId;
             document.getElementById('matchupId').value = matchupId;
-            
-            // Find the matchup card to get player names
-            const matchupCard = this.closest('.card');
-            const team1Players = matchupCard.querySelectorAll('.col:first-child strong')[0].textContent.trim();
-            const team2Players = matchupCard.querySelectorAll('.col:last-child strong')[0].textContent.trim();
-            
+
+            let team1Players, team2Players, existingScoresText;
+
+            // Check if we're in a table row (league format) or card (standard format)
+            const tableRow = this.closest('tr');
+            if (tableRow) {
+                // League format - extract from table cells
+                const cells = tableRow.querySelectorAll('td');
+                // Normalize whitespace - replace multiple whitespace (including newlines) with single space
+                const matchupText = cells[0].textContent.replace(/\s+/g, ' ').trim();
+
+                // Parse "Player1 & Player2 vs Player3 & Player4"
+                const parts = matchupText.split(' vs ');
+                if (parts.length === 2) {
+                    team1Players = parts[0].trim();
+                    team2Players = parts[1].trim();
+                } else {
+                    // Fallback if parsing fails
+                    team1Players = 'Team 1';
+                    team2Players = 'Team 2';
+                }
+
+                // Check if there are existing scores - look for the span with class 'match-scores'
+                const scoresSpan = cells[1].querySelector('.match-scores');
+                existingScoresText = scoresSpan ? scoresSpan.textContent.trim() : null;
+            } else {
+                // Standard format - extract from card
+                const matchupCard = this.closest('.card');
+                team1Players = matchupCard.querySelectorAll('.col:first-child strong')[0].textContent.trim();
+                team2Players = matchupCard.querySelectorAll('.col:last-child strong')[0].textContent.trim();
+
+                // Check for existing scores in the card
+                const scoreElements = matchupCard.querySelectorAll('.col:first-of-type');
+                existingScoresText = scoreElements.length > 1 ? 'card' : null;
+            }
+
             // Update labels with player names
             document.getElementById('team1Label').value = team1Players;
             document.getElementById('team2Label').value = team2Players;
@@ -359,32 +456,41 @@ document.addEventListener('DOMContentLoaded', function() {
             currentSets = 0;
 
             // If there are existing scores, populate them
-            const scoreElements = matchupCard.querySelectorAll('.col:first-of-type');
-            if (scoreElements.length > 1) {  // First element is the team name, rest are scores
-                // Get scores for both teams
+            if (existingScoresText === 'card') {
+                // Standard format - parse from card structure
+                const matchupCard = this.closest('.card');
+                const scoreElements = matchupCard.querySelectorAll('.col:first-of-type');
                 const team1Scores = [];
                 const team2Scores = [];
-                let foundWinningTeam = false;
-                
+
                 // Skip first element (team names) and process score elements
                 for (let i = 1; i < scoreElements.length; i++) {
                     const team1Score = scoreElements[i].textContent.trim();
                     const team2ScoreElement = matchupCard.querySelectorAll('.col:last-of-type')[i];
                     const team2Score = team2ScoreElement.textContent.trim();
-                    
+
                     team1Scores.push(team1Score);
                     team2Scores.push(team2Score);
-                    
-                    // No need to determine winning team as it's calculated from scores now
-                    foundWinningTeam = true;
                 }
-                
+
                 // Create set inputs and populate with scores
                 team1Scores.forEach((score1, index) => {
                     addNewSet();
                     const lastSetContainer = document.querySelector('.set-container:last-child');
                     lastSetContainer.querySelector('[name="team1_scores[]"]').value = score1;
                     lastSetContainer.querySelector('[name="team2_scores[]"]').value = team2Scores[index];
+                });
+            } else if (existingScoresText) {
+                // League format - parse scores like "11–9, 11–7"
+                const scorePairs = existingScoresText.split(',').map(s => s.trim());
+                scorePairs.forEach(pair => {
+                    const scores = pair.split('–');
+                    addNewSet();
+                    const lastSetContainer = document.querySelector('.set-container:last-child');
+                    if (lastSetContainer) {
+                        lastSetContainer.querySelector('[name="team1_scores[]"]').value = scores[0].trim();
+                        lastSetContainer.querySelector('[name="team2_scores[]"]').value = scores[1].trim();
+                    }
                 });
             } else {
                 // Add one empty set for new scores

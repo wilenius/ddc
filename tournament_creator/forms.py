@@ -43,6 +43,7 @@ class TournamentCreationForm(forms.ModelForm):
             'notify_by_matrix': forms.CheckboxInput,
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'number_of_stages': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 60px;', 'min': '1', 'max': '9'}),
             'signal_recipient_usernames': forms.Textarea(attrs={
                 'rows': 2,
                 'placeholder': 'Optional: +358401234567, +358409876543 (leave empty to use global settings)',

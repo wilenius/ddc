@@ -74,11 +74,24 @@
                                             <td style="width: 40%;">
                                                 {% if matchup.scores.all %}
                                                     {% for score in matchup.scores.all %}
-                                                        {{ score.pair1_score }}–{{ score.pair2_score }}{% if not forloop.last %}, {% endif %}
+                                                        {{ score.team1_score }}–{{ score.team2_score }}{% if not forloop.last %}, {% endif %}
                                                     {% endfor %}
+                                                    {% if can_record_scores %}
+                                                        <button class="btn btn-outline-primary btn-sm record-result ms-2"
+                                                                data-matchup-id="{{ matchup.id }}"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#recordScoreModal">
+                                                            Edit
+                                                        </button>
+                                                    {% endif %}
                                                 {% else %}
                                                     {% if can_record_scores %}
-                                                        <a href="{% url 'record_match_result' tournament_id=tournament.id matchup_id=matchup.id %}" class="btn btn-sm btn-outline-primary">Record Score</a>
+                                                        <button class="btn btn-primary btn-sm record-result"
+                                                                data-matchup-id="{{ matchup.id }}"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#recordScoreModal">
+                                                            Record Score
+                                                        </button>
                                                     {% else %}
                                                         <span class="text-muted">Not played</span>
                                                     {% endif %}

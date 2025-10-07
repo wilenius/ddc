@@ -2,6 +2,45 @@
 
 {% block title %}Create Tournament - DDC Tournament Manager{% endblock %}
 
+{% block extra_css %}
+<style>
+/* Style Select2 to match Bootstrap form-select */
+.select2-container--default .select2-selection--multiple {
+    border: 1px solid #dee2e6 !important;
+    border-radius: 0.375rem !important;
+    min-height: calc(1.5em + 0.75rem + 2px) !important;
+    padding: 0.25rem 0.5rem !important;
+    background-color: #fff !important;
+    font-size: 1rem !important;
+    line-height: 1.5 !important;
+}
+
+.select2-container--default .select2-selection--multiple:focus-within {
+    border-color: #86b7fe !important;
+    outline: 0 !important;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+}
+
+.select2-container--default .select2-selection--multiple .select2-selection__choice {
+    background-color: #0d6efd !important;
+    border: none !important;
+    color: white !important;
+    padding: 0.25rem 0.5rem !important;
+    border-radius: 0.25rem !important;
+    margin: 0.25rem 0.25rem 0 0 !important;
+}
+
+.select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+    color: white !important;
+    margin-right: 0.25rem !important;
+}
+
+.select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+    color: #f8f9fa !important;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row">
     <div class="col-md-8 offset-md-2">
@@ -132,62 +171,31 @@
                         {{ form.tournament_category }}
                         {% if form.tournament_category.errors %}<div class="invalid-feedback d-block">{{ form.tournament_category.errors|join:", " }}</div>{% endif %}
                         {% if form.tournament_category.help_text %}<small class="form-text text-muted">{{ form.tournament_category.help_text }}</small>{% endif %}
-                        <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var select = document.getElementById('{{ form.tournament_category.id_for_label }}');
-    if (select) {
-        select.addEventListener('change', function() {
-            // Collect form values
-            var name = document.querySelector('input[name="name"]').value;
-            var date = document.querySelector('input[name="date"]').value;
-            var endDate = document.querySelector('input[name="end_date"]').value;
-            var numberOfStages = document.querySelector('input[name="number_of_stages"]').value;
-            var nameDisplayFormat = document.querySelector('select[name="name_display_format"]').value;
-            var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
-            var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
-            var notifyByMatrix = document.querySelector('input[name="notify_by_matrix"]').checked;
-            var showStructure = document.querySelector('input[name="show_structure"]').checked;
-            var url = "{% url 'tournament_create' %}?tournament_category=" + this.value +
-                      "&name=" + encodeURIComponent(name) +
-                      "&date=" + encodeURIComponent(date) +
-                      "&end_date=" + encodeURIComponent(endDate) +
-                      "&number_of_stages=" + encodeURIComponent(numberOfStages) +
-                      "&name_display_format=" + encodeURIComponent(nameDisplayFormat) +
-                      "&notify_by_email=" + notifyByEmail +
-                      "&notify_by_signal=" + notifyBySignal +
-                      "&notify_by_matrix=" + notifyByMatrix +
-                      "&show_structure=" + showStructure;
-            window.location = url;
-        });
-    }
-});
-</script>
                     </div>
+
+                    {% if selected_category %}
+                    <div class="mb-3">
+                        <label for="{{ moc_player_form.players.id_for_label }}">
+                            Players
+                            {% if selected_category == 'MOC' %}
+                                <small class="text-muted">(Monarch of the Court)</small>
+                            {% elif selected_category == 'PAIRS' %}
+                                <small class="text-muted">(select an even number for Doubles)</small>
+                            {% endif %}
+                        </label>
+                        {{ moc_player_form.players }}
+                        <small class="form-text text-muted d-block mt-1">
+                            The tournament format will be automatically selected based on the number of players you choose.
+                            {% if selected_category == 'PAIRS' %}
+                            Players will be paired in the order entered (1st & 2nd, 3rd & 4th, etc.).
+                            {% endif %}
+                        </small>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
             {% if selected_category %}
-                <div class="card mb-4">
-                    <div class="card-header">
-                        Select Players
-                        {% if selected_category == 'MOC' %}
-                            <small class="text-muted">- Monarch of the Court</small>
-                        {% elif selected_category == 'PAIRS' %}
-                            <small class="text-muted">- Doubles Tournament (select an even number of players)</small>
-                        {% endif %}
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            {{ moc_player_form.players }}
-                        </div>
-                        <small class="form-text text-muted">
-                            The tournament format will be automatically selected based on the number of players you choose.
-                            {% if selected_category == 'PAIRS' %}
-                            Players will be paired in the order entered (1st & 2nd, 3rd & 4th, etc.). Seeding is based on combined ranking points.
-                            {% endif %}
-                        </small>
-                    </div>
-                </div>
                 <script>
                     $(document).ready(function() {
                         console.log("Tournament create page ready");
@@ -293,6 +301,33 @@ document.addEventListener('DOMContentLoaded', function() {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 
+    // Tournament category change handler - reload page to show player selection
+    var categorySelect = document.getElementById('{{ form.tournament_category.id_for_label }}');
+    if (categorySelect) {
+        categorySelect.addEventListener('change', function() {
+            // Collect form values
+            var name = document.querySelector('input[name="name"]').value;
+            var date = document.querySelector('input[name="date"]').value;
+            var endDate = document.querySelector('input[name="end_date"]').value;
+            var numberOfStages = document.querySelector('input[name="number_of_stages"]').value;
+            var nameDisplayFormat = document.querySelector('select[name="name_display_format"]').value;
+            var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
+            var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
+            var notifyByMatrix = document.querySelector('input[name="notify_by_matrix"]').checked;
+            var showStructure = document.querySelector('input[name="show_structure"]').checked;
+            var url = "{% url 'tournament_create' %}?tournament_category=" + this.value +
+                      "&name=" + encodeURIComponent(name) +
+                      "&date=" + encodeURIComponent(date) +
+                      "&end_date=" + encodeURIComponent(endDate) +
+                      "&number_of_stages=" + encodeURIComponent(numberOfStages) +
+                      "&name_display_format=" + encodeURIComponent(nameDisplayFormat) +
+                      "&notify_by_email=" + notifyByEmail +
+                      "&notify_by_signal=" + notifyBySignal +
+                      "&notify_by_matrix=" + notifyByMatrix +
+                      "&show_structure=" + showStructure;
+            window.location = url;
+        });
+    }
 
     // Date synchronization logic
     const startDateField = document.querySelector('input[name="date"]');

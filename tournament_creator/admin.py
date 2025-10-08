@@ -24,7 +24,8 @@ admin.site.register(User, CustomUserAdmin)
 
 @admin.register(Player)
 class PlayerAdmin(admin.ModelAdmin):
-    list_display = ('first_name', 'last_name', 'ranking')
+    list_display = ('first_name', 'last_name', 'nickname', 'ranking')
+    list_editable = ('nickname',)
     ordering = ('ranking',)
 
 @admin.register(TournamentChart)

@@ -393,14 +393,18 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
 
         # Set display names for the Pairs/Players list block
         if is_pairs_tournament:
-            # Set display names for all players in all pairs
-            for pair in tournament.pairs.all():
+            # Get pairs and set display names
+            pairs_list = list(tournament.pairs.all())
+            for pair in pairs_list:
                 pair.player1.display_name = pair.player1.get_display_name_last_name_mode(all_players) if use_last_names else pair.player1.get_display_name(all_players)
                 pair.player2.display_name = pair.player2.get_display_name_last_name_mode(all_players) if use_last_names else pair.player2.get_display_name(all_players)
+            context['pairs_list'] = pairs_list
         else:
-            # Set display names for all players in the tournament
-            for player in tournament.players.all():
+            # Get players and set display names
+            players_list = list(tournament.players.all())
+            for player in players_list:
                 player.display_name = player.get_display_name_last_name_mode(all_players) if use_last_names else player.get_display_name(all_players)
+            context['players_list'] = players_list
 
         return context
         

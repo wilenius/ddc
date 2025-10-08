@@ -270,14 +270,14 @@
                         </thead>
                         <tbody>
                             {% if is_pairs_tournament %}
-                                {% for pair in tournament.pairs.all|dictsort:"seed" %}
+                                {% for pair in pairs_list|dictsort:"seed" %}
                                     <tr>
                                         <td>{{ pair.seed }}</td>
                                         <td>{{ pair.player1.display_name }} &<br>{{ pair.player2.display_name }}</td>
                                     </tr>
                                 {% endfor %}
                             {% else %}
-                                {% for player in tournament.players.all|dictsort:"ranking" %}
+                                {% for player in players_list|dictsort:"ranking" %}
                                     <tr>
                                         <td>{{ player.ranking }}</td>
                                         <td>{{ player.display_name }}</td>

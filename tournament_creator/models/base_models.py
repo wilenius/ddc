@@ -4,6 +4,7 @@ class Player(models.Model):
     """Represents a player registered in the system."""
     first_name = models.CharField(max_length=255)
     last_name = models.CharField(max_length=255)
+    nickname = models.CharField(max_length=255, blank=True, null=True, help_text="Optional nickname to display instead of first name")
     ranking = models.IntegerField()
     ranking_points = models.FloatField(default=0)
     
@@ -12,35 +13,43 @@ class Player(models.Model):
     
     def get_display_name(self, players=None):
         """
-        Returns a name for display with first name and enough of the last name to disambiguate.
+        Returns a name for display with first name (or nickname) and enough of the last name to disambiguate.
         If 'players' is provided, checks for duplicate first names and adds last name initial(s).
         """
-        # If no players list is provided or just one player, return first name
-        if not players or len(players) <= 1:
-            return self.first_name
+        # Use nickname if available, otherwise first name
+        display_first_name = self.nickname if self.nickname else self.first_name
 
-        # Find players with the same first name
+        # If no players list is provided or just one player, return first name/nickname
+        if not players or len(players) <= 1:
+            return display_first_name
+
+        # Find players with the same first name (for disambiguation purposes)
         same_first_name = [p for p in players if p.first_name == self.first_name and p.id != self.id]
 
-        # If no duplicate first names, return just first name
+        # If no duplicate first names, return just first name/nickname
         if not same_first_name:
-            return self.first_name
+            return display_first_name
 
         # Find minimum length of last name needed for disambiguation
         for i in range(1, len(self.last_name) + 1):
             my_surname_prefix = self.last_name[:i]
             # Check if this prefix is unique among players with same first name
             if not any(p.last_name.startswith(my_surname_prefix) for p in same_first_name):
-                return f"{self.first_name} {my_surname_prefix}."
+                return f"{display_first_name} {my_surname_prefix}."
 
         # If we need the full last name for disambiguation
-        return f"{self.first_name} {self.last_name}"
+        return f"{display_first_name} {self.last_name}"
 
     def get_display_name_last_name_mode(self, players=None):
         """
         Returns a name for display with last name and first name initial(s) for disambiguation.
         If 'players' is provided, checks for duplicate last names and adds first name initial(s).
+        If nickname is set, returns nickname instead.
         """
+        # If player has a nickname, use it regardless of mode
+        if self.nickname:
+            return self.nickname
+
         # If no players list is provided or just one player, return last name
         if not players or len(players) <= 1:
             return self.last_name

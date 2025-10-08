@@ -391,6 +391,17 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         if tournament.show_structure:
             context['tournament_structure'] = self._generate_tournament_structure(tournament, all_players, use_last_names)
 
+        # Set display names for the Pairs/Players list block
+        if is_pairs_tournament:
+            # Set display names for all players in all pairs
+            for pair in tournament.pairs.all():
+                pair.player1.display_name = pair.player1.get_display_name_last_name_mode(all_players) if use_last_names else pair.player1.get_display_name(all_players)
+                pair.player2.display_name = pair.player2.get_display_name_last_name_mode(all_players) if use_last_names else pair.player2.get_display_name(all_players)
+        else:
+            # Set display names for all players in the tournament
+            for player in tournament.players.all():
+                player.display_name = player.get_display_name_last_name_mode(all_players) if use_last_names else player.get_display_name(all_players)
+
         return context
         
     def apply_tiebreaks(self, tournament, player_scores):

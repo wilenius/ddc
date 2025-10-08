@@ -273,14 +273,14 @@
                                 {% for pair in tournament.pairs.all|dictsort:"seed" %}
                                     <tr>
                                         <td>{{ pair.seed }}</td>
-                                        <td>{{ pair.player1.first_name }} {{ pair.player1.last_name }} &<br>{{ pair.player2.first_name }} {{ pair.player2.last_name }}</td>
+                                        <td>{{ pair.player1.display_name }} &<br>{{ pair.player2.display_name }}</td>
                                     </tr>
                                 {% endfor %}
                             {% else %}
                                 {% for player in tournament.players.all|dictsort:"ranking" %}
                                     <tr>
                                         <td>{{ player.ranking }}</td>
-                                        <td>{{ player.first_name }} {{ player.last_name }}</td>
+                                        <td>{{ player.display_name }}</td>
                                     </tr>
                                 {% endfor %}
                             {% endif %}

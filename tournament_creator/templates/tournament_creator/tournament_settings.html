@@ -6,13 +6,13 @@
 <div class="row">
     <div class="col-md-10 offset-md-1">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>{{ tournament.name }} - Match Date Assignment</h2>
+            <h2>{{ tournament.name }} - Match Date and Time Assignment</h2>
             <a href="{% url 'tournament_detail' pk=tournament.id %}" class="btn btn-secondary">Back to Tournament</a>
         </div>
 
         <div class="alert alert-info">
             <i class="bi bi-info-circle"></i>
-            Assign dates to each match in your league-format tournament. Matches will be displayed by date in the tournament view.
+            Assign dates and times to each match in your league-format tournament. Matches will be displayed by date and time in the tournament view.
         </div>
 
         <form method="post">
@@ -40,6 +40,7 @@
                                     <tr>
                                         <th>Match</th>
                                         <th>Date</th>
+                                        <th>Time</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -59,6 +60,13 @@
                                                    style="max-width: 200px;"
                                                    value="{{ matchup.match_date|date:'Y-m-d'|default:'' }}">
                                         </td>
+                                        <td>
+                                            <input type="time"
+                                                   name="match_time_{{ matchup.id }}"
+                                                   class="form-control"
+                                                   style="max-width: 150px;"
+                                                   value="{{ matchup.match_time|time:'H:i'|default:'' }}">
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -69,7 +77,7 @@
             {% endfor %}
 
             <div class="text-center mb-4">
-                <button type="submit" class="btn btn-primary btn-lg">Save Match Dates</button>
+                <button type="submit" class="btn btn-primary btn-lg">Save Match Dates and Times</button>
                 <a href="{% url 'tournament_detail' pk=tournament.id %}" class="btn btn-secondary btn-lg">Cancel</a>
             </div>
         </form>

@@ -38,7 +38,7 @@
                 <h5 class="mb-0">Match Schedule</h5>
                 {% if is_league_format %}
                     <a href="{% url 'tournament_settings' tournament_id=tournament.id %}" class="btn btn-sm btn-primary">
-                        <i class="bi bi-calendar"></i> Assign Dates
+                        <i class="bi bi-calendar"></i> Assign Dates & Times
                     </a>
                 {% endif %}
             </div>
@@ -61,6 +61,9 @@
                                     {% for matchup in matchups_by_date|dict_get:date %}
                                         <tr>
                                             <td style="width: 60%;">
+                                                {% if matchup.match_time %}
+                                                    <strong>{{ matchup.match_time|time:"H:i" }}</strong> &ndash;
+                                                {% endif %}
                                                 {% if matchup.pair1 %}
                                                     {{ matchup.pair1.player1.display_name }} & {{ matchup.pair1.player2.display_name }}
                                                     vs
@@ -420,7 +423,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 // League format - extract from table cells
                 const cells = tableRow.querySelectorAll('td');
                 // Normalize whitespace - replace multiple whitespace (including newlines) with single space
-                const matchupText = cells[0].textContent.replace(/\s+/g, ' ').trim();
+                let matchupText = cells[0].textContent.replace(/\s+/g, ' ').trim();
+
+                // Remove time prefix if present (format: "HH:MM – ")
+                matchupText = matchupText.replace(/^\d{1,2}:\d{2}\s*–\s*/, '');
 
                 // Parse "Player1 & Player2 vs Player3 & Player4"
                 const parts = matchupText.split(' vs ');

@@ -7,6 +7,7 @@ from django.db import models
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 import json
+from datetime import time
 from ..models.base_models import TournamentChart, Matchup, TournamentArchetype, Player, Pair
 from ..models.tournament_types import PairsTournamentArchetype
 from ..models.scoring import MatchScore, PlayerScore, ManualTiebreakResolution
@@ -315,6 +316,10 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
                     if date_key not in matchups_by_date:
                         matchups_by_date[date_key] = []
                     matchups_by_date[date_key].append(matchup)
+
+            # Sort matchups within each date by time
+            for date_key in matchups_by_date:
+                matchups_by_date[date_key].sort(key=lambda m: m.match_time if m.match_time else time(0, 0))
 
             # Sort dates
             sorted_dates = sorted(matchups_by_date.keys())
@@ -913,7 +918,7 @@ class TournamentDeleteView(AdminRequiredMixin, DeleteView):
 @login_required
 def tournament_settings(request, tournament_id):
     """
-    View for assigning dates to matchups in league-format tournaments.
+    View for assigning dates and times to matchups in league-format tournaments.
     """
     tournament = get_object_or_404(TournamentChart, id=tournament_id)
 
@@ -925,16 +930,28 @@ def tournament_settings(request, tournament_id):
     matchups = Matchup.objects.filter(tournament_chart=tournament).order_by('stage__stage_number', 'round_number', 'court_number')
 
     if request.method == 'POST':
-        # Process the date assignments
+        # Process the date and time assignments
         for matchup in matchups:
             date_key = f'match_date_{matchup.id}'
+            time_key = f'match_time_{matchup.id}'
+
             if date_key in request.POST:
                 date_value = request.POST.get(date_key)
                 if date_value:
                     matchup.match_date = date_value
-                    matchup.save()
+                else:
+                    matchup.match_date = None
 
-        messages.success(request, 'Match dates have been updated successfully.')
+            if time_key in request.POST:
+                time_value = request.POST.get(time_key)
+                if time_value:
+                    matchup.match_time = time_value
+                else:
+                    matchup.match_time = None
+
+            matchup.save()
+
+        messages.success(request, 'Match dates and times have been updated successfully.')
         return redirect('tournament_detail', pk=tournament_id)
 
     context = {

@@ -190,6 +190,7 @@ class Matchup(models.Model):
     round_number = models.IntegerField()
     court_number = models.IntegerField()
     match_date = models.DateField(null=True, blank=True, help_text="For league-format tournaments, the date this match will be played")
+    match_time = models.TimeField(null=True, blank=True, help_text="For league-format tournaments, the time this match will be played")
     def __str__(self):
         return pair_or_player_str(self)
     class Meta:

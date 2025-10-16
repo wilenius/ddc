@@ -34,7 +34,7 @@ class TournamentChartAdmin(admin.ModelAdmin):
     list_display = ('name', 'date', 'end_date', 'number_of_rounds', 'number_of_courts')
     ordering = ('-date',)
     fieldsets = [
-        (None, {'fields': ('name', 'date', 'end_date', 'name_display_format')}),
+        (None, {'fields': ('name', 'date', 'end_date', 'name_display_format', 'show_structure')}),
         ('Notification Settings', {
             'fields': ('notify_by_email', 'notify_by_signal', 'notify_by_matrix')
         }),

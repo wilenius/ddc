@@ -93,6 +93,10 @@ A Django-based tournament management system specifically designed for Double Dis
    - Main site: http://127.0.0.1:8000/
    - Admin interface: http://127.0.0.1:8000/admin/
 
+### Getting started
+
+After running the setup steps above to create users navigate to the admin panel at `http://localhost:8000/admin/`. Create a user with `administrator` role that can be used in the application for creating tournaments and players.
+
 ### Production Deployment
 
 For production deployment, follow the development setup steps with these modifications:

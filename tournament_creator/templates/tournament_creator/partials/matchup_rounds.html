@@ -14,15 +14,8 @@
                                     {% with scores=matchup.scores.all %}
                                         <div class="mb-2">
                                             <strong {% if scores.exists and scores.first.winning_team == 1 %}class="text-primary"{% endif %}>
-                                                {% if matchup.pair1 %}
-                                                    {# Pairs tournament #}
-                                                    {{ matchup.pair1.player1.display_name }} &<br>
-                                                    {{ matchup.pair1.player2.display_name }}
-                                                {% else %}
-                                                    {# MoC tournament #}
-                                                    {{ matchup.pair1_player1.display_name }} &<br>
-                                                    {{ matchup.pair1_player2.display_name }}
-                                                {% endif %}
+                                                {{ matchup.get_team1_player1.display_name }} &<br>
+                                                {{ matchup.get_team1_player2.display_name }}
                                             </strong>
                                         </div>
                                     {% endwith %}
@@ -34,20 +27,14 @@
                                     {% with scores=matchup.scores.all %}
                                         <div class="mb-2">
                                             <strong {% if scores.exists and scores.first.winning_team == 2 %}class="text-primary"{% endif %}>
-                                                {% if matchup.pair2 %}
-                                                    {# Pairs tournament #}
-                                                    {{ matchup.pair2.player1.display_name }} &<br>
-                                                    {{ matchup.pair2.player2.display_name }}
-                                                {% else %}
-                                                    {# MoC tournament #}
-                                                    {{ matchup.pair2_player1.display_name }} &<br>
-                                                    {{ matchup.pair2_player2.display_name }}
-                                                {% endif %}
+                                                {{ matchup.get_team2_player1.display_name }} &<br>
+                                                {{ matchup.get_team2_player2.display_name }}
                                             </strong>
                                         </div>
                                     {% endwith %}
                                 </div>
                             </div>
+
                             {% if matchup.scores.exists %}
                                 {% for score in matchup.scores.all %}
                                     <div class="row text-center" style="font-size: 1.3em">

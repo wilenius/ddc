@@ -179,20 +179,49 @@ class Matchup(models.Model):
     """
     tournament_chart = models.ForeignKey(TournamentChart, on_delete=models.CASCADE, related_name='matchups')
     stage = models.ForeignKey(Stage, on_delete=models.CASCADE, related_name='matchups', null=True, blank=True)
+    
     # Fields for pairs tournaments
     pair1 = models.ForeignKey(Pair, on_delete=models.CASCADE, related_name='as_pair1', null=True, blank=True)
     pair2 = models.ForeignKey(Pair, on_delete=models.CASCADE, related_name='as_pair2', null=True, blank=True)
+    
     # Fields for MoC tournaments
     pair1_player1 = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='pair1_player1_matchups', null=True, blank=True)
     pair1_player2 = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='pair1_player2_matchups', null=True, blank=True)
     pair2_player1 = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='pair2_player1_matchups', null=True, blank=True)
     pair2_player2 = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='pair2_player2_matchups', null=True, blank=True)
+    
     round_number = models.IntegerField()
     court_number = models.IntegerField()
     match_date = models.DateField(null=True, blank=True, help_text="For league-format tournaments, the date this match will be played")
     match_time = models.TimeField(null=True, blank=True, help_text="For league-format tournaments, the time this match will be played")
+
+    def get_team1_player1(self):
+        if self.pair1:
+            return self.pair1.player1
+        else:
+            return self.pair1_player1
+
+    def get_team1_player2(self):
+        if self.pair1:
+            return self.pair1.player2
+        else:
+            return self.pair1_player2
+
+    def get_team2_player1(self):
+        if self.pair2:
+            return self.pair2.player1
+        else:
+            return self.pair2_player1
+
+    def get_team2_player2(self):
+        if self.pair2:
+            return self.pair2.player2
+        else:
+            return self.pair2_player2
+
     def __str__(self):
         return pair_or_player_str(self)
+        
     class Meta:
         ordering = ['stage__stage_number', 'round_number', 'court_number']
 

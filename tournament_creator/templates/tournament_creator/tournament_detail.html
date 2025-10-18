@@ -1,5 +1,6 @@
 {% extends 'tournament_creator/base.html' %}
 {% load tournament_filters %}
+{% load static %}
 
 {% block title %}Tournament Details - DDC Tournament Manager{% endblock %}
 
@@ -54,25 +55,44 @@
                     {% endif %}
 
                     {% for date in sorted_dates %}
-                        <h6 class="mt-3 mb-2">{{ date|date:"l, F j, Y" }}</h6>
+                        <h6 class="mt-3 mb-1">{{ date|date:"l, F j, Y" }}</h6>
                         <div class="table-responsive">
                             <table class="table table-sm table-bordered">
                                 <tbody>
                                     {% for matchup in matchups_by_date|dict_get:date %}
                                         <tr>
                                             <td style="width: 60%;">
-                                                {% if matchup.match_time %}
-                                                    <strong>{{ matchup.match_time|time:"H:i" }}</strong> &ndash;
-                                                {% endif %}
-                                                {% if matchup.pair1 %}
-                                                    {{ matchup.pair1.player1.display_name }} & {{ matchup.pair1.player2.display_name }}
+                                                {# Per-match calendar popup trigger wrapping icon and time #}
+                                                <div class="d-inline-block me-2 match-calendar-container"
+                                                     data-date="{{ date|date:'Y-m-d' }}"
+                                                     data-time="{% if matchup.match_time %}{{ matchup.match_time|time:'H:i' }}{% endif %}"
+                                                     data-summary="{{ matchup.get_team1_player1.display_name }} & {{ matchup.get_team1_player2.display_name }} vs {{ matchup.get_team2_player1.display_name }} & {{ matchup.get_team2_player2.display_name }}">
+                                                    
+                                                    <a href="#" class="add-match-calendar text-decoration-none d-inline-flex align-items-center" title="Add this match to calendar">
+                                                        <i class="bi bi-calendar-plus me-1"></i>
+                                                        {% if matchup.match_time %}
+                                                            <strong>{{ matchup.match_time|time:"H:i" }}</strong>
+                                                        {% endif %}
+                                                    </a>
+                                                    
+                                                    <div class="match-calendar-popup card shadow-sm p-2 small d-none position-absolute" style="z-index: 1000;">
+                                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                                            <strong>Add match to your calendar</strong>
+                                                            <button type="button" class="btn btn-sm btn-link text-danger close-match-popup" aria-label="Close">&times;</button>
+                                                        </div>
+                                                        <div class="match-calendar-options" data-init="0">
+                                                            <a href="#" class="match-gc-link">Google</a> |
+                                                            <a href="#" class="match-ics-link">Apple</a> |
+                                                            <a href="#" class="match-outlook-link">Outlook</a>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <span class="matchup-display">
+                                                    {{ matchup.get_team1_player1.display_name }} & {{ matchup.get_team1_player2.display_name }}
                                                     vs
-                                                    {{ matchup.pair2.player1.display_name }} & {{ matchup.pair2.player2.display_name }}
-                                                {% else %}
-                                                    {{ matchup.pair1_player1.display_name }} & {{ matchup.pair1_player2.display_name }}
-                                                    vs
-                                                    {{ matchup.pair2_player1.display_name }} & {{ matchup.pair2_player2.display_name }}
-                                                {% endif %}
+                                                    {{ matchup.get_team2_player1.display_name }} & {{ matchup.get_team2_player2.display_name }}
+                                                </span>
                                             </td>
                                             <td style="width: 40%;">
                                                 {% if matchup.scores.all %}
@@ -375,6 +395,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'tournament_creator/js/calendar_matchday.js' %}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     let currentSets = 0;
@@ -420,26 +441,29 @@ document.addEventListener('DOMContentLoaded', function() {
             // Check if we're in a table row (league format) or card (standard format)
             const tableRow = this.closest('tr');
             if (tableRow) {
-                // League format - extract from table cells
-                const cells = tableRow.querySelectorAll('td');
-                // Normalize whitespace - replace multiple whitespace (including newlines) with single space
-                let matchupText = cells[0].textContent.replace(/\s+/g, ' ').trim();
-
-                // Remove time prefix if present (format: "HH:MM – ")
-                matchupText = matchupText.replace(/^\d{1,2}:\d{2}\s*–\s*/, '');
-
-                // Parse "Player1 & Player2 vs Player3 & Player4"
-                const parts = matchupText.split(' vs ');
-                if (parts.length === 2) {
-                    team1Players = parts[0].trim();
-                    team2Players = parts[1].trim();
+                // League format - extract from matchup-display element
+                const matchupDisplay = tableRow.querySelector('.matchup-display');
+                if (matchupDisplay) {
+                    const matchupText = matchupDisplay.textContent.replace(/\s+/g, ' ').trim();
+                    
+                    // Parse "Player1 & Player2 vs Player3 & Player4"
+                    const parts = matchupText.split(' vs ');
+                    if (parts.length === 2) {
+                        team1Players = parts[0].trim();
+                        team2Players = parts[1].trim();
+                    } else {
+                        // Fallback if parsing fails
+                        team1Players = 'Team 1';
+                        team2Players = 'Team 2';
+                    }
                 } else {
-                    // Fallback if parsing fails
+                    // Fallback if matchup-display not found
                     team1Players = 'Team 1';
                     team2Players = 'Team 2';
                 }
 
                 // Check if there are existing scores - look for the span with class 'match-scores'
+                const cells = tableRow.querySelectorAll('td');
                 const scoresSpan = cells[1].querySelector('.match-scores');
                 existingScoresText = scoresSpan ? scoresSpan.textContent.trim() : null;
             } else {

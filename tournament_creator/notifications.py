@@ -3,8 +3,46 @@ from django.core.mail import send_mail
 from django.core.mail.backends.smtp import EmailBackend as SMTPEmailBackend
 from django.core.cache import cache
 import json
+import uuid
 import requests
 from django.conf import settings
+
+
+def _signal_jsonrpc_call(base_url, method, params=None, timeout=10):
+    """
+    Make a JSON-RPC 2.0 call to signal-cli HTTP daemon.
+
+    Args:
+        base_url: Base URL of signal-cli daemon (e.g., "http://127.0.0.1:8080")
+        method: JSON-RPC method name (e.g., "send", "listGroups")
+        params: Optional dict of parameters
+        timeout: Request timeout in seconds
+
+    Returns:
+        The 'result' field from the JSON-RPC response
+
+    Raises:
+        requests.exceptions.RequestException: On network errors
+        ValueError: On JSON-RPC error responses
+    """
+    rpc_url = f"{base_url.rstrip('/')}/api/v1/rpc"
+    payload = {
+        "jsonrpc": "2.0",
+        "method": method,
+        "id": str(uuid.uuid4())
+    }
+    if params:
+        payload["params"] = params
+
+    response = requests.post(rpc_url, json=payload, timeout=timeout)
+    response.raise_for_status()
+
+    result = response.json()
+    if "error" in result:
+        error_msg = result["error"].get("message", str(result["error"]))
+        raise ValueError(f"JSON-RPC error: {error_msg}")
+
+    return result.get("result")
 from tournament_creator.models.base_models import TournamentChart # Added import
 from tournament_creator.models.notifications import NotificationBackendSetting, NotificationLog
 from tournament_creator.models.auth import User
@@ -35,12 +73,12 @@ def get_signal_groups(force_refresh=False):
     if not signal_cli_rest_api_url or not signal_sender_phone_number:
         raise ValueError("Signal CLI URL or sender phone number not configured")
 
-    # Fetch groups from API - will raise RequestException if fails
-    groups_url = f"{signal_cli_rest_api_url.rstrip('/')}/v1/groups/{signal_sender_phone_number}"
-    response = requests.get(groups_url, timeout=10)
-    response.raise_for_status()
-
-    groups_data = response.json()
+    # Fetch groups from API using JSON-RPC - will raise RequestException if fails
+    groups_data = _signal_jsonrpc_call(
+        signal_cli_rest_api_url,
+        "listGroups",
+        {"account": signal_sender_phone_number}
+    )
 
     # Cache permanently (None = no expiration)
     cache.set('signal_groups', groups_data, None)
@@ -366,56 +404,60 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
         f"(by {user_who_recorded.username})"
     )
 
-    payload = {
-        "number": signal_sender_phone_number,
-        "message": message_body
-    }
+    # Send messages using JSON-RPC - need separate calls for recipients vs groups
+    all_errors = []
+    all_successes = []
 
-    # Combine usernames and group IDs into a single recipients list
-    all_recipients = []
+    # Send to individual recipients (phone numbers)
     if actual_recipient_usernames:
-        all_recipients.extend(actual_recipient_usernames)
-    if actual_recipient_group_ids:
-        all_recipients.extend(actual_recipient_group_ids)
+        for recipient in actual_recipient_usernames:
+            try:
+                result = _signal_jsonrpc_call(
+                    signal_cli_rest_api_url,
+                    "send",
+                    {
+                        "account": signal_sender_phone_number,
+                        "message": message_body,
+                        "recipient": [recipient]
+                    }
+                )
+                all_successes.append(f"recipient {recipient}")
+            except (requests.exceptions.RequestException, ValueError) as e:
+                all_errors.append(f"recipient {recipient}: {str(e)}")
 
-    if all_recipients:
-        payload["recipients"] = all_recipients
-        
-    send_url = f"{signal_cli_rest_api_url.rstrip('/')}/v2/send"
-    
-    try:
-        response = requests.post(send_url, json=payload, timeout=10)
-        response.raise_for_status()
-        log_details = f"Signal message sent. API Response: {response.status_code} - {response.text}"
-        if actual_recipient_usernames:
-            log_details += f" Usernames: {', '.join(actual_recipient_usernames)}."
-        if actual_recipient_group_ids:
-            log_details += f" Group IDs: {', '.join(actual_recipient_group_ids)}."
+    # Send to groups
+    if actual_recipient_group_ids:
+        for group_id in actual_recipient_group_ids:
+            try:
+                result = _signal_jsonrpc_call(
+                    signal_cli_rest_api_url,
+                    "send",
+                    {
+                        "account": signal_sender_phone_number,
+                        "message": message_body,
+                        "groupId": group_id
+                    }
+                )
+                all_successes.append(f"group {group_id}")
+            except (requests.exceptions.RequestException, ValueError) as e:
+                all_errors.append(f"group {group_id}: {str(e)}")
+
+    # Log results
+    if all_successes and not all_errors:
         NotificationLog.objects.create(
             backend_setting=signal_backend_setting, success=True,
-            details=log_details, match_result_log=match_result_log_instance
-        )
-    except requests.exceptions.HTTPError as e:
-        error_details = f"Signal API HTTP Error: {e.response.status_code} - {e.response.text}"
-        try:
-            error_json = e.response.json()
-            if 'error' in error_json:
-                 error_details += f" | API Error Message: {error_json['error']}"
-        except ValueError:
-            pass
-        NotificationLog.objects.create(
-            backend_setting=signal_backend_setting, success=False,
-            details=error_details, match_result_log=match_result_log_instance
-        )
-    except requests.exceptions.RequestException as e:
-        NotificationLog.objects.create(
-            backend_setting=signal_backend_setting, success=False,
-            details=f"Failed to send Signal message due to a request exception: {str(e)}",
+            details=f"Signal message sent to: {', '.join(all_successes)}",
             match_result_log=match_result_log_instance
         )
-    except Exception as e:
+    elif all_successes and all_errors:
+        NotificationLog.objects.create(
+            backend_setting=signal_backend_setting, success=True,
+            details=f"Signal message partially sent. Successes: {', '.join(all_successes)}. Errors: {', '.join(all_errors)}",
+            match_result_log=match_result_log_instance
+        )
+    else:
         NotificationLog.objects.create(
             backend_setting=signal_backend_setting, success=False,
-            details=f"An unexpected error occurred while sending Signal message: {str(e)}",
+            details=f"Failed to send Signal message. Errors: {', '.join(all_errors)}",
             match_result_log=match_result_log_instance
         )

@@ -1,4 +1,5 @@
 import requests
+from datetime import date
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
@@ -9,7 +10,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--division', type=str, default='O', help='Division to update (default: O)')
-        parser.add_argument('--year', type=str, default='2025', help='Year for rankings (default: 2025)')
+        parser.add_argument('--year', type=str, default=str(date.today().year), help='Year for rankings (default: current year)')
         parser.add_argument('--dry-run', action='store_true', help='Show what would be updated without making changes')
 
     def handle(self, *args, **options):
@@ -69,12 +70,17 @@ class Command(BaseCommand):
             response_player.raise_for_status()
             player_data = response_player.json()
             
+            if rankings_data is None:
+                raise CommandError(f"API returned no rankings data for year {year}. The year may not have data yet.")
+            if player_data is None:
+                raise CommandError("API returned no player data.")
+
             # Create a dictionary for player lookup
             player_dict = {player['id']: player['name'] for player in player_data}
-            
+
             # Filter rankings for requested division
             filtered_rankings = [
-                ranking for ranking in rankings_data 
+                ranking for ranking in rankings_data
                 if ranking['division'] == division
             ]
             

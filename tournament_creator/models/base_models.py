@@ -120,6 +120,13 @@ class TournamentChart(models.Model):
         ('LEAGUE', 'League (date-based matches)'),
     ]
     format_type = models.CharField(max_length=20, choices=FORMAT_TYPE_CHOICES, default='STANDARD', help_text="How matches are organized - by round/court or by date")
+    # Sets per match (used by MoC tournaments to scale automatic wins for the eliminated 1&2 pairing)
+    SETS_PER_MATCH_CHOICES = [(1, '1'), (2, '2'), (3, '3')]
+    default_sets_per_match = models.PositiveSmallIntegerField(
+        choices=SETS_PER_MATCH_CHOICES,
+        default=2,
+        help_text="MoC only: typical sets played per match. Used to scale the free win awarded to seeds 1 & 2 in formats where their pairing is eliminated."
+    )
     def __str__(self):
         return self.name
     class Meta:
@@ -165,6 +172,33 @@ class Stage(models.Model):
     def __str__(self):
         return f"{self.tournament.name} - {self.name}"
 
+class Pool(models.Model):
+    """
+    A group of pairs playing each other within a stage (e.g., 'Pool A' in a pool phase,
+    or a placement group like 'Places 9-12' in a finals stage).
+    """
+    stage = models.ForeignKey(Stage, on_delete=models.CASCADE, related_name='pools')
+    name = models.CharField(max_length=100, help_text="Display name for this pool (e.g., 'Pool A', 'Places 9-12')")
+    order = models.IntegerField(default=0, help_text="Display/processing order of this pool within its stage")
+    pairs = models.ManyToManyField(Pair, through='PoolPair', blank=True, related_name='pools')
+
+    class Meta:
+        ordering = ['stage', 'order']
+        unique_together = ['stage', 'order']
+
+    def __str__(self):
+        return f"{self.stage} - {self.name}"
+
+class PoolPair(models.Model):
+    """Membership of a pair in a pool, with its pool-internal seed position (1-based)."""
+    pool = models.ForeignKey(Pool, on_delete=models.CASCADE)
+    pair = models.ForeignKey(Pair, on_delete=models.CASCADE)
+    position = models.IntegerField(help_text="Pool-internal seed position (1-based)")
+
+    class Meta:
+        ordering = ['pool', 'position']
+        unique_together = ['pool', 'position']
+
 def pair_or_player_str(obj):
     if hasattr(obj, 'pair1') and hasattr(obj, 'pair2'):
         return f"{obj.pair1} vs {obj.pair2}"
@@ -179,6 +213,7 @@ class Matchup(models.Model):
     """
     tournament_chart = models.ForeignKey(TournamentChart, on_delete=models.CASCADE, related_name='matchups')
     stage = models.ForeignKey(Stage, on_delete=models.CASCADE, related_name='matchups', null=True, blank=True)
+    pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name='matchups', null=True, blank=True)
     
     # Fields for pairs tournaments
     pair1 = models.ForeignKey(Pair, on_delete=models.CASCADE, related_name='as_pair1', null=True, blank=True)

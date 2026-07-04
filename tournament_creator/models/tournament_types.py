@@ -1,5 +1,5 @@
 from django.db import models
-from .base_models import TournamentArchetype, Matchup, Pair, Player
+from .base_models import TournamentArchetype, Matchup, Pair, Player, Stage, Pool, PoolPair
 from typing import List, Dict, Optional, Any
 
 # Function to map TournamentArchetype database objects to their code implementations
@@ -19,6 +19,7 @@ def get_implementation(archetype: TournamentArchetype) -> Optional[Any]:
         "8 pairs doubles tournament": EightPairsSwedishFormat(),
         "9 pairs doubles tournament": NinePairsFormat(),
         "10 pairs doubles tournament": TenPairsFormat(),
+        "20 pairs euros format": EurosFormat(),
         # Monarch of the Court tournaments
         "5-player Monarch of the Court": MonarchOfTheCourt5(),
         "6-player Monarch of the Court": MonarchOfTheCourt6(),
@@ -187,6 +188,330 @@ class TenPairsFormat(PairsTournamentArchetype):
     ]
     name = "10 pairs doubles tournament"
     description = "Round robin: 9 rounds on 5 courts with 10 pairs."
+
+class EurosFormat(PairsTournamentArchetype):
+    """
+    'Euros' format for 20 pairs (used at European Open 2024/2026).
+
+    Phase 1: 5 pools of 4 (snake seeding), single round robin within each pool.
+    Phase 2: top 2 of each pool -> A Pool (10 pairs), bottom 2 -> B Pool (10 pairs),
+             full round robin within each pool (former pool-mates play again).
+    Finals:  provisional order (A Pool ranks 1-10, B Pool ranks 11-20) is sliced into
+             groups of 4 (1-4, 5-8, ...). Each group plays semis (1v4, 2v3), then the
+             winners play a placement final and the losers a consolation match.
+    Every pair plays 3 + 9 + 2 = 14 matches.
+
+    Phases 2 and 3 depend on earlier results, so their matchups are generated via
+    advance_to_next_stage() once the previous stage is complete.
+    """
+    name = "20 pairs euros format"
+    description = "Euros format: 5 pools of 4, then A/B pools of 10, then placement groups of 4."
+    number_of_pairs = 20
+    number_of_fields = 10
+    is_multi_phase = True
+
+    STAGE_DEFINITIONS = [
+        {'stage_number': 1, 'stage_type': 'POOL', 'name': 'Pool Phase 1'},
+        {'stage_number': 2, 'stage_type': 'POOL', 'name': 'Pool Phase 2'},
+        {'stage_number': 3, 'stage_type': 'PLAYOFF', 'name': 'Finals'},
+    ]
+
+    NUM_FIRST_PHASE_POOLS = 5
+
+    def calculate_rounds(self, num_pairs):
+        return 14  # 3 (phase 1) + 9 (phase 2) + 2 (finals)
+
+    def calculate_courts(self, num_pairs):
+        return self.number_of_fields
+
+    def create_stages(self, tournament) -> List[Stage]:
+        """Create the three stages. Each stage's standings are computed from its own matches."""
+        return [
+            Stage.objects.create(tournament=tournament, scoring_mode='RESET', **definition)
+            for definition in self.STAGE_DEFINITIONS
+        ]
+
+    def generate_matchups(self, tournament_chart, pairs: List[Pair], stage=None):
+        """Generate phase 1: snake-seed 20 pairs into 5 pools of 4, round robin in each."""
+        if len(pairs) != self.number_of_pairs:
+            raise ValueError(f"This tournament format requires exactly {self.number_of_pairs} pairs")
+        if stage is None:
+            raise ValueError("The euros format requires a stage for matchup generation")
+
+        sorted_pairs = sorted(pairs, key=lambda p: p.seed)
+
+        # Snake seeding: seeds 1-5 go to pools A-E, 6-10 to E-A, 11-15 to A-E, 16-20 to E-A.
+        pool_members = [[] for _ in range(self.NUM_FIRST_PHASE_POOLS)]
+        for block_idx in range(0, len(sorted_pairs), self.NUM_FIRST_PHASE_POOLS):
+            block = sorted_pairs[block_idx:block_idx + self.NUM_FIRST_PHASE_POOLS]
+            if (block_idx // self.NUM_FIRST_PHASE_POOLS) % 2 == 1:
+                block = list(reversed(block))
+            for pool_idx, pair in enumerate(block):
+                pool_members[pool_idx].append(pair)
+
+        for pool_idx, members in enumerate(pool_members):
+            pool = self._create_pool(
+                stage,
+                name=f"Pool {chr(ord('A') + pool_idx)}",
+                order=pool_idx,
+                ordered_pairs=members,
+            )
+            self._generate_pool_round_robin(
+                tournament_chart, stage, pool, members,
+                schedule=FourPairsSwedishFormat.schedule,
+                court_offset=pool_idx * 2,
+            )
+
+    def advance_to_next_stage(self, tournament) -> Stage:
+        """
+        Generate the next stage's matchups from the previous stage's results.
+        Raises ValueError if the previous stage is incomplete or everything is generated.
+        Returns the stage that was populated.
+        """
+        stages = list(tournament.stages.order_by('stage_number'))
+        if len(stages) != 3:
+            raise ValueError("This tournament does not have the expected three stages")
+        stage1, stage2, stage3 = stages
+
+        if not stage2.matchups.exists():
+            if not self.is_stage_complete(stage1):
+                raise ValueError(f"{stage1.name} is not complete yet - record all scores first")
+            self._generate_second_phase(tournament, stage1, stage2)
+            return stage2
+        elif not stage3.matchups.exists():
+            if not self.is_stage_complete(stage2):
+                raise ValueError(f"{stage2.name} is not complete yet - record all scores first")
+            self._generate_finals(tournament, stage2, stage3)
+            return stage3
+        else:
+            raise ValueError("All stages have already been generated")
+
+    def get_next_stage_to_generate(self, tournament) -> Optional[Stage]:
+        """Returns the first stage without matchups, or None if all are generated."""
+        return tournament.stages.filter(matchups__isnull=True).order_by('stage_number').first()
+
+    def is_stage_complete(self, stage) -> bool:
+        """A stage is complete when it has matchups and every matchup has a recorded score."""
+        matchups = stage.matchups.annotate(num_scores=models.Count('scores'))
+        return matchups.exists() and not matchups.filter(num_scores=0).exists()
+
+    def _generate_second_phase(self, tournament, stage1, stage2):
+        """Top 2 of each phase-1 pool -> A Pool, bottom 2 -> B Pool; fresh 10-team round robins."""
+        rankings = [
+            [entry['pair'] for entry in self.get_pool_standings(pool)]
+            for pool in stage1.pools.order_by('order')
+        ]
+        # Pool-internal seeding: pool winners first (in pool order), then runners-up, etc.
+        a_pool_pairs = [r[0] for r in rankings] + [r[1] for r in rankings]
+        b_pool_pairs = [r[2] for r in rankings] + [r[3] for r in rankings]
+
+        for order, (name, members, court_offset) in enumerate([
+            ("A Pool", a_pool_pairs, 0),
+            ("B Pool", b_pool_pairs, 5),
+        ]):
+            pool = self._create_pool(stage2, name=name, order=order, ordered_pairs=members)
+            self._generate_pool_round_robin(
+                tournament, stage2, pool, members,
+                schedule=TenPairsFormat.schedule,
+                court_offset=court_offset,
+            )
+
+    def _generate_finals(self, tournament, stage2, stage3):
+        """Slice the provisional order into groups of 4; each group plays semis 1v4 and 2v3."""
+        a_pool, b_pool = list(stage2.pools.order_by('order'))
+        provisional_order = (
+            [entry['pair'] for entry in self.get_pool_standings(a_pool)]
+            + [entry['pair'] for entry in self.get_pool_standings(b_pool)]
+        )
+
+        for group_idx in range(5):
+            base = group_idx * 4
+            group = provisional_order[base:base + 4]
+            pool = self._create_pool(
+                stage3,
+                name=f"Places {base + 1}-{base + 4}",
+                order=group_idx,
+                ordered_pairs=group,
+            )
+            # Semifinals: 1v4 and 2v3 (positions within the group)
+            Matchup.objects.create(
+                tournament_chart=tournament, stage=stage3, pool=pool,
+                pair1=group[0], pair2=group[3],
+                round_number=1, court_number=group_idx * 2 + 1,
+            )
+            Matchup.objects.create(
+                tournament_chart=tournament, stage=stage3, pool=pool,
+                pair1=group[1], pair2=group[2],
+                round_number=1, court_number=group_idx * 2 + 2,
+            )
+
+    def maybe_generate_placement_matches(self, tournament, matchup):
+        """
+        Called after a score is recorded. If both semifinals of a finals group are now
+        scored and the placement matches don't exist yet, create them (winners play for
+        the higher placement, losers for the lower).
+        """
+        pool = matchup.pool
+        if pool is None or matchup.stage is None or matchup.stage.stage_type != 'PLAYOFF':
+            return
+        if pool.matchups.filter(round_number=2).exists():
+            return
+        semis = list(pool.matchups.filter(round_number=1).order_by('court_number'))
+        if len(semis) != 2 or any(not semi.scores.exists() for semi in semis):
+            return
+
+        winner1, loser1 = self._matchup_winner_loser(semis[0])
+        winner2, loser2 = self._matchup_winner_loser(semis[1])
+        Matchup.objects.create(
+            tournament_chart=tournament, stage=matchup.stage, pool=pool,
+            pair1=winner1, pair2=winner2,
+            round_number=2, court_number=semis[0].court_number,
+        )
+        Matchup.objects.create(
+            tournament_chart=tournament, stage=matchup.stage, pool=pool,
+            pair1=loser1, pair2=loser2,
+            round_number=2, court_number=semis[1].court_number,
+        )
+
+    def get_pool_standings(self, pool) -> List[Dict]:
+        """
+        Rank the pairs in a pool by this pool's matches only.
+        Order: wins, then (within ties) head-to-head wins, head-to-head point difference,
+        overall point difference, and finally original seed.
+        Returns a list of dicts: {'pair', 'wins', 'matches_played', 'point_difference', 'position'}.
+        """
+        members = [pp.pair for pp in PoolPair.objects.filter(pool=pool).select_related(
+            'pair', 'pair__player1', 'pair__player2').order_by('position')]
+        stats = {pair.id: {'pair': pair, 'wins': 0, 'matches_played': 0, 'point_difference': 0}
+                 for pair in members}
+
+        scored_matchups = []
+        for m in pool.matchups.select_related('pair1', 'pair2').prefetch_related('scores'):
+            scores = list(m.scores.all())
+            if not scores:
+                continue
+            scored_matchups.append(m)
+            winner, _ = self._matchup_winner_loser(m, scores)
+            pair1_pd = sum(s.point_difference if s.winning_team == 1 else -s.point_difference
+                           for s in scores)
+            stats[m.pair1_id]['matches_played'] += 1
+            stats[m.pair2_id]['matches_played'] += 1
+            stats[m.pair1_id]['point_difference'] += pair1_pd
+            stats[m.pair2_id]['point_difference'] -= pair1_pd
+            stats[winner.id]['wins'] += 1
+
+        # Base order: wins desc, then PD desc, then seed asc
+        ordered = sorted(stats.values(),
+                         key=lambda e: (-e['wins'], -e['point_difference'], e['pair'].seed))
+
+        # Refine tie groups (same wins) with head-to-head results
+        result = []
+        idx = 0
+        while idx < len(ordered):
+            group = [ordered[idx]]
+            while idx + len(group) < len(ordered) and ordered[idx + len(group)]['wins'] == group[0]['wins']:
+                group.append(ordered[idx + len(group)])
+            if len(group) > 1:
+                group = self._sort_tied_group(group, scored_matchups)
+            result.extend(group)
+            idx += len(group)
+
+        for position, entry in enumerate(result, start=1):
+            entry['position'] = position
+        return result
+
+    def _sort_tied_group(self, group, scored_matchups):
+        """Sort a group of tied entries by head-to-head wins/PD among the tied pairs."""
+        tied_ids = {entry['pair'].id for entry in group}
+        h2h = {pair_id: {'wins': 0, 'pd': 0} for pair_id in tied_ids}
+        for m in scored_matchups:
+            if m.pair1_id not in tied_ids or m.pair2_id not in tied_ids:
+                continue
+            scores = list(m.scores.all())
+            winner, _ = self._matchup_winner_loser(m, scores)
+            pair1_pd = sum(s.point_difference if s.winning_team == 1 else -s.point_difference
+                           for s in scores)
+            h2h[winner.id]['wins'] += 1
+            h2h[m.pair1_id]['pd'] += pair1_pd
+            h2h[m.pair2_id]['pd'] -= pair1_pd
+        return sorted(group, key=lambda e: (
+            -h2h[e['pair'].id]['wins'],
+            -h2h[e['pair'].id]['pd'],
+            -e['point_difference'],
+            e['pair'].seed,
+        ))
+
+    def get_final_standings(self, tournament) -> Optional[List[Dict]]:
+        """
+        Final placements 1-20 once all finals placement matches are played.
+        Returns a list of dicts {'position', 'pair'}, or None if the finals aren't done.
+        """
+        stage3 = tournament.stages.filter(stage_number=3).first()
+        if stage3 is None or not stage3.matchups.exists():
+            return None
+
+        standings = []
+        for group_idx, pool in enumerate(stage3.pools.order_by('order')):
+            placement_matches = list(pool.matchups.filter(round_number=2).order_by('court_number'))
+            if len(placement_matches) != 2 or any(not m.scores.exists() for m in placement_matches):
+                return None
+            base = group_idx * 4
+            final, consolation = placement_matches
+            final_winner, final_loser = self._matchup_winner_loser(final)
+            consolation_winner, consolation_loser = self._matchup_winner_loser(consolation)
+            standings.extend([
+                {'position': base + 1, 'pair': final_winner},
+                {'position': base + 2, 'pair': final_loser},
+                {'position': base + 3, 'pair': consolation_winner},
+                {'position': base + 4, 'pair': consolation_loser},
+            ])
+        return standings
+
+    def _create_pool(self, stage, name, order, ordered_pairs) -> Pool:
+        pool = Pool.objects.create(stage=stage, name=name, order=order)
+        for position, pair in enumerate(ordered_pairs, start=1):
+            PoolPair.objects.create(pool=pool, pair=pair, position=position)
+        return pool
+
+    def _generate_pool_round_robin(self, tournament_chart, stage, pool, ordered_pairs,
+                                   schedule, court_offset):
+        """Create matchups for a pool using a schedule of pool-internal seed positions."""
+        pairs_by_position = {position: pair for position, pair in enumerate(ordered_pairs, start=1)}
+        for round_idx, round_matches in enumerate(schedule, 1):
+            for match_idx, (pos1, pos2) in enumerate(round_matches, 1):
+                Matchup.objects.create(
+                    tournament_chart=tournament_chart,
+                    stage=stage,
+                    pool=pool,
+                    pair1=pairs_by_position[pos1],
+                    pair2=pairs_by_position[pos2],
+                    round_number=round_idx,
+                    court_number=court_offset + match_idx,
+                )
+
+    def _matchup_winner_loser(self, matchup, scores=None):
+        """
+        Winning pair of a matchup, mirroring record_match_result: most sets won,
+        then total points, then the first set as the last resort.
+        """
+        if scores is None:
+            scores = list(matchup.scores.order_by('set_number'))
+        if not scores:
+            raise ValueError(f"Matchup {matchup.id} has no recorded scores")
+        team1_sets = sum(1 for s in scores if s.winning_team == 1)
+        team2_sets = len(scores) - team1_sets
+        if team1_sets != team2_sets:
+            team1_won = team1_sets > team2_sets
+        else:
+            team1_points = sum(s.team1_score for s in scores)
+            team2_points = sum(s.team2_score for s in scores)
+            if team1_points != team2_points:
+                team1_won = team1_points > team2_points
+            else:
+                team1_won = scores[0].winning_team == 1
+        if team1_won:
+            return matchup.pair1, matchup.pair2
+        return matchup.pair2, matchup.pair1
 
 # -- Monarch of the Court base --
 class MoCTournamentArchetype(TournamentArchetype):
@@ -359,14 +684,17 @@ class MonarchOfTheCourt6(MoCTournamentArchetype):
 class MonarchOfTheCourt7(MoCTournamentArchetype):
     name = "7-player Monarch of the Court"
     description = "MoC: 7-player specific schedule."
-    
+
     def calculate_rounds(self, num_players):
         if num_players != 7:
             raise ValueError("This tournament type requires exactly 7 players")
         return 10
-    
+
     def calculate_courts(self, num_players):
         return 1
+
+    def get_automatic_wins(self, num_players):
+        return {0: 1, 1: 1}
     
     def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 7:
@@ -477,14 +805,17 @@ class MonarchOfTheCourt9(MoCTournamentArchetype):
 class MonarchOfTheCourt10(MoCTournamentArchetype):
     name = "10-player Monarch of the Court"
     description = "MoC: 10-player specific schedule with 2 courts."
-    
+
     def calculate_rounds(self, num_players):
         if num_players != 10:
             raise ValueError("This tournament type requires exactly 10 players")
         return 11
-    
+
     def calculate_courts(self, num_players):
         return 2
+
+    def get_automatic_wins(self, num_players):
+        return {0: 1, 1: 1}
     
     def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 10:
@@ -742,14 +1073,17 @@ class MonarchOfTheCourt13(MoCTournamentArchetype):
 class MonarchOfTheCourt14(MoCTournamentArchetype):
     name = "14-player Monarch of the Court"
     description = "MoC: 14-player specific schedule with 3 courts."
-    
+
     def calculate_rounds(self, num_players):
         if num_players != 14:
             raise ValueError("This tournament type requires exactly 14 players")
         return 15
-    
+
     def calculate_courts(self, num_players):
         return 3
+
+    def get_automatic_wins(self, num_players):
+        return {0: 1, 1: 1}
     
     def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 14:
@@ -812,14 +1146,17 @@ class MonarchOfTheCourt14(MoCTournamentArchetype):
 class MonarchOfTheCourt15(MoCTournamentArchetype):
     name = "15-player Monarch of the Court"
     description = "MoC: 15-player specific schedule with 3 courts."
-    
+
     def calculate_rounds(self, num_players):
         if num_players != 15:
             raise ValueError("This tournament type requires exactly 15 players")
         return 18
-    
+
     def calculate_courts(self, num_players):
         return 3
+
+    def get_automatic_wins(self, num_players):
+        return {0: 1, 1: 1}
     
     def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 15:

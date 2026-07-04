@@ -59,6 +59,9 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         # Preserve show_structure checkbox state
         if 'show_structure' in self.request.GET:
             initial['show_structure'] = self.request.GET.get('show_structure') == 'true'
+        # Preserve sets per match (MoC only)
+        if 'default_sets_per_match' in self.request.GET:
+            initial['default_sets_per_match'] = self.request.GET.get('default_sets_per_match')
         return initial
 
     def get_context_data(self, **kwargs):
@@ -121,10 +124,17 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
                     return render(request, self.template_name, context)
 
                 num_pairs = num_players // 2
-                archetype = TournamentArchetype.objects.get(
-                    tournament_category='PAIRS',
-                    name=f"{num_pairs} pairs doubles tournament"
-                )
+                # 20 pairs use the multi-phase euros format; smaller counts are plain round robins
+                if num_pairs == 20:
+                    archetype = TournamentArchetype.objects.get(
+                        tournament_category='PAIRS',
+                        name="20 pairs euros format"
+                    )
+                else:
+                    archetype = TournamentArchetype.objects.get(
+                        tournament_category='PAIRS',
+                        name=f"{num_pairs} pairs doubles tournament"
+                    )
             else:
                 messages.error(request, "Please select a tournament type")
                 context = self.get_context_data(object=None)
@@ -202,6 +212,22 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             archetype_impl = get_implementation(archetype)
             tournament.number_of_rounds = archetype_impl.calculate_rounds(len(pairs))
             tournament.number_of_courts = archetype_impl.calculate_courts(len(pairs))
+
+            if getattr(archetype_impl, 'is_multi_phase', False):
+                # Multi-phase format (euros): fixed stage structure, later stages are
+                # generated from results via the "Generate next phase" action.
+                tournament.number_of_stages = len(archetype_impl.STAGE_DEFINITIONS)
+                tournament.save()
+                tournament.pairs.set(pairs)
+                stages = archetype_impl.create_stages(tournament)
+                archetype_impl.generate_matchups(tournament, pairs, stage=stages[0])
+                messages.success(
+                    request,
+                    f"Tournament created with {len(pairs)} pairs. {stages[0].name} is ready; "
+                    "later phases are generated once the previous phase is complete."
+                )
+                return redirect('tournament_detail', pk=tournament.pk)
+
             tournament.save()
             tournament.pairs.set(pairs)
 
@@ -410,6 +436,54 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
             for player in players_list:
                 player.display_name = player.get_display_name_last_name_mode(all_players) if use_last_names else player.get_display_name(all_players)
             context['players_list'] = players_list
+
+        # Multi-phase (euros) support: pools, per-pool standings, phase advancement state
+        from ..models.tournament_types import get_implementation
+        archetype_impl = get_implementation(tournament.archetype) if tournament.archetype else None
+        is_multi_phase = bool(archetype_impl and getattr(archetype_impl, 'is_multi_phase', False))
+        context['is_multi_phase'] = is_multi_phase
+        if is_multi_phase:
+            def set_pair_display_names(pair):
+                for player in (pair.player1, pair.player2):
+                    player.display_name = (
+                        player.get_display_name_last_name_mode(all_players) if use_last_names
+                        else player.get_display_name(all_players)
+                    )
+
+            pool_data_by_stage = {}
+            for stage in stages:
+                pool_blocks = []
+                for pool in stage.pools.order_by('order'):
+                    standings = archetype_impl.get_pool_standings(pool)
+                    for entry in standings:
+                        set_pair_display_names(entry['pair'])
+                    pool_blocks.append({
+                        'pool': pool,
+                        'matchups': [m for m in all_matchups if m.pool_id == pool.id],
+                        'standings': standings,
+                    })
+                if pool_blocks:
+                    pool_data_by_stage[stage.id] = pool_blocks
+            context['pool_data_by_stage'] = pool_data_by_stage
+
+            # State of the "Generate next phase" action
+            next_stage = archetype_impl.get_next_stage_to_generate(tournament)
+            can_advance_stage = False
+            if next_stage:
+                previous_stage = next((s for s in stages if s.stage_number == next_stage.stage_number - 1), None)
+                can_advance_stage = bool(previous_stage and archetype_impl.is_stage_complete(previous_stage))
+            context['next_stage'] = next_stage
+            context['can_advance_stage'] = can_advance_stage and context['can_record_scores']
+
+            # Final standings once the finals placement matches are all played
+            final_standings = archetype_impl.get_final_standings(tournament)
+            if final_standings:
+                for entry in final_standings:
+                    set_pair_display_names(entry['pair'])
+            context['final_standings'] = final_standings
+            # For multi-phase formats the tournament is complete only when all phases
+            # have been generated and played through
+            context['tournament_complete'] = final_standings is not None
 
         return context
         
@@ -865,7 +939,21 @@ class TournamentDownloadResultsView(SpectatorAccessMixin, View):
         lines.append("Final Standings:")
         lines.append("-" * 60)
 
-        if is_pairs_tournament:
+        from ..models.tournament_types import get_implementation
+        archetype_impl = get_implementation(tournament.archetype) if tournament.archetype else None
+        final_standings = None
+        if archetype_impl and getattr(archetype_impl, 'is_multi_phase', False):
+            final_standings = archetype_impl.get_final_standings(tournament)
+
+        if final_standings:
+            # Multi-phase (euros) format: placements come from the finals groups
+            for entry in final_standings:
+                player1 = entry['pair'].player1
+                player2 = entry['pair'].player2
+                full_name1 = f"{player1.first_name} {player1.last_name}".strip()
+                full_name2 = f"{player2.first_name} {player2.last_name}".strip()
+                lines.append(f"{entry['position']}. {full_name1} & {full_name2}")
+        elif is_pairs_tournament:
             # For doubles tournaments, use PairScore
             from ..models.scoring import PairScore
             pair_scores = list(PairScore.objects.filter(tournament=tournament))
@@ -959,6 +1047,36 @@ def tournament_settings(request, tournament_id):
         'matchups': matchups,
     }
     return render(request, 'tournament_creator/tournament_settings.html', context)
+
+@login_required
+@require_POST
+def generate_next_stage(request, tournament_id):
+    """
+    Generate the next phase of a multi-phase tournament (e.g., euros format) from the
+    completed previous phase's results.
+    """
+    tournament = get_object_or_404(TournamentChart, id=tournament_id)
+
+    can_manage = (
+        getattr(request.user, 'is_admin', lambda: False)()
+        or getattr(request.user, 'is_player', lambda: False)()
+    )
+    if not can_manage:
+        messages.error(request, "You don't have permission to generate the next phase.")
+        return redirect('tournament_detail', pk=tournament_id)
+
+    from ..models.tournament_types import get_implementation
+    archetype_impl = get_implementation(tournament.archetype) if tournament.archetype else None
+    if not archetype_impl or not getattr(archetype_impl, 'is_multi_phase', False):
+        messages.error(request, "This tournament format doesn't support phase generation.")
+        return redirect('tournament_detail', pk=tournament_id)
+
+    try:
+        new_stage = archetype_impl.advance_to_next_stage(tournament)
+        messages.success(request, f"{new_stage.name} has been generated!")
+    except ValueError as e:
+        messages.error(request, str(e))
+    return redirect('tournament_detail', pk=tournament_id)
 
 @login_required
 def manual_tiebreak_resolution(request, tournament_id):
@@ -1154,21 +1272,30 @@ def record_match_result(request, tournament_id, matchup_id):
             # Log and continue, similar to email.
 
         # Update player scores
-        # Get automatic wins from the tournament archetype if applicable
+        # Get automatic wins from the tournament archetype if applicable.
+        # Seeds are derived from the FULL tournament roster, not the players in this matchup —
+        # otherwise auto-wins leak to whoever happens to be lowest-ranked within a given match.
         from ..models.tournament_types import get_implementation
         archetype_impl = None
         automatic_wins_map = {}
+        all_tournament_players = list(tournament.players.all())
+        sorted_tournament_players = sorted(
+            all_tournament_players,
+            key=lambda p: p.ranking if p.ranking is not None else 9999
+        )
+        player_to_seed = {p.id: idx for idx, p in enumerate(sorted_tournament_players)}
+
         if hasattr(tournament, 'archetype') and tournament.archetype:
             archetype_impl = get_implementation(tournament.archetype)
             if archetype_impl and hasattr(archetype_impl, 'get_automatic_wins'):
-                automatic_wins_map = archetype_impl.get_automatic_wins(len(players))
+                base_map = archetype_impl.get_automatic_wins(len(all_tournament_players))
+                # Scale by sets-per-match: an eliminated match would have produced N wins
+                # for the winning pair, so the compensating bonus scales the same way.
+                multiplier = tournament.default_sets_per_match
+                automatic_wins_map = {seed: wins * multiplier for seed, wins in base_map.items()}
 
         # Determine if this is a MoC tournament (sets count as separate matches)
         is_moc = _is_moc_tournament_helper(tournament)
-
-        # Sort players by ranking to get their seed index
-        sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
-        player_to_seed = {p.id: idx for idx, p in enumerate(sorted_players)}
 
         for player in players:
             player_score, _ = PlayerScore.objects.get_or_create(
@@ -1282,6 +1409,11 @@ def record_match_result(request, tournament_id, matchup_id):
                     pair_score.total_point_difference += total_pd
 
                 pair_score.save()
+
+        # For multi-phase pairs formats (euros), create the placement matches of a
+        # finals group as soon as both of its semifinals have scores.
+        if is_pairs_tournament and archetype_impl and getattr(archetype_impl, 'is_multi_phase', False):
+            archetype_impl.maybe_generate_placement_matches(tournament, matchup)
 
         return JsonResponse({'status': 'success'})
         

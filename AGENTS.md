@@ -157,6 +157,9 @@ document.addEventListener('DOMContentLoaded', function() {
    - Stage types: `POOL` (pool play), `PLAYOFF` (playoffs/finals), `ROUND_ROBIN`
    - Scoring modes: `CUMULATIVE` (scores carry over) or `RESET` (fresh start)
    - Matchups are linked to specific stages
+   - `Pool` model groups pairs within a stage (e.g., "Pool A", "Places 9-12"); ordered
+     membership via `PoolPair` (`position` = pool-internal seed). `Matchup.pool` is a
+     nullable FK — only multi-phase formats (euros) set it
 
 4. **Matchups and Scoring**
    - `Matchup` represents a single match (between pairs or individuals)
@@ -308,6 +311,32 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
   - Head-to-head records
   - Point differential
   - Automatic win integration
+
+- **Euros format (multi-phase pairs, 20 pairs)** — used at European Open 2024/2026
+  - Archetype: `EurosFormat` in `tournament_types.py` (DB row "20 pairs euros format");
+    auto-detected when a PAIRS tournament is created with 40 players
+  - Three fixed stages, all `RESET` scoring:
+    - **Pool Phase 1**: snake seeding into 5 pools of 4 (Pool A: seeds 1/10/11/20 ...
+      Pool E: 5/6/15/16), round robin within each pool (reuses the 4-pair schedule)
+    - **Pool Phase 2**: top 2 of each pool → A Pool, bottom 2 → B Pool; full fresh
+      10-team round robin in each (former pool-mates play again; 9 games per team)
+    - **Finals**: provisional order (A Pool ranks 1-10, B Pool 11-20) sliced into groups
+      of 4 ("Places 1-4" ... "Places 17-20"); each group plays semis 1v4 and 2v3, then
+      placement matches (auto-generated when both semis are scored, via a hook in
+      `record_match_result`)
+  - Every pair plays 3 + 9 + 2 = 14 matches; 10 courts (2 per pool / 5 per pool / 2 per group)
+  - Phases 2 and 3 are generated manually via the "Generate next phase" button
+    (`generate_next_stage` view), enabled once the previous phase is fully scored.
+    Advancement is one-way: editing a semi's score after placement matches were
+    generated does NOT regenerate the pairings
+  - Pool standings (per pool, per stage): wins → head-to-head wins among tied →
+    head-to-head PD → overall PD → seed. Final placements 1-20 come from the finals
+    groups (`get_final_standings`); the global `PairScore` standings are hidden for
+    this format
+  - Tests: `tournament_creator/tests/test_euros_format.py`
+  - TODO: Make Euros format work for 11-40 pairs (currently only exactly 20 pairs;
+    generalizing needs per-count pool layouts and an explicit format selector in the
+    creation UI, since e.g. 4/8 pairs would collide with the plain round-robin formats)
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.

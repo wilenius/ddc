@@ -185,6 +185,20 @@
                         {% if form.tournament_category.help_text %}<small class="form-text text-muted">{{ form.tournament_category.help_text }}</small>{% endif %}
                     </div>
 
+                    {% if selected_category == 'MOC' %}
+                    <div class="mb-3">
+                        <label for="{{ form.default_sets_per_match.id_for_label }}">
+                            Sets per match
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="Typical sets played per MoC match. Determines the size of the free win awarded to seeds 1 & 2 in formats that eliminate their pairing (7, 10, 11, 14, 15 players)."></i>
+                        </label>
+                        {{ form.default_sets_per_match }}
+                        {% if form.default_sets_per_match.errors %}<div class="invalid-feedback d-block">{{ form.default_sets_per_match.errors|join:", " }}</div>{% endif %}
+                    </div>
+                    {% endif %}
+
                     {% if selected_category %}
                     <div class="mb-3">
                         <label for="{{ moc_player_form.players.id_for_label }}">
@@ -328,6 +342,9 @@ document.addEventListener('DOMContentLoaded', function() {
             var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
             var notifyByMatrix = document.querySelector('input[name="notify_by_matrix"]').checked;
             var showStructure = document.querySelector('input[name="show_structure"]').checked;
+            // sets-per-match field only exists in the DOM after MoC is selected; preserve if present
+            var setsPerMatchEl = document.querySelector('select[name="default_sets_per_match"]');
+            var setsPerMatch = setsPerMatchEl ? setsPerMatchEl.value : '';
             var url = "{% url 'tournament_create' %}?tournament_category=" + this.value +
                       "&name=" + encodeURIComponent(name) +
                       "&date=" + encodeURIComponent(date) +
@@ -338,7 +355,8 @@ document.addEventListener('DOMContentLoaded', function() {
                       "&notify_by_email=" + notifyByEmail +
                       "&notify_by_signal=" + notifyBySignal +
                       "&notify_by_matrix=" + notifyByMatrix +
-                      "&show_structure=" + showStructure;
+                      "&show_structure=" + showStructure +
+                      (setsPerMatch ? "&default_sets_per_match=" + encodeURIComponent(setsPerMatch) : "");
             window.location = url;
         });
     }

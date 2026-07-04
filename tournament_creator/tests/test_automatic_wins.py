@@ -1,7 +1,14 @@
 from django.test import TestCase
 from django.utils import timezone
 from ..models import Player, TournamentChart, TournamentArchetype
-from ..models.tournament_types import MonarchOfTheCourt11, get_implementation
+from ..models.tournament_types import (
+    MonarchOfTheCourt7,
+    MonarchOfTheCourt10,
+    MonarchOfTheCourt11,
+    MonarchOfTheCourt14,
+    MonarchOfTheCourt15,
+    get_implementation,
+)
 from ..models.scoring import PlayerScore
 
 
@@ -52,6 +59,26 @@ class AutomaticWinsTests(TestCase):
             self.assertTrue(hasattr(impl, 'get_automatic_wins'))
         except TournamentArchetype.DoesNotExist:
             self.skipTest("11-player MoC archetype not found in database")
+
+    def test_all_eliminated_pair_formats_define_automatic_wins(self):
+        """Per kodiak.md, formats 7, 10, 11, 14, 15 eliminate the 1&2 pair and award them a free win."""
+        cases = [
+            (MonarchOfTheCourt7(), 7),
+            (MonarchOfTheCourt10(), 10),
+            (MonarchOfTheCourt11(), 11),
+            (MonarchOfTheCourt14(), 14),
+            (MonarchOfTheCourt15(), 15),
+        ]
+        for impl, n in cases:
+            auto_wins = impl.get_automatic_wins(n)
+            self.assertEqual(auto_wins.get(0), 1, f"{n}-player MoC: seed 1 missing auto win")
+            self.assertEqual(auto_wins.get(1), 1, f"{n}-player MoC: seed 2 missing auto win")
+            for seed in range(2, n):
+                self.assertIsNone(auto_wins.get(seed), f"{n}-player MoC: seed {seed+1} should not have an auto win")
+
+    def test_default_sets_per_match_field(self):
+        """TournamentChart should default sets-per-match to 2."""
+        self.assertEqual(self.tournament.default_sets_per_match, 2)
 
     def test_player_score_has_automatic_wins_field(self):
         """Test that PlayerScore model has automatic_wins field."""

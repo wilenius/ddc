@@ -35,7 +35,7 @@ class TournamentCreationForm(forms.ModelForm):
             'name', 'date', 'end_date', 'number_of_stages', 'format_type',
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
             'signal_recipient_usernames', 'signal_recipient_group_ids',
-            'name_display_format', 'show_structure'
+            'name_display_format', 'show_structure', 'default_sets_per_match'
         ]
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Summer League 2025'}),
@@ -47,6 +47,7 @@ class TournamentCreationForm(forms.ModelForm):
             'number_of_stages': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 60px;', 'min': '1', 'max': '9'}),
             'format_type': forms.Select(attrs={'class': 'form-select'}),
             'name_display_format': forms.Select(attrs={'class': 'form-select'}),
+            'default_sets_per_match': forms.Select(attrs={'class': 'form-select', 'style': 'width: 80px;'}),
             'signal_recipient_usernames': forms.Textarea(attrs={
                 'rows': 2,
                 'placeholder': 'Optional: +358401234567, +358409876543 (leave empty to use global settings)',
@@ -64,6 +65,7 @@ class TournamentCreationForm(forms.ModelForm):
             'number_of_stages': 'Stages',
             'format_type': 'Format',
             'name_display_format': 'Player Names',
+            'default_sets_per_match': 'Sets per match',
         }
         help_texts = {
             'name': '',
@@ -71,6 +73,7 @@ class TournamentCreationForm(forms.ModelForm):
             'format_type': '',
             'name_display_format': '',
             'show_structure': '',
+            'default_sets_per_match': '',
         }
 
     def __init__(self, *args, **kwargs):
@@ -88,6 +91,17 @@ class TournamentCreationForm(forms.ModelForm):
         # Make tournament_category not required when editing (only needed during creation)
         if self.instance and self.instance.pk:
             self.fields['tournament_category'].required = False
+
+        # Field has a model default; let it apply when omitted (e.g., for non-MoC submissions
+        # where the field isn't shown in the UI).
+        self.fields['default_sets_per_match'].required = False
+
+    def clean_default_sets_per_match(self):
+        # Fall back to the model's default when empty (the field is hidden for non-MoC).
+        value = self.cleaned_data.get('default_sets_per_match')
+        if value in (None, ''):
+            return TournamentChart._meta.get_field('default_sets_per_match').default
+        return value
 
         # Populate group picker choices from cache
         from django.core.cache import cache

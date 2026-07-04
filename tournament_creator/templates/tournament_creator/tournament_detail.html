@@ -149,8 +149,71 @@
                             <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
                                  id="stage-{{ stage.id }}"
                                  role="tabpanel">
-                                {% regroup matchups_by_stage|dict_get:stage.id by round_number as round_list %}
-                                {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores %}
+                                {% if is_multi_phase %}
+                                    {% with pool_blocks=pool_data_by_stage|dict_get:stage.id %}
+                                        {% if pool_blocks %}
+                                            {% for block in pool_blocks %}
+                                                <h4 class="mt-3 mb-3">{{ block.pool.name }}</h4>
+                                                {% if stage.stage_type != 'PLAYOFF' %}
+                                                    <div class="table-responsive mb-3">
+                                                        <table class="table table-sm table-striped" style="max-width: 500px;">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Pos</th>
+                                                                    <th>Pair</th>
+                                                                    <th>Played</th>
+                                                                    <th>Wins</th>
+                                                                    <th>Point Diff</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {% for entry in block.standings %}
+                                                                    <tr>
+                                                                        <td><strong>{{ entry.position }}</strong></td>
+                                                                        <td>{{ entry.pair.player1.display_name }} & {{ entry.pair.player2.display_name }}</td>
+                                                                        <td>{{ entry.matches_played }}</td>
+                                                                        <td>{{ entry.wins }}</td>
+                                                                        <td>{{ entry.point_difference }}</td>
+                                                                    </tr>
+                                                                {% endfor %}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                {% endif %}
+                                                {% regroup block.matchups by round_number as round_list %}
+                                                {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores %}
+                                                {% if not forloop.last %}<hr class="my-4">{% endif %}
+                                            {% endfor %}
+                                            {% if next_stage and can_advance_stage and stage.stage_number|add:1 == next_stage.stage_number %}
+                                                <hr class="my-4">
+                                                <form method="post" action="{% url 'generate_next_stage' tournament.id %}"
+                                                      onsubmit="return confirm('Generate {{ next_stage.name }} from the {{ stage.name }} results? This cannot be undone.')">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-primary">
+                                                        Generate {{ next_stage.name }}
+                                                    </button>
+                                                </form>
+                                            {% endif %}
+                                        {% else %}
+                                            <div class="alert alert-info">
+                                                {{ stage.name }} has not been generated yet. It will be created from
+                                                the previous phase's results once all of its matches are played.
+                                            </div>
+                                            {% if next_stage and next_stage.id == stage.id and can_advance_stage %}
+                                                <form method="post" action="{% url 'generate_next_stage' tournament.id %}"
+                                                      onsubmit="return confirm('Generate {{ stage.name }} from the previous phase results? This cannot be undone.')">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-primary">
+                                                        Generate {{ stage.name }}
+                                                    </button>
+                                                </form>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endwith %}
+                                {% else %}
+                                    {% regroup matchups_by_stage|dict_get:stage.id by round_number as round_list %}
+                                    {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores %}
+                                {% endif %}
                             </div>
                         {% endfor %}
                     </div>
@@ -190,6 +253,40 @@
                 <h5 class="mb-0">{% if tournament_complete %}Final Standings{% else %}Current Standings{% endif %}</h5>
             </div>
             <div class="card-body">
+                {% if is_multi_phase %}
+                    {% if final_standings %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Pos</th>
+                                        <th>Pair</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for entry in final_standings %}
+                                        <tr>
+                                            <td><strong>{{ entry.position }}</strong></td>
+                                            <td>{{ entry.pair.player1.display_name }} &<br>{{ entry.pair.player2.display_name }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% if tournament_complete %}
+                        <div class="card-footer text-center">
+                            <a href="{% url 'tournament_download_results' tournament.pk %}" class="btn btn-primary btn-sm">
+                                <i class="bi bi-download"></i> Download Tournament Results
+                            </a>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted mb-0">
+                            Pool standings are shown within each phase tab.
+                            Final placements appear here once the finals are complete.
+                        </p>
+                    {% endif %}
+                {% else %}
                 <div class="table-responsive">
                     <table class="table table-striped">
                         <thead>
@@ -251,6 +348,7 @@
                         <i class="bi bi-download"></i> Download Tournament Results
                     </a>
                 </div>
+                {% endif %}
                 {% endif %}
             </div>
         </div>

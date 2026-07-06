@@ -375,10 +375,21 @@ class EurosFormat(PairsTournamentArchetype):
 
     def get_pool_standings(self, pool) -> List[Dict]:
         """
-        Rank the pairs in a pool by this pool's matches only.
-        Order: wins, then (within ties) head-to-head wins, head-to-head point difference,
-        overall point difference, and finally original seed.
-        Returns a list of dicts: {'pair', 'wins', 'matches_played', 'point_difference', 'position'}.
+        Rank the pairs in a pool by this pool's matches only, breaking win ties
+        with the DDC doubles tiebreak rules:
+          Step 1: fewest forfeits — TODO: forfeits cannot be recorded yet; once
+                  they can, apply this before the head-to-head steps.
+          Step 2: record against the other tied teams
+          Step 3: point differential against the other tied teams
+          Step 4: record against teams placed above the tied group
+          Step 5: point differential against teams placed above the tied group
+          Step 6: point differential against all teams in the pool
+          Step 7: manual resolution by the director (ManualPoolTiebreakResolution),
+                  applied on top of the automatic order; original seed is the
+                  last automatic resort.
+        Returns a list of dicts: {'pair', 'wins', 'matches_played', 'point_difference',
+        'position'}, plus tiebreak stats ('h2h_wins', 'h2h_losses', 'h2h_pd',
+        'above_wins', 'above_pd', 'manually_resolved', 'manual_reason') on tied entries.
         """
         members = [pp.pair for pp in PoolPair.objects.filter(pool=pool).select_related(
             'pair', 'pair__player1', 'pair__player2').order_by('position')]
@@ -404,7 +415,7 @@ class EurosFormat(PairsTournamentArchetype):
         ordered = sorted(stats.values(),
                          key=lambda e: (-e['wins'], -e['point_difference'], e['pair'].seed))
 
-        # Refine tie groups (same wins) with head-to-head results
+        # Refine tie groups (same wins) with the tiebreak steps
         result = []
         idx = 0
         while idx < len(ordered):
@@ -412,7 +423,8 @@ class EurosFormat(PairsTournamentArchetype):
             while idx + len(group) < len(ordered) and ordered[idx + len(group)]['wins'] == group[0]['wins']:
                 group.append(ordered[idx + len(group)])
             if len(group) > 1:
-                group = self._sort_tied_group(group, scored_matchups)
+                above_ids = {entry['pair'].id for entry in ordered[:idx]}
+                group = self._sort_tied_group(group, scored_matchups, above_ids, pool)
             result.extend(group)
             idx += len(group)
 
@@ -420,26 +432,68 @@ class EurosFormat(PairsTournamentArchetype):
             entry['position'] = position
         return result
 
-    def _sort_tied_group(self, group, scored_matchups):
-        """Sort a group of tied entries by head-to-head wins/PD among the tied pairs."""
+    def _sort_tied_group(self, group, scored_matchups, above_ids, pool):
+        """
+        Sort a group of entries tied on wins, per the DDC doubles tiebreak rules
+        (see get_pool_standings). Annotates each entry with the stats used so the
+        UI can show how the tie was resolved.
+        """
         tied_ids = {entry['pair'].id for entry in group}
-        h2h = {pair_id: {'wins': 0, 'pd': 0} for pair_id in tied_ids}
+        records = {pair_id: {'h2h_wins': 0, 'h2h_losses': 0, 'h2h_pd': 0,
+                             'above_wins': 0, 'above_pd': 0}
+                   for pair_id in tied_ids}
         for m in scored_matchups:
-            if m.pair1_id not in tied_ids or m.pair2_id not in tied_ids:
+            in1, in2 = m.pair1_id in tied_ids, m.pair2_id in tied_ids
+            if not (in1 or in2):
                 continue
             scores = list(m.scores.all())
-            winner, _ = self._matchup_winner_loser(m, scores)
+            winner, loser = self._matchup_winner_loser(m, scores)
             pair1_pd = sum(s.point_difference if s.winning_team == 1 else -s.point_difference
                            for s in scores)
-            h2h[winner.id]['wins'] += 1
-            h2h[m.pair1_id]['pd'] += pair1_pd
-            h2h[m.pair2_id]['pd'] -= pair1_pd
-        return sorted(group, key=lambda e: (
-            -h2h[e['pair'].id]['wins'],
-            -h2h[e['pair'].id]['pd'],
-            -e['point_difference'],
+            # Steps 2-3: games among the tied teams
+            if in1 and in2:
+                records[winner.id]['h2h_wins'] += 1
+                records[loser.id]['h2h_losses'] += 1
+                records[m.pair1_id]['h2h_pd'] += pair1_pd
+                records[m.pair2_id]['h2h_pd'] -= pair1_pd
+            # Steps 4-5: games against teams that placed above the tied group
+            elif in1 and m.pair2_id in above_ids:
+                if winner.id == m.pair1_id:
+                    records[m.pair1_id]['above_wins'] += 1
+                records[m.pair1_id]['above_pd'] += pair1_pd
+            elif in2 and m.pair1_id in above_ids:
+                if winner.id == m.pair2_id:
+                    records[m.pair2_id]['above_wins'] += 1
+                records[m.pair2_id]['above_pd'] -= pair1_pd
+
+        # Pairs that haven't played yet are only nominally tied — don't show
+        # tiebreak info for them
+        for entry in group:
+            if entry['matches_played']:
+                entry['tied'] = True
+                entry.update(records[entry['pair'].id])
+        group = sorted(group, key=lambda e: (
+            -records[e['pair'].id]['h2h_wins'],      # Step 2
+            -records[e['pair'].id]['h2h_pd'],        # Step 3
+            -records[e['pair'].id]['above_wins'],    # Step 4
+            -records[e['pair'].id]['above_pd'],      # Step 5
+            -e['point_difference'],                  # Step 6
             e['pair'].seed,
         ))
+
+        # Step 7: manual resolution by the director overrides the automatic order
+        from .scoring import ManualPoolTiebreakResolution
+        resolution = ManualPoolTiebreakResolution.objects.filter(
+            pool=pool, wins_tied_at=group[0]['wins']).first()
+        if resolution:
+            auto_order = [e['pair'].id for e in group]
+            rank = {pair_id: i for i, pair_id in enumerate(resolution.resolved_order)}
+            group = sorted(group, key=lambda e: rank.get(e['pair'].id, len(rank)))
+            order_differs = auto_order != [e['pair'].id for e in group]
+            for entry in group:
+                entry['manually_resolved'] = order_differs
+                entry['manual_reason'] = resolution.reason if order_differs else ''
+        return group
 
     def get_final_standings(self, tournament) -> Optional[List[Dict]]:
         """

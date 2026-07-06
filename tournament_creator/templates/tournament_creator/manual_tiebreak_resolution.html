@@ -14,7 +14,60 @@
                 tournament directors can manually set the order. Drag and drop players to reorder them, then save the resolution.
             </div>
             
-            {% if not ties %}
+            {% if is_multi_phase %}
+                {% if not pool_ties %}
+                    <div class="alert alert-success">
+                        <h4>No Ties Found</h4>
+                        <p>There are no tied pairs in the pools of this tournament that require manual resolution.</p>
+                    </div>
+                {% else %}
+                    {% for tie in pool_ties %}
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h4>{{ tie.stage.name }} — {{ tie.pool.name }}: pairs tied at {{ tie.wins }} wins</h4>
+                                {% if tie.resolved %}
+                                    <span class="badge bg-success">Already Resolved</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Automatic resolution in use</span>
+                                {% endif %}
+                            </div>
+                            <div class="card-body">
+                                <form method="post">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="pool_id" value="{{ tie.pool.id }}">
+                                    <input type="hidden" name="wins_level" value="{{ tie.wins }}">
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Pair Order (1st to last):</label>
+                                        <div id="sortable-pool-{{ tie.pool.id }}-{{ tie.wins }}" class="sortable-list">
+                                            {% for entry in tie.entries %}
+                                                <div class="sortable-item" data-entity-id="{{ entry.pair.id }}">
+                                                    <span class="handle">⋮⋮</span>
+                                                    <strong>{{ entry.pair.player1 }} & {{ entry.pair.player2 }}</strong>&nbsp;
+                                                    ({{ entry.wins }} wins, {{ entry.point_difference }} PD;
+                                                    H2H: {{ entry.h2h_wins }}W/{{ entry.h2h_losses }}L ({{ entry.h2h_pd }}PD),
+                                                    VS Above: {{ entry.above_wins }}W/{{ entry.above_pd }}PD)
+                                                    <input type="hidden" name="pair_order" value="{{ entry.pair.id }}">
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="reason-{{ tie.pool.id }}-{{ tie.wins }}" class="form-label">Reason (optional):</label>
+                                        <textarea class="form-control" id="reason-{{ tie.pool.id }}-{{ tie.wins }}" name="reason" rows="3" placeholder="Explain why this manual resolution was needed (e.g. forfeit)..."></textarea>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <button type="submit" class="btn btn-primary">Save Resolution</button>
+                                        <a href="{% url 'tournament_detail' tournament.pk %}" class="btn btn-secondary">Cancel</a>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% elif not ties %}
                 <div class="alert alert-success">
                     <h4>No Ties Found</h4>
                     <p>There are no tied players in this tournament that require manual resolution.</p>
@@ -107,22 +160,21 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Make each tie group sortable
-    {% for tie in ties %}
-        var el = document.getElementById('sortable-{{ tie.wins }}');
-        var sortable = Sortable.create(el, {
+    document.querySelectorAll('.sortable-list').forEach(function(el) {
+        Sortable.create(el, {
             handle: '.handle',
             animation: 150,
             onUpdate: function (evt) {
                 // Update hidden inputs to reflect new order
                 var items = evt.to.children;
                 for (var i = 0; i < items.length; i++) {
-                    var input = items[i].querySelector('input[name="player_order"]');
-                    var playerId = items[i].getAttribute('data-player-id');
-                    input.value = playerId;
+                    var input = items[i].querySelector('input[type="hidden"]');
+                    var entityId = items[i].getAttribute('data-entity-id') || items[i].getAttribute('data-player-id');
+                    input.value = entityId;
                 }
             }
         });
-    {% endfor %}
+    });
 });
 </script>
 {% endblock %}

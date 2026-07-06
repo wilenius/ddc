@@ -156,7 +156,7 @@
                                                 <h4 class="mt-3 mb-3">{{ block.pool.name }}</h4>
                                                 {% if stage.stage_type != 'PLAYOFF' %}
                                                     <div class="table-responsive mb-3">
-                                                        <table class="table table-sm table-striped" style="max-width: 500px;">
+                                                        <table class="table table-sm table-striped" style="max-width: 700px;">
                                                             <thead>
                                                                 <tr>
                                                                     <th>Pos</th>
@@ -164,20 +164,33 @@
                                                                     <th>Played</th>
                                                                     <th>Wins</th>
                                                                     <th>Point Diff</th>
+                                                                    <th>Tiebreak</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
                                                                 {% for entry in block.standings %}
                                                                     <tr>
-                                                                        <td><strong>{{ entry.position }}</strong></td>
+                                                                        <td><strong>{{ entry.position }}{% if entry.manually_resolved %}*{% endif %}</strong></td>
                                                                         <td>{{ entry.pair.player1.display_name }} & {{ entry.pair.player2.display_name }}</td>
                                                                         <td>{{ entry.matches_played }}</td>
                                                                         <td>{{ entry.wins }}</td>
                                                                         <td>{{ entry.point_difference }}</td>
+                                                                        <td>
+                                                                            {% if entry.tied %}
+                                                                                <span title="H2H: {{ entry.h2h_wins }}W/{{ entry.h2h_losses }}L, {{ entry.h2h_pd }}PD{% if entry.above_wins != 0 or entry.above_pd != 0 %}, VS Above: {{ entry.above_wins }}W/{{ entry.above_pd }}PD{% endif %}{% if entry.manually_resolved and entry.manual_reason %} — {{ entry.manual_reason }}{% endif %}">
+                                                                                    H2H: {{ entry.h2h_wins }}W/{{ entry.h2h_losses }}L ({{ entry.h2h_pd }}PD){% if entry.above_wins != 0 or entry.above_pd != 0 %}, VS Above: {{ entry.above_wins }}W/{{ entry.above_pd }}PD{% endif %}{% if entry.manually_resolved %}*{% endif %}
+                                                                                </span>
+                                                                            {% else %}
+                                                                                -
+                                                                            {% endif %}
+                                                                        </td>
                                                                     </tr>
                                                                 {% endfor %}
                                                             </tbody>
                                                         </table>
+                                                        {% if block.has_manual_resolution %}
+                                                            <div class="text-muted small mt-1">*) Resolved manually</div>
+                                                        {% endif %}
                                                     </div>
                                                 {% endif %}
                                                 {% regroup block.matchups by round_number as round_list %}

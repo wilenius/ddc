@@ -1,5 +1,5 @@
 from django.db import models
-from .base_models import Player, Matchup, TournamentChart
+from .base_models import Player, Matchup, TournamentChart, Pool
 from .auth import User
 
 class MatchScore(models.Model):
@@ -105,3 +105,25 @@ class ManualTiebreakResolution(models.Model):
     
     def __str__(self):
         return f"Tiebreak resolution for {self.tournament.name} at {self.wins_tied_at} wins"
+
+
+class ManualPoolTiebreakResolution(models.Model):
+    """
+    Manual tiebreak resolution for a tie within a pool (multi-phase pairs
+    formats such as euros). Used when the automatic criteria cannot resolve
+    a tie — for example after a forfeit, which the automatic tiebreaks do
+    not yet take into account.
+    """
+    pool = models.ForeignKey(Pool, on_delete=models.CASCADE, related_name='tiebreak_resolutions')
+    wins_tied_at = models.IntegerField()  # Number of wins where the tie occurred
+    resolved_order = models.JSONField()  # List of pair IDs in resolved order (best first)
+    reason = models.TextField(blank=True)
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    resolved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['pool', 'wins_tied_at']
+        ordering = ['-resolved_at']
+
+    def __str__(self):
+        return f"Tiebreak resolution for {self.pool} at {self.wins_tied_at} wins"

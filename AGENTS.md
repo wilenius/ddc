@@ -329,10 +329,15 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
     (`generate_next_stage` view), enabled once the previous phase is fully scored.
     Advancement is one-way: editing a semi's score after placement matches were
     generated does NOT regenerate the pairings
-  - Pool standings (per pool, per stage): wins → head-to-head wins among tied →
-    head-to-head PD → overall PD → seed. Final placements 1-20 come from the finals
-    groups (`get_final_standings`); the global `PairScore` standings are hidden for
-    this format
+  - Pool standings (per pool, per stage) follow the DDC doubles tiebreak rules within
+    groups tied on wins: h2h wins among tied → h2h PD among tied → record vs teams
+    placed above the tied group → PD vs teams above → overall pool PD → seed; a
+    director can override the order via `ManualPoolTiebreakResolution` ("Resolve
+    Tiebreaks" button — rules step 7; also the fallback for forfeits, which can't be
+    recorded yet — rules step 1, TODO). Tied entries carry their tiebreak stats and
+    the standings table shows how each tie was resolved. Final placements 1-20 come
+    from the finals groups (`get_final_standings`); the global `PairScore` standings
+    are hidden for this format
   - Tests: `tournament_creator/tests/test_euros_format.py`
   - TODO: Make Euros format work for 11-40 pairs (currently only exactly 20 pairs;
     generalizing needs per-count pool layouts and an explicit format selector in the

@@ -8,9 +8,9 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 import json
 from datetime import time
-from ..models.base_models import TournamentChart, Matchup, TournamentArchetype, Player, Pair
+from ..models.base_models import TournamentChart, Matchup, TournamentArchetype, Player, Pair, Pool
 from ..models.tournament_types import PairsTournamentArchetype
-from ..models.scoring import MatchScore, PlayerScore, ManualTiebreakResolution
+from ..models.scoring import MatchScore, PlayerScore, ManualTiebreakResolution, ManualPoolTiebreakResolution
 from ..models.logging import MatchResultLog
 from ..models.notifications import NotificationBackendSetting # Added import
 from ..views.auth import SpectatorAccessMixin, PlayerOrAdminRequiredMixin, AdminRequiredMixin
@@ -461,6 +461,7 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
                         'pool': pool,
                         'matchups': [m for m in all_matchups if m.pool_id == pool.id],
                         'standings': standings,
+                        'has_manual_resolution': any(e.get('manually_resolved') for e in standings),
                     })
                 if pool_blocks:
                     pool_data_by_stage[stage.id] = pool_blocks
@@ -1082,10 +1083,16 @@ def generate_next_stage(request, tournament_id):
 def manual_tiebreak_resolution(request, tournament_id):
     """
     View to manually resolve tiebreaks for tournament directors.
-    Shows tied players and allows manual ordering.
+    Shows tied players and allows manual ordering. For multi-phase pairs
+    formats (euros) the ties are per pool instead of global.
     """
     tournament = get_object_or_404(TournamentChart, id=tournament_id)
-    
+
+    from ..models.tournament_types import get_implementation
+    archetype_impl = get_implementation(tournament.archetype) if tournament.archetype else None
+    if archetype_impl and getattr(archetype_impl, 'is_multi_phase', False):
+        return _manual_pool_tiebreak_resolution(request, tournament, archetype_impl)
+
     # Get player scores for this tournament
     player_scores = PlayerScore.objects.filter(tournament=tournament).order_by('-wins', '-total_point_difference')
     
@@ -1150,6 +1157,55 @@ def manual_tiebreak_resolution(request, tournament_id):
         'tournament': tournament,
         'ties': ties
     })
+
+
+def _manual_pool_tiebreak_resolution(request, tournament, archetype_impl):
+    """
+    Manual tiebreak resolution for multi-phase pairs formats: ties are within a
+    pool, and the resolved order overrides the automatic tiebreak (step 7 of the
+    rules — e.g. for forfeits, or when all other criteria fail).
+    """
+    if request.method == 'POST':
+        pool = get_object_or_404(Pool, id=request.POST.get('pool_id'), stage__tournament=tournament)
+        wins_level = int(request.POST.get('wins_level'))
+        pair_order = [int(pid) for pid in request.POST.getlist('pair_order')]
+        reason = request.POST.get('reason', '')
+
+        ManualPoolTiebreakResolution.objects.filter(pool=pool, wins_tied_at=wins_level).delete()
+        ManualPoolTiebreakResolution.objects.create(
+            pool=pool,
+            wins_tied_at=wins_level,
+            resolved_order=pair_order,
+            reason=reason,
+            resolved_by=request.user
+        )
+        messages.success(request, f'Manual tiebreak resolution saved for {pool.name} at {wins_level} wins.')
+        return redirect('tournament_detail', pk=tournament.id)
+
+    pool_ties = []
+    for pool in Pool.objects.filter(stage__tournament=tournament).order_by('stage__stage_number', 'order'):
+        standings = archetype_impl.get_pool_standings(pool)
+        tied_by_wins = {}
+        for entry in standings:
+            if entry.get('tied'):
+                tied_by_wins.setdefault(entry['wins'], []).append(entry)
+        for wins, entries in tied_by_wins.items():
+            pool_ties.append({
+                'pool': pool,
+                'stage': pool.stage,
+                'wins': wins,
+                'entries': entries,
+                'resolved': ManualPoolTiebreakResolution.objects.filter(
+                    pool=pool, wins_tied_at=wins
+                ).exists()
+            })
+
+    return render(request, 'tournament_creator/manual_tiebreak_resolution.html', {
+        'tournament': tournament,
+        'pool_ties': pool_ties,
+        'is_multi_phase': True,
+    })
+
 
 def _is_moc_tournament_helper(tournament):
     """

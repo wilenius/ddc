@@ -2,7 +2,7 @@ from .auth import User
 from .base_models import Player, Pair, TournamentChart, TournamentPlayer, TournamentPair, Matchup, TournamentArchetype, Stage, Pool, PoolPair
 from .logging import MatchResultLog
 from .rankings import RankingsUpdate
-from .scoring import MatchScore, PlayerScore, PairScore, ManualTiebreakResolution
+from .scoring import MatchScore, PlayerScore, PairScore, ManualTiebreakResolution, ManualPoolTiebreakResolution
 from .tournament_types import (
     FourPairsSwedishFormat, EightPairsSwedishFormat, EurosFormat,
     MonarchOfTheCourt5, MonarchOfTheCourt6, MonarchOfTheCourt7, MonarchOfTheCourt8,

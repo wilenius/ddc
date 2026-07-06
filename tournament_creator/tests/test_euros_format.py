@@ -1,6 +1,7 @@
 from django.test import TestCase, Client
 from django.urls import reverse
-from ..models import Player, Pair, TournamentChart, TournamentArchetype, Matchup, MatchScore, Pool, PoolPair, User
+from ..models import (Player, Pair, TournamentChart, TournamentArchetype, Matchup, MatchScore,
+                      Pool, PoolPair, User, ManualPoolTiebreakResolution)
 from ..models.tournament_types import EurosFormat, get_implementation
 
 
@@ -277,6 +278,98 @@ class EurosStandingsTest(EurosFormatTestBase):
         # H2H PD: seed 10 = +10-2 = +8, seed 20 = +2-2 = 0, seed 11 = -10+2 = -8
         self.assertEqual([e['pair'].seed for e in standings], [1, 10, 20, 11])
 
+    def _make_five_pair_pool(self):
+        """
+        A synthetic 5-pair pool (seeds 1-5) on stage 1 where seeds 2/3/4 end up
+        in a circular tie with level head-to-head wins AND level head-to-head PD,
+        so the tie can only be resolved by the later steps:
+          - seed 1 beats everyone (margins vs 2/3/4: 2, 6, 10)
+          - circle: 2 beats 3, 3 beats 4, 4 beats 2, all by 4 (h2h: 1 win, 0 PD each)
+          - seed 5 loses to everyone (margins vs 2/3/4: 1, 3, 13)
+        PD vs above (step 5): 2 → -2, 3 → -6, 4 → -10 (order 2, 3, 4)
+        Overall PD (step 6):  2 → -1, 3 → -3, 4 → +3 (order 4, 2, 3) — different!
+        """
+        pool = Pool.objects.create(stage=self.stages[0], name='Test Pool', order=99)
+        by_seed = {s: self.pair_by_seed(s) for s in (1, 2, 3, 4, 5)}
+        for position, seed in enumerate((1, 2, 3, 4, 5), start=1):
+            PoolPair.objects.create(pool=pool, pair=by_seed[seed], position=position)
+        matchups = {}
+        pairs_list = [by_seed[s] for s in (1, 2, 3, 4, 5)]
+        court = 1
+        for i, pair1 in enumerate(pairs_list):
+            for pair2 in pairs_list[i + 1:]:
+                m = Matchup.objects.create(
+                    tournament_chart=self.tournament, stage=self.stages[0], pool=pool,
+                    pair1=pair1, pair2=pair2, round_number=1, court_number=court)
+                matchups[frozenset((pair1.seed, pair2.seed))] = m
+                court += 1
+
+        def win(seed_a, seed_b, margin):
+            self.record_win(matchups[frozenset((seed_a, seed_b))], by_seed[seed_a],
+                            winner_score=15, loser_score=15 - margin)
+
+        win(1, 2, 2)
+        win(1, 3, 6)
+        win(1, 4, 10)
+        win(1, 5, 5)
+        win(2, 3, 4)
+        win(3, 4, 4)
+        win(4, 2, 4)
+        win(2, 5, 1)
+        win(3, 5, 3)
+        win(4, 5, 13)
+        return pool
+
+    def test_tie_resolved_by_pd_against_above_teams_not_overall_pd(self):
+        """Step 5 (PD vs teams placed above) must be applied before step 6 (overall PD)."""
+        pool = self._make_five_pair_pool()
+        standings = self.impl.get_pool_standings(pool)
+        # Overall PD alone would give 1, 4, 2, 3 — PD vs above (seed 1) gives 1, 2, 3, 4.
+        self.assertEqual([e['pair'].seed for e in standings], [1, 2, 3, 4, 5])
+        tied = {e['pair'].seed: e for e in standings if e.get('tied')}
+        self.assertEqual(set(tied), {2, 3, 4})
+        for seed in (2, 3, 4):
+            self.assertEqual(tied[seed]['h2h_wins'], 1)
+            self.assertEqual(tied[seed]['h2h_losses'], 1)
+            self.assertEqual(tied[seed]['h2h_pd'], 0)
+            self.assertEqual(tied[seed]['above_wins'], 0)
+        self.assertEqual([tied[s]['above_pd'] for s in (2, 3, 4)], [-2, -6, -10])
+
+    def test_manual_resolution_overrides_automatic_order(self):
+        """Step 7: a director's manual resolution reorders the tied group."""
+        pool = self._make_five_pair_pool()
+        ManualPoolTiebreakResolution.objects.create(
+            pool=pool, wins_tied_at=2,
+            resolved_order=[self.pair_by_seed(4).id, self.pair_by_seed(3).id, self.pair_by_seed(2).id],
+            reason='Seed 2 forfeited a game')
+        standings = self.impl.get_pool_standings(pool)
+        self.assertEqual([e['pair'].seed for e in standings], [1, 4, 3, 2, 5])
+        for e in standings:
+            if e.get('tied'):
+                self.assertTrue(e['manually_resolved'])
+                self.assertEqual(e['manual_reason'], 'Seed 2 forfeited a game')
+            else:
+                self.assertFalse(e.get('manually_resolved'))
+
+    def test_no_tiebreak_info_before_any_games_played(self):
+        """Pairs at 0 wins with 0 games played are not presented as a resolved tie."""
+        pool_a = self.stages[0].pools.order_by('order').first()
+        standings = self.impl.get_pool_standings(pool_a)
+        self.assertFalse(any(e.get('tied') for e in standings))
+        # Untouched pools keep the seeding order
+        self.assertEqual([e['pair'].seed for e in standings], [1, 10, 11, 20])
+
+    def test_manual_resolution_matching_automatic_order_not_flagged(self):
+        """A manual resolution that agrees with the automatic order is not marked."""
+        pool = self._make_five_pair_pool()
+        ManualPoolTiebreakResolution.objects.create(
+            pool=pool, wins_tied_at=2,
+            resolved_order=[self.pair_by_seed(2).id, self.pair_by_seed(3).id, self.pair_by_seed(4).id],
+            reason='')
+        standings = self.impl.get_pool_standings(pool)
+        self.assertEqual([e['pair'].seed for e in standings], [1, 2, 3, 4, 5])
+        self.assertFalse(any(e.get('manually_resolved') for e in standings))
+
 
 class EurosViewsTest(EurosFormatTestBase):
     """The detail page renders (all template branches) and the advancement endpoint works."""
@@ -340,6 +433,51 @@ class EurosViewsTest(EurosFormatTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context['final_standings']), 20)
         self.assertTrue(response.context['tournament_complete'])
+
+    def test_detail_shows_tiebreak_explanation(self):
+        """A tie broken by head-to-head is explained in the pool standings table."""
+        self.play_stage_lower_seed_wins(self.stages[0])
+        response = self.detail()
+        # Lower-seed-wins gives every pool distinct win counts except none tied;
+        # standings still render the Tiebreak column header.
+        self.assertContains(response, '<th>Tiebreak</th>', html=True)
+
+        # Force a tie in Pool A: seed 20 upsets seed 1, so seeds 1 and 10
+        # are tied at 2 wins (and seeds 11 and 20 at 1 win)
+        pool_a = self.stages[0].pools.order_by('order').first()
+        matchups = {frozenset((m.pair1.seed, m.pair2.seed)): m for m in pool_a.matchups.all()}
+        self.record_win(matchups[frozenset((1, 20))], self.pair_by_seed(20))
+        response = self.detail()
+        self.assertContains(response, 'H2H:')
+
+    def test_manual_tiebreak_page_lists_pool_ties_and_saves(self):
+        self.play_stage_lower_seed_wins(self.stages[0])
+        pool_a = self.stages[0].pools.order_by('order').first()
+        matchups = {frozenset((m.pair1.seed, m.pair2.seed)): m for m in pool_a.matchups.all()}
+        # Seed 20 upsets seed 1: seeds 1 and 10 tied at 2 wins
+        self.record_win(matchups[frozenset((1, 20))], self.pair_by_seed(20))
+        standings = self.impl.get_pool_standings(pool_a)
+        self.assertEqual([e['pair'].seed for e in standings], [1, 10, 11, 20])
+
+        url = reverse('manual_tiebreak_resolution', kwargs={'tournament_id': self.tournament.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['is_multi_phase'])
+        ties = response.context['pool_ties']
+        self.assertTrue(any(t['pool'].id == pool_a.id and t['wins'] == 2 for t in ties))
+
+        # Save a manual order: seed 10 above seed 1 (automatic gives 1 above 10 on h2h)
+        p1, p10 = self.pair_by_seed(1), self.pair_by_seed(10)
+        response = self.client.post(url, {
+            'pool_id': pool_a.id,
+            'wins_level': 2,
+            'pair_order': [p10.id, p1.id],
+            'reason': 'Forfeit',
+        })
+        self.assertRedirects(response, reverse('tournament_detail', kwargs={'pk': self.tournament.pk}))
+        standings = self.impl.get_pool_standings(pool_a)
+        self.assertEqual([e['pair'].seed for e in standings], [10, 1, 11, 20])
+        self.assertTrue(standings[0]['manually_resolved'])
 
 
 class EurosCreationViewTest(TestCase):

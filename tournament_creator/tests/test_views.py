@@ -1,5 +1,6 @@
 from django.test import TestCase, Client
 from django.urls import reverse
+from datetime import timedelta
 from ..models import Player, TournamentChart, TournamentArchetype, User, Matchup
 from ..models.notifications import NotificationBackendSetting # Added
 from ..forms import TournamentCreationForm # Added
@@ -261,3 +262,64 @@ class ViewTests(TestCase):
 
         # Check if the correct category option is selected in the dropdown
         self.assertContains(response, f'<option value="{test_category}" selected')
+
+
+class TournamentListTabsTests(TestCase):
+    """Tests for upcoming/past/archived tabs on the tournament list."""
+
+    def setUp(self):
+        self.client = Client()
+        self.admin_user = User.objects.create_user(
+            username='admin_test', password='test123', role='ADMIN')
+        self.spectator_user = User.objects.create_user(
+            username='spectator_test', password='test123', role='SPECTATOR')
+
+        today = timezone.now().date()
+
+        self.upcoming = TournamentChart.objects.create(
+            name='Upcoming Cup', date=today + timedelta(days=10),
+            number_of_rounds=7, number_of_courts=2)
+        # Ongoing (started, ends in the future) counts as upcoming/current.
+        self.ongoing = TournamentChart.objects.create(
+            name='Ongoing Cup', date=today - timedelta(days=1),
+            end_date=today + timedelta(days=1),
+            number_of_rounds=7, number_of_courts=2)
+        self.past = TournamentChart.objects.create(
+            name='Past Cup', date=today - timedelta(days=30),
+            number_of_rounds=7, number_of_courts=2)
+        self.archived = TournamentChart.objects.create(
+            name='Iloranta Open', date=today - timedelta(days=60),
+            number_of_rounds=7, number_of_courts=2, archived=True)
+
+    def test_tabs_categorize_tournaments(self):
+        self.client.login(username='spectator_test', password='test123')
+        response = self.client.get(reverse('tournament_list'))
+        self.assertEqual(response.status_code, 200)
+
+        upcoming_names = {t.name for t in response.context['upcoming_tournaments']}
+        past_names = {t.name for t in response.context['past_tournaments']}
+
+        self.assertEqual(upcoming_names, {'Upcoming Cup', 'Ongoing Cup'})
+        self.assertEqual(past_names, {'Past Cup'})
+
+    def test_archived_hidden_from_non_admin(self):
+        self.client.login(username='spectator_test', password='test123')
+        response = self.client.get(reverse('tournament_list'))
+
+        self.assertEqual(response.context['archived_tournaments'], [])
+        # Archived tournament must not leak into the other tabs either.
+        all_shown = (response.context['upcoming_tournaments']
+                     + response.context['past_tournaments'])
+        self.assertNotIn(self.archived, all_shown)
+        self.assertNotContains(response, 'Iloranta Open')
+
+    def test_archived_visible_to_admin(self):
+        self.client.login(username='admin_test', password='test123')
+        response = self.client.get(reverse('tournament_list'))
+
+        archived_names = {t.name for t in response.context['archived_tournaments']}
+        self.assertEqual(archived_names, {'Iloranta Open'})
+        self.assertContains(response, 'Iloranta Open')
+        # Archived stays out of upcoming/past even for admins.
+        past_names = {t.name for t in response.context['past_tournaments']}
+        self.assertNotIn('Iloranta Open', past_names)

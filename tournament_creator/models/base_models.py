@@ -114,6 +114,7 @@ class TournamentChart(models.Model):
     ]
     name_display_format = models.CharField(max_length=10, choices=NAME_DISPLAY_CHOICES, default='FIRST', help_text="How to display player names in notifications and tournament view")
     show_structure = models.BooleanField(default=False, help_text="Show tournament structure in a separate block")
+    archived = models.BooleanField(default=False, help_text="Archived tournaments are hidden from the normal list and only visible to admins (e.g. tournaments that were never finished properly).")
     # Tournament format type
     FORMAT_TYPE_CHOICES = [
         ('STANDARD', 'Standard (round/court based)'),

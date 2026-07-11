@@ -35,7 +35,8 @@ class TournamentCreationForm(forms.ModelForm):
             'name', 'date', 'end_date', 'number_of_stages', 'format_type',
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
             'signal_recipient_usernames', 'signal_recipient_group_ids',
-            'name_display_format', 'show_structure', 'default_sets_per_match'
+            'name_display_format', 'show_structure', 'default_sets_per_match',
+            'archived'
         ]
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Summer League 2025'}),
@@ -89,12 +90,14 @@ class TournamentCreationForm(forms.ModelForm):
                 self.fields['end_date'].initial = today
 
         # Make tournament_category not required when editing (only needed during creation)
-        if self.instance and self.instance.pk:
+        if self.instance and self.instance.pk and 'tournament_category' in self.fields:
             self.fields['tournament_category'].required = False
 
         # Field has a model default; let it apply when omitted (e.g., for non-MoC submissions
-        # where the field isn't shown in the UI).
-        self.fields['default_sets_per_match'].required = False
+        # where the field isn't shown in the UI). Guard the access because the admin restricts
+        # this form to the fields in its fieldsets, which omit default_sets_per_match.
+        if 'default_sets_per_match' in self.fields:
+            self.fields['default_sets_per_match'].required = False
 
     def clean_default_sets_per_match(self):
         # Fall back to the model's default when empty (the field is hidden for non-MoC).

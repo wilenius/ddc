@@ -58,6 +58,40 @@ class TournamentListView(SpectatorAccessMixin, ListView):
     template_name = 'tournament_creator/tournament_list.html'
     context_object_name = 'tournaments'
 
+    def get_queryset(self):
+        # Non-archived tournaments only; archived ones are handled separately
+        # and only shown to admins.
+        return TournamentChart.objects.filter(archived=False)
+
+    def get_context_data(self, **kwargs):
+        from datetime import date
+        context = super().get_context_data(**kwargs)
+        today = date.today()
+        tournaments = context['tournaments']
+
+        # A tournament is "past" once its last day has gone by. Use end_date
+        # when set (multi-day tournaments), otherwise the start date.
+        def effective_end(t):
+            return t.end_date or t.date
+
+        upcoming = [t for t in tournaments if effective_end(t) >= today]
+        past = [t for t in tournaments if effective_end(t) < today]
+        # Upcoming tournaments read best oldest-first (soonest at the top);
+        # the base ordering is newest-first, which suits past tournaments.
+        upcoming.reverse()
+
+        context['upcoming_tournaments'] = upcoming
+        context['past_tournaments'] = past
+
+        if self.request.user.is_admin():
+            context['archived_tournaments'] = list(
+                TournamentChart.objects.filter(archived=True)
+            )
+        else:
+            context['archived_tournaments'] = []
+
+        return context
+
 class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
     model = TournamentChart
     form_class = TournamentCreationForm # Changed from fields

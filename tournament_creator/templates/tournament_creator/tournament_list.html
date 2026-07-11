@@ -12,28 +12,65 @@
     </div>
 </div>
 
-{% if tournaments %}
-    <div class="row row-cols-1 row-cols-md-2 g-4">
-        {% for tournament in tournaments %}
-            <div class="col">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ tournament.name }}</h5>
-                        <p class="card-text">
-                            Date: {{ tournament.date }}<br>
-                            Players: {{ tournament.players.count }}<br>
-                            Rounds: {{ tournament.number_of_rounds }}<br>
-                            Courts: {{ tournament.number_of_courts }}
-                        </p>
-                        <a href="{% url 'tournament_detail' tournament.id %}" class="btn btn-primary">View Details</a>
-                    </div>
-                </div>
-            </div>
-        {% endfor %}
+<ul class="nav nav-tabs mb-4" id="tournamentTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="upcoming-tab" data-bs-toggle="tab" data-bs-target="#upcoming"
+                type="button" role="tab" aria-controls="upcoming" aria-selected="true">
+            Upcoming <span class="badge bg-secondary">{{ upcoming_tournaments|length }}</span>
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="past-tab" data-bs-toggle="tab" data-bs-target="#past"
+                type="button" role="tab" aria-controls="past" aria-selected="false">
+            Past <span class="badge bg-secondary">{{ past_tournaments|length }}</span>
+        </button>
+    </li>
+    {% if user.is_admin %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="archived-tab" data-bs-toggle="tab" data-bs-target="#archived"
+                type="button" role="tab" aria-controls="archived" aria-selected="false">
+            <i class="bi bi-archive"></i> Archived <span class="badge bg-secondary">{{ archived_tournaments|length }}</span>
+        </button>
+    </li>
+    {% endif %}
+</ul>
+
+<div class="tab-content" id="tournamentTabsContent">
+    <div class="tab-pane fade show active" id="upcoming" role="tabpanel" aria-labelledby="upcoming-tab">
+        {% with tournaments=upcoming_tournaments empty_text="No upcoming tournaments." %}
+            {% include 'tournament_creator/partials/tournament_cards.html' %}
+        {% endwith %}
     </div>
-{% else %}
-    <div class="alert alert-info">
-        No tournaments have been created yet. Click "Create New Tournament" to get started.
+    <div class="tab-pane fade" id="past" role="tabpanel" aria-labelledby="past-tab">
+        {% with tournaments=past_tournaments empty_text="No past tournaments." %}
+            {% include 'tournament_creator/partials/tournament_cards.html' %}
+        {% endwith %}
     </div>
-{% endif %}
+    {% if user.is_admin %}
+    <div class="tab-pane fade" id="archived" role="tabpanel" aria-labelledby="archived-tab">
+        {% with tournaments=archived_tournaments empty_text="No archived tournaments." archived=True %}
+            {% include 'tournament_creator/partials/tournament_cards.html' %}
+        {% endwith %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    // Persist the active tab across page reloads.
+    document.addEventListener('DOMContentLoaded', function () {
+        var storageKey = 'tournamentListActiveTab';
+        var savedTab = sessionStorage.getItem(storageKey);
+        if (savedTab) {
+            var trigger = document.querySelector('button[data-bs-target="' + savedTab + '"]');
+            if (trigger) {
+                new bootstrap.Tab(trigger).show();
+            }
+        }
+        document.querySelectorAll('#tournamentTabs button[data-bs-toggle="tab"]').forEach(function (btn) {
+            btn.addEventListener('shown.bs.tab', function (event) {
+                sessionStorage.setItem(storageKey, event.target.getAttribute('data-bs-target'));
+            });
+        });
+    });
+</script>
 {% endblock %}

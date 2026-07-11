@@ -31,10 +31,12 @@ class PlayerAdmin(admin.ModelAdmin):
 @admin.register(TournamentChart)
 class TournamentChartAdmin(admin.ModelAdmin):
     form = TournamentCreationForm
-    list_display = ('name', 'date', 'end_date', 'number_of_rounds', 'number_of_courts')
+    list_display = ('name', 'date', 'end_date', 'number_of_rounds', 'number_of_courts', 'archived')
+    list_editable = ('archived',)
+    list_filter = ('archived',)
     ordering = ('-date',)
     fieldsets = [
-        (None, {'fields': ('name', 'date', 'end_date', 'name_display_format', 'show_structure')}),
+        (None, {'fields': ('name', 'date', 'end_date', 'name_display_format', 'show_structure', 'archived')}),
         ('Notification Settings', {
             'fields': ('notify_by_email', 'notify_by_signal', 'notify_by_matrix')
         }),

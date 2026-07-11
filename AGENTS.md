@@ -173,6 +173,18 @@ document.addEventListener('DOMContentLoaded', function() {
    - Per-tournament notification settings
    - `NotificationBackendSetting` for global configuration
    - `NotificationLog` tracks notification history
+   - Match-result notifications are dispatched from a background thread
+     (`NOTIFICATIONS_ASYNC` setting; forced synchronous under `manage.py test` so
+     mocked senders can be asserted) — see `_send_match_notifications` in
+     `tournament_views.py`
+   - Signal goes through a signal-cli **JSON-RPC HTTP daemon** (`/api/v1/rpc`,
+     see `_signal_jsonrpc_call` in `tournament_creator/notifications.py`), NOT
+     the dockerized bbernhard/signal-cli-rest-api the README still describes.
+     Group IDs in config must be the raw base64 id from `listGroups` — the old
+     `group.<base64>` REST-API format is rejected by the daemon
+   - Signal group list is cached forever in the file-based cache (key
+     `signal_groups`); refresh via `/api/refresh-signal-groups/` after group
+     changes or after clearing the cache directory
 
 ### Tournament Structure
 
@@ -275,10 +287,17 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
 ```
 
 ### Testing
-- Test suite has 65 tests, 62 currently passing
-- 3 pre-existing notification test failures (unrelated to multi-stage feature)
+- Test suite has 95 tests; 7 pre-existing failures as of 2026-07-11 (5 in
+  test_notifications, 2 in test_views) — verify a change didn't add failures by
+  comparing against a baseline run, not by expecting a green suite
 - Tests updated to include required fields: `tournament_category`, `number_of_stages`, `name_display_format`
 - Form fields use `FIRST` or `LAST` for name_display_format (not `FULL`)
+- `manage.py stress_test_recording <tournament_id> --concurrency 5 [--enable-signal]`
+  fires concurrent score recordings over HTTP against the running server (real
+  nginx → gunicorn → sqlite → Signal path) and reports latencies and
+  notification outcomes; restore the test bed afterwards with
+  `manage.py simulate_scores <id> --clear`. `--enable-signal` sends real Signal
+  messages — only run it when the user asks
 
 ## File Organization
 

@@ -87,28 +87,40 @@ class Command(BaseCommand):
             # Prepare for database update
             to_create = []
             to_update = []
-            existing_player_ids = set(Player.objects.values_list('id', flat=True))
-            
+
+            # Match incoming rankings to existing players on a normalized
+            # (whitespace-trimmed, case-folded) name so hand-created rows — e.g.
+            # players seeded before they had ranking points — merge in place and
+            # keep any linked login account, instead of spawning a duplicate.
+            def name_key(first, last):
+                return (first.strip().casefold(), last.strip().casefold())
+
+            existing_by_name = {}
+            for player in Player.objects.all():
+                existing_by_name.setdefault(
+                    name_key(player.first_name, player.last_name), player
+                )
+
             for ranking in filtered_rankings:
                 player_id = ranking['player_id']
                 player_name = player_dict.get(player_id, "Unknown")
-                
+
                 # Split name into first and last name
                 name_parts = player_name.split(' ', 1)
                 first_name = name_parts[0]
                 last_name = name_parts[1] if len(name_parts) > 1 else ''
-                
+
                 rank = int(ranking['rank'])
                 points = float(ranking['points'])
-                
-                # Check if player exists
-                try:
-                    player = Player.objects.get(first_name=first_name, last_name=last_name)
+
+                # Check if player exists (normalized name match)
+                player = existing_by_name.get(name_key(first_name, last_name))
+                if player is not None:
                     # Update existing player
                     player.ranking = rank
                     player.ranking_points = points
                     to_update.append(player)
-                except Player.DoesNotExist:
+                else:
                     # Create new player
                     player = Player(
                         first_name=first_name,

@@ -1,4 +1,9 @@
+from datetime import date
+
 from django import forms
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.utils.safestring import mark_safe
 from dal import autocomplete
 from .models.base_models import Player, TournamentChart
@@ -338,3 +343,81 @@ class SignalBackendConfigForm(forms.ModelForm):
 
                 # Put ALL existing group IDs in the manual field as backup
                 self.fields['recipient_group_ids'].initial = existing_group_ids
+
+
+class PlayerSignupForm(forms.Form):
+    """
+    Self-service signup gated by a shared invite code. Creates a PLAYER user
+    and links it to a ranking Player that has no account yet.
+    """
+    invite_code = forms.CharField(
+        label="Invite code",
+        widget=forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'off'}),
+        help_text="The code shared in the tournament Signal group.",
+    )
+    player = forms.ModelChoiceField(
+        queryset=Player.objects.none(),
+        label="Your name",
+        empty_label="Select your name…",
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text="Pick yourself from the rankings list. Ask a director if you're missing.",
+    )
+    username = forms.CharField(
+        label="Username",
+        widget=forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'username'}),
+    )
+    password1 = forms.CharField(
+        label="Password",
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}),
+    )
+    password2 = forms.CharField(
+        label="Confirm password",
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Only players without a linked account can be claimed.
+        self.fields['player'].queryset = Player.objects.filter(
+            user__isnull=True
+        ).order_by('ranking')
+
+    def clean_invite_code(self):
+        code = self.cleaned_data['invite_code'].strip()
+        expected = settings.SIGNUP_INVITE_CODE
+        expires = settings.SIGNUP_INVITE_CODE_EXPIRES
+        if not expected:
+            raise forms.ValidationError("Signup is currently disabled.")
+        if expires and date.today() > expires:
+            raise forms.ValidationError("Signup has closed for this tournament.")
+        if code != expected:
+            raise forms.ValidationError("Invalid invite code.")
+        return code
+
+    def clean_username(self):
+        username = self.cleaned_data['username'].strip()
+        User = get_user_model()
+        if User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError("That username is already taken.")
+        return username
+
+    def clean_password2(self):
+        password1 = self.cleaned_data.get('password1')
+        password2 = self.cleaned_data.get('password2')
+        if password1 and password2 and password1 != password2:
+            raise forms.ValidationError("The two passwords don't match.")
+        # Run Django's configured password validators.
+        validate_password(password2)
+        return password2
+
+    def save(self):
+        User = get_user_model()
+        user = User.objects.create_user(
+            username=self.cleaned_data['username'],
+            password=self.cleaned_data['password1'],
+            role=User.Role.PLAYER,
+        )
+        player = self.cleaned_data['player']
+        player.user = user
+        player.save(update_fields=['user'])
+        return user

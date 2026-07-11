@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 class Player(models.Model):
@@ -7,7 +8,15 @@ class Player(models.Model):
     nickname = models.CharField(max_length=255, blank=True, null=True, help_text="Optional nickname to display instead of first name")
     ranking = models.IntegerField()
     ranking_points = models.FloatField(default=0)
-    
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='player',
+        help_text="Optional login account linked to this ranking player.",
+    )
+
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
     

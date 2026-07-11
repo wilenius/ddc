@@ -160,10 +160,10 @@ class RankingsCommandTest(TestCase):
         # Run the command
         call_command('update_rankings', division='O', dry_run=False)
         
-        # Check that players were created
-        self.assertEqual(Player.objects.count(), 2)
-        self.assertTrue(Player.objects.filter(first_name='Alice', last_name='Smith').exists())
-        self.assertTrue(Player.objects.filter(first_name='Bob', last_name='Jones').exists())
+        # Check that players were created (exactly once each; other rows may be
+        # present from seed-data migrations).
+        self.assertEqual(Player.objects.filter(first_name='Alice', last_name='Smith').count(), 1)
+        self.assertEqual(Player.objects.filter(first_name='Bob', last_name='Jones').count(), 1)
         
         # Check that a rankings update record was created
         self.assertEqual(RankingsUpdate.objects.count(), 1)
@@ -171,3 +171,32 @@ class RankingsCommandTest(TestCase):
         self.assertEqual(update.division, 'O')
         self.assertEqual(update.player_count, 2)
         self.assertTrue(update.successful)
+
+    @patch('requests.get')
+    def test_update_rankings_merges_seeded_player(self, mock_get):
+        """A hand-seeded player (with a linked account) is updated in place,
+        not duplicated, when they appear in the rankings feed."""
+        account = User.objects.create_user(username='tessa', password='x')
+        seeded = Player.objects.create(
+            first_name='Tessa', last_name='Vainio', ranking=9999,
+            ranking_points=0, user=account,
+        )
+
+        rankings_response = MagicMock()
+        rankings_response.json.return_value = [
+            {'rank': '5', 'player_id': '123', 'points': '55.0', 'division': 'O'},
+        ]
+        player_response = MagicMock()
+        # Note the trailing whitespace / casing the normalized match must absorb.
+        player_response.json.return_value = [
+            {'id': '123', 'name': 'tessa  Vainio '},
+        ]
+        mock_get.side_effect = [rankings_response, player_response]
+
+        call_command('update_rankings', division='O', dry_run=False)
+
+        self.assertEqual(Player.objects.filter(last_name__iexact='Vainio').count(), 1)
+        seeded.refresh_from_db()
+        self.assertEqual(seeded.ranking, 5)
+        self.assertEqual(seeded.ranking_points, 55.0)
+        self.assertEqual(seeded.user, account)

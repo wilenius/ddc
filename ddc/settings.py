@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+from datetime import date
 import os
 import sys
 from decouple import config, Csv
@@ -53,6 +54,15 @@ AUTH_USER_MODEL = 'tournament_creator.User'
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/tournaments/'
 LOGOUT_REDIRECT_URL = '/'
+
+# Self-service player signup. A single shared invite code (distributed over
+# Signal) gates the /signup/ page, valid until SIGNUP_INVITE_CODE_EXPIRES.
+# An empty code disables signup entirely.
+SIGNUP_INVITE_CODE = config('SIGNUP_INVITE_CODE', default='')
+SIGNUP_INVITE_CODE_EXPIRES = config(
+    'SIGNUP_INVITE_CODE_EXPIRES', default='2026-07-31',
+    cast=lambda v: date.fromisoformat(v) if v else None,
+)
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

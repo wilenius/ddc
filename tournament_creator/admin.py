@@ -1,5 +1,13 @@
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.forms import UserChangeForm
+from django.contrib.auth.tokens import default_token_generator
+from django.db.models import Q
+from django.urls import reverse
+from django.utils.encoding import force_bytes
+from django.utils.html import format_html
+from django.utils.http import urlsafe_base64_encode
 from .models.base_models import Player, TournamentChart, TournamentPlayer, Matchup, TournamentArchetype
 from .models.tournament_types import MonarchOfTheCourt8, FourPairsSwedishFormat, EightPairsSwedishFormat
 from .models.scoring import MatchScore, PlayerScore
@@ -10,15 +18,74 @@ from .forms import EmailBackendConfigForm, SignalBackendConfigForm, TournamentCr
 from django.utils.text import Truncator
 # import functools # Removed import
 
+class UserChangeAdminForm(UserChangeForm):
+    """Adds a 'linked player' selector to the User change form. The link itself
+    lives on Player.user (reverse side), so it's reconciled in save_model."""
+    player = forms.ModelChoiceField(
+        queryset=Player.objects.all(),
+        required=False,
+        label='Linked player',
+        help_text="Ranking player this login belongs to. Only unlinked players are listed.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        current = None
+        if self.instance and self.instance.pk:
+            current = Player.objects.filter(user=self.instance).first()
+        # Offer unlinked players, plus the one already linked to this user.
+        self.fields['player'].queryset = Player.objects.filter(
+            Q(user__isnull=True) | Q(pk=current.pk if current else None)
+        ).order_by('ranking')
+        self.fields['player'].initial = current
+
+
 class CustomUserAdmin(UserAdmin):
     model = User
-    list_display = ['username', 'email', 'role', 'is_staff']
+    form = UserChangeAdminForm
+    list_display = ['username', 'email', 'role', 'linked_player', 'is_staff']
     fieldsets = UserAdmin.fieldsets + (
         ('Role', {'fields': ('role',)}),
+        ('Linked player', {'fields': ('player',)}),
     )
     add_fieldsets = UserAdmin.add_fieldsets + (
         ('Role', {'fields': ('role',)}),
     )
+    actions = ['make_password_reset_link']
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # The 'player' field isn't a User field; reconcile the reverse OneToOne.
+        if 'player' not in form.cleaned_data:
+            return
+        selected = form.cleaned_data['player']
+        current = Player.objects.filter(user=obj).first()
+        if current and current != selected:
+            current.user = None
+            current.save(update_fields=['user'])
+        if selected and selected.user_id != obj.pk:
+            selected.user = obj
+            selected.save(update_fields=['user'])
+
+    @admin.display(description='Linked player')
+    def linked_player(self, obj):
+        # `player` reverse accessor from Player.user (OneToOne); may not exist.
+        return getattr(obj, 'player', None)
+
+    @admin.action(description='Copy password-reset link')
+    def make_password_reset_link(self, request, queryset):
+        """Generate a no-email password-reset link per selected user. Directors
+        paste the link into Signal; the user picks their own password."""
+        for user in queryset:
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            path = reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
+            url = request.build_absolute_uri(path)
+            self.message_user(
+                request,
+                format_html('Reset link for <strong>{}</strong>: {}', user.username, url),
+                level=messages.INFO,
+            )
 
 admin.site.register(User, CustomUserAdmin)
 

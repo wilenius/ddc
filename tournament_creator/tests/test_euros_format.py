@@ -376,11 +376,18 @@ class EurosViewsTest(EurosFormatTestBase):
 
     def setUp(self):
         super().setUp()
+        from django.utils import timezone
         self.client = Client()
         self.player_user = User.objects.create_user(
             username='player_test', password='test123', role='PLAYER')
         self.spectator_user = User.objects.create_user(
             username='spectator_test', password='test123', role='SPECTATOR')
+        # player_test is competing in this tournament, and the tournament is
+        # current, so it may manage results (record / advance phases).
+        self.tournament.date = timezone.now().date()
+        self.tournament.save()
+        self.pairs[0].player1.user = self.player_user
+        self.pairs[0].player1.save()
         self.client.login(username='player_test', password='test123')
 
     def detail(self):

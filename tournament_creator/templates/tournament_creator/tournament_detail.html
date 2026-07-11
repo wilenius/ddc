@@ -15,6 +15,12 @@
                 Date: {{ tournament.date }}
             {% endif %}
         </p>
+        {% if results_locked_past %}
+            <div class="alert alert-secondary py-2 mb-0">
+                <i class="bi bi-lock"></i>
+                This tournament is in the past &mdash; match results can no longer be edited.
+            </div>
+        {% endif %}
     </div>
     <div class="col-auto">
         {% if user.is_authenticated and user.is_admin %}

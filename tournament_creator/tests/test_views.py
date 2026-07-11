@@ -95,7 +95,12 @@ class ViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
     def test_record_match_result_permissions(self):
-        """Test match result recording permissions"""
+        """Match results are editable by participants and admins on current
+        tournaments, and locked for non-admins once a tournament is past."""
+        # Link the player user to a player competing in this tournament.
+        self.players[0].user = self.player_user
+        self.players[0].save()
+
         # Create a matchup
         matchup = Matchup.objects.create(
             tournament_chart=self.tournament,
@@ -118,19 +123,33 @@ class ViewTests(TestCase):
             'winning_team': '1'
         }
 
-        # Any logged-in user can record scores (including spectators)
+        # A logged-in user who isn't competing (and isn't admin) is denied.
         self.client.login(username='spectator_test', password='test123')
         response = self.client.post(url, data)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['status'], 'success')
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['status'], 'error')
 
-        # Player should have access
+        # A player competing in the tournament can record.
         self.client.login(username='player_test', password='test123')
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['status'], 'success')
 
-        # Admin should have access
+        # Admin can always record.
+        self.client.login(username='admin_test', password='test123')
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'success')
+
+        # Once the tournament is in the past, non-admins are locked out...
+        self.tournament.date = timezone.now().date() - timedelta(days=2)
+        self.tournament.save()
+        self.client.login(username='player_test', password='test123')
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['status'], 'error')
+
+        # ...but admins retain access to fix past results.
         self.client.login(username='admin_test', password='test123')
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 200)

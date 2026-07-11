@@ -139,6 +139,52 @@ class TournamentChart(models.Model):
     )
     def __str__(self):
         return self.name
+
+    def is_past(self):
+        """True if the tournament's last day is before today.
+
+        Uses ``end_date`` for multi-day tournaments, falling back to ``date``.
+        """
+        from django.utils import timezone
+        last_day = self.end_date or self.date
+        return last_day < timezone.localdate()
+
+    def has_participant(self, user):
+        """True if ``user``'s linked ranking player is competing in this tournament.
+
+        Covers both MoC tournaments (players linked directly) and doubles
+        tournaments (players linked via their pair).
+        """
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        from django.core.exceptions import ObjectDoesNotExist
+        try:
+            player = user.player
+        except (AttributeError, ObjectDoesNotExist):
+            player = None
+        if player is None:
+            return False
+        if self.players.filter(id=player.id).exists():
+            return True
+        return self.pairs.filter(
+            models.Q(player1=player) | models.Q(player2=player)
+        ).exists()
+
+    def user_can_edit_results(self, user):
+        """Whether ``user`` may record or edit match results for this tournament.
+
+        - Admins can always edit (including past tournaments).
+        - For non-admins, past tournaments are locked.
+        - For current tournaments, non-admins must be competing participants.
+        """
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        if getattr(user, 'is_admin', lambda: False)():
+            return True
+        if self.is_past():
+            return False
+        return self.has_participant(user)
+
     class Meta:
         ordering = ['-date']
 

@@ -473,9 +473,11 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         context['match_logs'] = MatchResultLog.objects.filter(
             matchup__tournament_chart=tournament
         ).select_related('recorded_by', 'matchup').order_by('-recorded_at')[:10]
-        context['can_record_scores'] = self.request.user.is_authenticated and (
-            getattr(self.request.user, 'is_admin', lambda: False)()
-            or getattr(self.request.user, 'is_player', lambda: False)()
+        context['can_record_scores'] = tournament.user_can_edit_results(self.request.user)
+        # Surface why recording is unavailable so players aren't left guessing.
+        context['results_locked_past'] = (
+            tournament.is_past()
+            and not getattr(self.request.user, 'is_admin', lambda: False)()
         )
 
         # Set display names for player scores
@@ -1128,11 +1130,7 @@ def generate_next_stage(request, tournament_id):
     """
     tournament = get_object_or_404(TournamentChart, id=tournament_id)
 
-    can_manage = (
-        getattr(request.user, 'is_admin', lambda: False)()
-        or getattr(request.user, 'is_player', lambda: False)()
-    )
-    if not can_manage:
+    if not tournament.user_can_edit_results(request.user):
         messages.error(request, "You don't have permission to generate the next phase.")
         return redirect('tournament_detail', pk=tournament_id)
 
@@ -1295,6 +1293,14 @@ def record_match_result(request, tournament_id, matchup_id):
     try:
         matchup = get_object_or_404(Matchup, id=matchup_id)
         tournament = get_object_or_404(TournamentChart, id=tournament_id)
+
+        if not tournament.user_can_edit_results(request.user):
+            if tournament.is_past() and not request.user.is_admin():
+                message = 'This tournament is in the past; results can no longer be edited.'
+            else:
+                message = "You don't have permission to record results for this tournament."
+            return JsonResponse({'status': 'error', 'message': message}, status=403)
+
         team1_scores = json.loads(request.POST.get('team1_scores', '[]'))
         team2_scores = json.loads(request.POST.get('team2_scores', '[]'))
         

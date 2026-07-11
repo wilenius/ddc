@@ -6,7 +6,11 @@ from django.http import JsonResponse, HttpResponse
 from django.db import models
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
+from django.conf import settings
+from django.db import connections
 import json
+import logging
+import threading
 from datetime import time
 from ..models.base_models import TournamentChart, Matchup, TournamentArchetype, Player, Pair, Pool
 from ..models.tournament_types import PairsTournamentArchetype
@@ -16,6 +20,38 @@ from ..models.notifications import NotificationBackendSetting # Added import
 from ..views.auth import SpectatorAccessMixin, PlayerOrAdminRequiredMixin, AdminRequiredMixin
 from ..forms import PairFormSet, MoCPlayerSelectForm, TournamentCreationForm # Added import
 from ..notifications import send_email_notification, send_signal_notification
+
+logger = logging.getLogger(__name__)
+
+
+def _send_match_notifications(user, match_log_entry, tournament):
+    try:
+        send_email_notification(
+            user_who_recorded=user,
+            match_result_log_instance=match_log_entry,
+            tournament_chart_instance=tournament
+        )
+    except Exception as e_notify:
+        logger.error(f"Error sending email notification: {str(e_notify)}")
+    try:
+        send_signal_notification(
+            user_who_recorded=user,
+            match_result_log_instance=match_log_entry,
+            tournament_chart_instance=tournament
+        )
+    except Exception as e_notify_signal:
+        logger.error(f"Error sending Signal notification: {str(e_notify_signal)}")
+
+
+def _send_match_notifications_async(user, match_log_entry, tournament):
+    def _worker():
+        try:
+            _send_match_notifications(user, match_log_entry, tournament)
+        finally:
+            # Connections opened by this thread are thread-local; close them so
+            # they don't linger for the lifetime of the daemon thread.
+            connections.close_all()
+    threading.Thread(target=_worker, daemon=True).start()
 
 class TournamentListView(SpectatorAccessMixin, ListView):
     model = TournamentChart
@@ -1299,33 +1335,13 @@ def record_match_result(request, tournament_id, matchup_id):
             }
         )
         
-        # Send email notification
-        try:
-            send_email_notification(
-                user_who_recorded=request.user,
-                match_result_log_instance=match_log_entry,
-                tournament_chart_instance=tournament  # Pass the tournament instance
-            )
-        except Exception as e_notify:
-            # Log notification error specifically, but don't let it break the main flow
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error sending email notification: {str(e_notify)}")
-            # Optionally, add a message to the user or specific handling if notifications are critical
-            # For now, just log and continue.
-
-        # Send Signal notification
-        try:
-            send_signal_notification(
-                user_who_recorded=request.user,
-                match_result_log_instance=match_log_entry,
-                tournament_chart_instance=tournament  # Pass the tournament instance
-            )
-        except Exception as e_notify_signal:
-            import logging # Ensure logger is available
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error sending Signal notification: {str(e_notify_signal)}")
-            # Log and continue, similar to email.
+        # Send email/Signal notifications without blocking the response — a Signal
+        # send takes ~0.5–2s (10s on timeout) and must not hold a gunicorn worker.
+        # Synchronous under test (NOTIFICATIONS_ASYNC=False) so mocks can assert.
+        if getattr(settings, 'NOTIFICATIONS_ASYNC', True):
+            _send_match_notifications_async(request.user, match_log_entry, tournament)
+        else:
+            _send_match_notifications(request.user, match_log_entry, tournament)
 
         # Update player scores
         # Get automatic wins from the tournament archetype if applicable.

@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 import os
+import sys
 from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -91,8 +92,20 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            # Wait for locks instead of failing with "database is locked" when
+            # several gunicorn workers record scores concurrently.
+            'timeout': 20,
+            'transaction_mode': 'IMMEDIATE',
+            'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;',
+        },
     }
 }
+
+# Match-result notifications (email/Signal) are dispatched from a background
+# thread so score recording doesn't block on the signal-cli daemon. Disabled
+# under test so mocked senders can be asserted synchronously.
+NOTIFICATIONS_ASYNC = 'test' not in sys.argv
 
 # Email Configuration (placeholders - actual notification sending uses model-based config)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

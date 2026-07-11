@@ -99,40 +99,42 @@ class TournamentCreationForm(forms.ModelForm):
         if 'default_sets_per_match' in self.fields:
             self.fields['default_sets_per_match'].required = False
 
+        # Populate the Signal group picker choices from cache.
+        if 'signal_groups_picker' in self.fields:
+            from django.core.cache import cache
+            groups = cache.get('signal_groups', [])
+            choices = []
+
+            if groups:
+                for group in groups:
+                    group_id = group.get('id', '') or group.get('internal_id', '')
+                    group_name = group.get('name') or group.get('title', 'Unnamed Group')
+                    if group_id:
+                        choices.append((group_id, f"{group_name} ({group_id[:30]}...)"))
+
+            self.fields['signal_groups_picker'].choices = choices
+            if not choices:
+                self.fields['signal_groups_picker'].help_text = 'No groups available. Configure groups in Signal backend settings first.'
+
+            # Pre-select groups if editing an existing tournament
+            if self.instance and self.instance.pk:
+                existing_group_ids = self.instance.signal_recipient_group_ids
+                if existing_group_ids:
+                    selected_ids = [gid.strip() for gid in existing_group_ids.split(',') if gid.strip()]
+                    picker_ids = [choice[0] for choice in choices]
+                    picker_selected = [gid for gid in selected_ids if gid in picker_ids]
+                    self.fields['signal_groups_picker'].initial = picker_selected
+
+                    # Also populate the manual field with ALL existing group IDs as backup
+                    if 'signal_recipient_group_ids' in self.fields:
+                        self.fields['signal_recipient_group_ids'].initial = existing_group_ids
+
     def clean_default_sets_per_match(self):
         # Fall back to the model's default when empty (the field is hidden for non-MoC).
         value = self.cleaned_data.get('default_sets_per_match')
         if value in (None, ''):
             return TournamentChart._meta.get_field('default_sets_per_match').default
         return value
-
-        # Populate group picker choices from cache
-        from django.core.cache import cache
-        groups = cache.get('signal_groups', [])
-        choices = []
-
-        if groups:
-            for group in groups:
-                group_id = group.get('id', '') or group.get('internal_id', '')
-                group_name = group.get('name') or group.get('title', 'Unnamed Group')
-                if group_id:
-                    choices.append((group_id, f"{group_name} ({group_id[:30]}...)"))
-
-        self.fields['signal_groups_picker'].choices = choices
-        if not choices:
-            self.fields['signal_groups_picker'].help_text = 'No groups available. Configure groups in Signal backend settings first.'
-
-        # Pre-select groups if editing existing tournament
-        if self.instance and self.instance.pk:
-            existing_group_ids = self.instance.signal_recipient_group_ids
-            if existing_group_ids:
-                selected_ids = [gid.strip() for gid in existing_group_ids.split(',') if gid.strip()]
-                picker_ids = [choice[0] for choice in choices]
-                picker_selected = [gid for gid in selected_ids if gid in picker_ids]
-                self.fields['signal_groups_picker'].initial = picker_selected
-
-                # Also populate the manual field with ALL existing group IDs as backup
-                self.fields['signal_recipient_group_ids'].initial = existing_group_ids
 
     def save(self, commit=True):
         instance = super().save(commit=False)

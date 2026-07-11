@@ -77,8 +77,8 @@ class TestSendEmailNotification(TestCase):
     def test_email_skipped_tournament_inactive(self, mock_smtp_backend_class):
         mock_backend_instance = MagicMock()
         mock_smtp_backend_class.return_value = mock_backend_instance
-        
-        active_email_setting = NotificationBackendSetting.objects.create(
+
+        NotificationBackendSetting.objects.create(
             backend_name='email', is_active=True, config=self.email_config
         )
         self.tournament.notify_by_email = False # Tournament setting disables email
@@ -86,12 +86,9 @@ class TestSendEmailNotification(TestCase):
 
         send_email_notification(self.user, self.match_log, self.tournament)
 
+        # Disabled per-tournament notifications are skipped silently: no send, no log
         mock_backend_instance.send_messages.assert_not_called()
-        log_entry = NotificationLog.objects.filter(backend_setting=active_email_setting).latest('timestamp')
-        self.assertIsNotNone(log_entry)
-        self.assertFalse(log_entry.success)
-        self.assertIn(f"Email notification skipped for tournament '{self.tournament.name}' as per tournament settings (disabled).", log_entry.details)
-        self.assertEqual(log_entry.backend_setting, active_email_setting)
+        self.assertFalse(NotificationLog.objects.exists())
 
     @patch('tournament_creator.notifications.SMTPEmailBackend')
     def test_email_sending_fails_smtp_error(self, mock_smtp_backend_class):
@@ -186,6 +183,7 @@ class TestSendSignalNotification(TestCase):
             matchup=self.matchup, recorded_by=self.user, action='UPDATE',
             details={'team1_scores': [25], 'team2_scores': [23], 'winning_team': 'team1'}
         )
+        # signal-cli JSON-RPC HTTP daemon config (see _signal_jsonrpc_call in notifications.py)
         self.base_signal_config = {
             'signal_cli_rest_api_url': 'http://localhost:8080',
             'signal_sender_phone_number': '+10000000000',
@@ -202,11 +200,16 @@ class TestSendSignalNotification(TestCase):
             backend_name='signal', is_active=is_active, config=current_config
         )
 
+    def _mock_jsonrpc_ok_response(self):
+        mock_response = MagicMock(status_code=200)
+        mock_response.json.return_value = {
+            "jsonrpc": "2.0", "result": {"timestamp": 1700000000000}, "id": "test-id"
+        }
+        return mock_response
+
     @patch('tournament_creator.notifications.requests.post')
     def test_successful_send_with_usernames(self, mock_post):
-        mock_response = MagicMock(status_code=201, text='{"message": "Accepted"}')
-        mock_response.json.return_value = {"message": "Accepted"}
-        mock_post.return_value = mock_response
+        mock_post.return_value = self._mock_jsonrpc_ok_response()
 
         config_override = {'recipient_usernames': '+111,+122'}
         self._create_signal_setting(config_override=config_override)
@@ -215,24 +218,56 @@ class TestSendSignalNotification(TestCase):
 
         send_signal_notification(self.user, self.match_log, self.tournament)
 
-        mock_post.assert_called_once()
+        # One JSON-RPC "send" call per recipient
+        self.assertEqual(mock_post.call_count, 2)
+        recipients = []
+        for call in mock_post.call_args_list:
+            self.assertEqual(call.args[0], 'http://localhost:8080/api/v1/rpc')
+            payload = call.kwargs['json']
+            self.assertEqual(payload['jsonrpc'], '2.0')
+            self.assertEqual(payload['method'], 'send')
+            self.assertEqual(payload['params']['account'], '+10000000000')
+            recipients.extend(payload['params']['recipient'])
+        self.assertEqual(recipients, ['+111', '+122'])
+
         log_entry = NotificationLog.objects.first()
         self.assertTrue(log_entry.success)
-        self.assertIn("Usernames: +111, +122", log_entry.details)
+        self.assertIn("recipient +111", log_entry.details)
+        self.assertIn("recipient +122", log_entry.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_successful_send_with_group_id(self, mock_post):
+        mock_post.return_value = self._mock_jsonrpc_ok_response()
+
+        # Group IDs are the raw base64 id from listGroups (no "group." prefix)
+        group_id = 'abc123base64id='
+        self._create_signal_setting(config_override={'recipient_group_ids': group_id})
+        self.tournament.notify_by_signal = True
+        self.tournament.save()
+
+        send_signal_notification(self.user, self.match_log, self.tournament)
+
+        mock_post.assert_called_once()
+        payload = mock_post.call_args.kwargs['json']
+        self.assertEqual(payload['method'], 'send')
+        self.assertEqual(payload['params']['groupId'], group_id)
+        self.assertNotIn('recipient', payload['params'])
+
+        log_entry = NotificationLog.objects.first()
+        self.assertTrue(log_entry.success)
+        self.assertIn(f"group {group_id}", log_entry.details)
 
     @patch('tournament_creator.notifications.requests.post')
     def test_signal_skipped_tournament_inactive(self, mock_post):
-        active_signal_setting = self._create_signal_setting(config_override={'recipient_usernames': '+111'})
+        self._create_signal_setting(config_override={'recipient_usernames': '+111'})
         self.tournament.notify_by_signal = False # Tournament setting disables signal
         self.tournament.save()
 
         send_signal_notification(self.user, self.match_log, self.tournament)
 
+        # Disabled per-tournament notifications are skipped silently: no send, no log
         mock_post.assert_not_called()
-        log_entry = NotificationLog.objects.filter(backend_setting=active_signal_setting).latest('timestamp')
-        self.assertFalse(log_entry.success)
-        self.assertIn(f"Signal notification skipped for tournament '{self.tournament.name}' as per tournament settings (disabled).", log_entry.details)
-        self.assertEqual(log_entry.backend_setting, active_signal_setting)
+        self.assertFalse(NotificationLog.objects.exists())
 
     @patch('tournament_creator.notifications.requests.post')
     def test_signal_backend_not_active(self, mock_post):
@@ -247,9 +282,9 @@ class TestSendSignalNotification(TestCase):
 
     @patch('tournament_creator.notifications.requests.post')
     def test_signal_backend_missing_url(self, mock_post):
-        config_override = self.base_signal_config.copy()
-        del config_override['signal_cli_rest_api_url']
-        config_override['recipient_usernames'] = '+111'
+        # Blank out the daemon URL (config_override is merged over the base config,
+        # so deleting the key wouldn't remove it)
+        config_override = {'signal_cli_rest_api_url': '', 'recipient_usernames': '+111'}
         self._create_signal_setting(config_override=config_override)
         self.tournament.notify_by_signal = True
         self.tournament.save()
@@ -260,22 +295,45 @@ class TestSendSignalNotification(TestCase):
         self.assertIn("configuration is missing 'signal_cli_rest_api_url' or 'signal_sender_phone_number'", log.details)
 
     @patch('tournament_creator.notifications.requests.post')
-    def test_api_http_error_400_json_response(self, mock_post):
-        mock_response = MagicMock(status_code=400, text='{"error": "Bad API request"}')
-        mock_response.json.return_value = {"error": "Bad API request"}
-        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(response=mock_response)
+    def test_api_http_error(self, mock_post):
+        mock_response = MagicMock(status_code=400)
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            "400 Client Error: Bad Request", response=mock_response
+        )
         mock_post.return_value = mock_response
-        
+
         self._create_signal_setting(config_override={'recipient_usernames': '+111'})
         self.tournament.notify_by_signal = True
         self.tournament.save()
         send_signal_notification(self.user, self.match_log, self.tournament)
-        
+
         mock_post.assert_called_once()
         log = NotificationLog.objects.first()
         self.assertFalse(log.success)
-        self.assertIn("Signal API HTTP Error: 400", log.details)
-        self.assertIn("API Error Message: Bad API request", log.details)
+        self.assertIn("Failed to send Signal message", log.details)
+        self.assertIn("recipient +111: 400 Client Error: Bad Request", log.details)
+
+    @patch('tournament_creator.notifications.requests.post')
+    def test_jsonrpc_error_response(self, mock_post):
+        # HTTP 200 but the JSON-RPC envelope carries an error (e.g. unknown group id)
+        mock_response = MagicMock(status_code=200)
+        mock_response.json.return_value = {
+            "jsonrpc": "2.0",
+            "error": {"code": -32602, "message": "Invalid group id"},
+            "id": "test-id"
+        }
+        mock_post.return_value = mock_response
+
+        self._create_signal_setting(config_override={'recipient_group_ids': 'badgroupid='})
+        self.tournament.notify_by_signal = True
+        self.tournament.save()
+        send_signal_notification(self.user, self.match_log, self.tournament)
+
+        mock_post.assert_called_once()
+        log = NotificationLog.objects.first()
+        self.assertFalse(log.success)
+        self.assertIn("Failed to send Signal message", log.details)
+        self.assertIn("group badgroupid=: JSON-RPC error: Invalid group id", log.details)
 
 
 class TestNotificationTriggerInView(TestCase):

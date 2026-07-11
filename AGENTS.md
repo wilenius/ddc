@@ -287,10 +287,12 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
 ```
 
 ### Testing
-- Test suite has 95 tests; 7 pre-existing failures as of 2026-07-11 (5 in
-  test_notifications, 2 in test_views) — verify a change didn't add failures by
-  comparing against a baseline run, not by expecting a green suite
-- Tests updated to include required fields: `tournament_category`, `number_of_stages`, `name_display_format`
+- Test suite has 97 tests, all passing as of 2026-07-11 — expect a green suite;
+  a failure means the change under test broke something
+- Signal notification tests mock `requests.post` against the JSON-RPC daemon
+  protocol (one `send` call per recipient to `/api/v1/rpc`); disabled
+  per-tournament notifications are skipped silently (no send, no NotificationLog)
+- Tests updated to include required fields: `tournament_category`, `number_of_stages`, `format_type`, `name_display_format`
 - Form fields use `FIRST` or `LAST` for name_display_format (not `FULL`)
 - `manage.py stress_test_recording <tournament_id> --concurrency 5 [--enable-signal]`
   fires concurrent score recordings over HTTP against the running server (real

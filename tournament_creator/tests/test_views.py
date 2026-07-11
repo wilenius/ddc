@@ -73,6 +73,7 @@ class ViewTests(TestCase):
             'date': timezone.now().date(),
             'tournament_category': 'MOC',
             'number_of_stages': 1,
+            'format_type': 'STANDARD',
             'name_display_format': 'FIRST',
             'players': [player.id for player in self.players[:5]]  # 5 players for MOC
         }
@@ -200,6 +201,7 @@ class ViewTests(TestCase):
             'date': timezone.now().date().isoformat(),
             'tournament_category': 'MOC',
             'number_of_stages': 1,
+            'format_type': 'STANDARD',
             'name_display_format': 'FIRST',
             'players': [p.id for p in self.moc_players], # For MOC player selection
             'notify_by_email': 'on', # Checkbox value for True

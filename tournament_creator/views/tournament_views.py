@@ -349,7 +349,7 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         from ..models.base_models import Stage
         all_matchups = list(Matchup.objects.filter(tournament_chart=tournament).select_related(
             'pair1', 'pair2', 'pair1__player1', 'pair1__player2', 'pair2__player1', 'pair2__player2',
-            'pair1_player1', 'pair1_player2', 'pair2_player1', 'pair2_player2', 'stage'
+            'pair1_player1', 'pair1_player2', 'pair2_player1', 'pair2_player2', 'stage', 'pool'
         ).order_by('stage__stage_number', 'round_number', 'court_number'))
         stages = list(Stage.objects.filter(tournament=tournament).order_by('stage_number'))
 
@@ -390,6 +390,43 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
             if matchup.pair2:
                 matchup.pair2.player1.display_name = matchup.pair2.player1.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player1.get_display_name(all_players)
                 matchup.pair2.player2.display_name = matchup.pair2.player2.get_display_name_last_name_mode(all_players) if use_last_names else matchup.pair2.player2.get_display_name(all_players)
+
+        # "My matches" view: identify the logged-in viewer's own matchups so they can
+        # jump straight to recording their results instead of hunting through every
+        # phase/pool/court. Identity is the login-linked Player only (Player.user);
+        # visitors without a linked account simply don't see the toggle.
+        viewer_player = getattr(self.request.user, 'player', None) if self.request.user.is_authenticated else None
+        my_matchups = []
+        if viewer_player is not None:
+            vid = viewer_player.id
+            for matchup in all_matchups:
+                involved = vid in (
+                    matchup.pair1_player1_id, matchup.pair1_player2_id,
+                    matchup.pair2_player1_id, matchup.pair2_player2_id,
+                )
+                if not involved and matchup.pair1_id:
+                    involved = vid in (matchup.pair1.player1_id, matchup.pair1.player2_id)
+                if not involved and matchup.pair2_id:
+                    involved = vid in (matchup.pair2.player1_id, matchup.pair2.player2_id)
+                if involved:
+                    my_matchups.append(matchup)
+        context['my_matchups'] = my_matchups
+        context['viewer_is_participant'] = len(my_matchups) > 0
+
+        # "Up next": the viewer's first still-unrecorded match, in schedule order, so
+        # long tournaments open right on the match that needs recording.
+        my_next_matchup = None
+        if my_matchups:
+            scored_ids = set(
+                MatchScore.objects.filter(matchup__in=my_matchups).values_list('matchup_id', flat=True)
+            )
+            for matchup in my_matchups:
+                matchup.is_next = False
+                if my_next_matchup is None and matchup.id not in scored_ids:
+                    my_next_matchup = matchup
+            if my_next_matchup is not None:
+                my_next_matchup.is_next = True
+        context['my_next_matchup'] = my_next_matchup
 
         # NOW group matchups by stage (after display names are set)
         matchups_by_stage = {}

@@ -4,9 +4,10 @@
         <div class="row">
             {% for matchup in round.list %}
                 <div class="col-md-6 mb-3">
-                    <div class="card h-100">
-                        <div class="card-header">
-                            Court {{ matchup.court_number }}
+                    <div class="card h-100{% if mark_next and matchup.is_next %} border-primary border-2{% endif %}">
+                        <div class="card-header{% if mark_next and matchup.is_next %} d-flex align-items-center{% endif %}">
+                            <span>{% if show_pool and matchup.pool %}{{ matchup.pool.name }} &middot; {% endif %}Court {{ matchup.court_number }}</span>
+                            {% if mark_next and matchup.is_next %}<span class="badge bg-primary ms-auto">Up next</span>{% endif %}
                         </div>
                         <div class="card-body">
                             <div class="row align-items-center text-center">

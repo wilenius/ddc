@@ -50,6 +50,69 @@
                 {% endif %}
             </div>
             <div class="card-body">
+                {% if viewer_is_participant and not is_league_format %}
+                    {# Segmented toggle: jump straight to your own matches, or see the full schedule. #}
+                    <div class="btn-group mb-3 w-100" role="group" aria-label="Which matches to show" id="matchViewToggle">
+                        <button type="button" class="btn btn-outline-primary active" id="viewMineBtn" aria-pressed="true">
+                            <i class="bi bi-person-fill"></i> My matches
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" id="viewAllBtn" aria-pressed="false">
+                            <i class="bi bi-grid-3x3-gap-fill"></i> All matches
+                        </button>
+                    </div>
+                    <div id="myMatchesView">
+                        {# "Up next": jump straight to the first match you haven't recorded yet. #}
+                        {% if my_next_matchup %}
+                            <div class="card border-primary border-2 mb-4 shadow-sm">
+                                <div class="card-header bg-primary text-white d-flex flex-wrap align-items-center">
+                                    <span><i class="bi bi-play-fill"></i> <strong>Up next</strong></span>
+                                    <span class="ms-auto small">
+                                        {% if my_next_matchup.stage %}{{ my_next_matchup.stage.name }} &middot; {% endif %}{% if my_next_matchup.pool %}{{ my_next_matchup.pool.name }} &middot; {% endif %}Round {{ my_next_matchup.round_number }} &middot; Court {{ my_next_matchup.court_number }}
+                                    </span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row align-items-center text-center">
+                                        <div class="col">
+                                            <strong>{{ my_next_matchup.get_team1_player1.display_name }} &<br>{{ my_next_matchup.get_team1_player2.display_name }}</strong>
+                                        </div>
+                                        <div class="col-auto"><h4 class="mb-0">VS</h4></div>
+                                        <div class="col">
+                                            <strong>{{ my_next_matchup.get_team2_player1.display_name }} &<br>{{ my_next_matchup.get_team2_player2.display_name }}</strong>
+                                        </div>
+                                    </div>
+                                    {% if can_record_scores %}
+                                        <div class="text-center mt-3">
+                                            <button class="btn btn-primary record-result"
+                                                    data-matchup-id="{{ my_next_matchup.id }}"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#recordScoreModal">
+                                                Record result
+                                            </button>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle"></i>
+                                You're all caught up &mdash; every scheduled match of yours has a result{% if next_stage %}. Waiting for the next phase to be generated.{% else %}.{% endif %}
+                            </div>
+                        {% endif %}
+                        {% if has_multiple_stages %}
+                            {% regroup my_matchups by stage as my_stage_list %}
+                            {% for sgroup in my_stage_list %}
+                                <h5 class="mt-2 mb-3">{{ sgroup.grouper.name }}</h5>
+                                {% regroup sgroup.list by round_number as round_list %}
+                                {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores show_pool=is_multi_phase mark_next=True %}
+                                {% if not forloop.last %}<hr class="my-4">{% endif %}
+                            {% endfor %}
+                        {% else %}
+                            {% regroup my_matchups by round_number as round_list %}
+                            {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores mark_next=True %}
+                        {% endif %}
+                    </div>
+                {% endif %}
+                <div id="allMatchesView"{% if viewer_is_participant and not is_league_format %} class="d-none"{% endif %}>
                 {% if is_league_format %}
                     {# League format - display by date #}
                     {% if not all_matches_have_dates %}
@@ -260,6 +323,35 @@
                     {# Single stage - show matchups directly without tabs #}
                     {% regroup matchups by round_number as round_list %}
                     {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores %}
+                {% endif %}
+                </div>{# /#allMatchesView #}
+                {% if viewer_is_participant and not is_league_format %}
+                <script>
+                // "My matches" / "All matches" segmented toggle. Defaults to My matches
+                // (the answer to "which view on open"); a manual switch to All matches is
+                // remembered per-tournament in localStorage and survives the reload that
+                // follows recording a score.
+                (function() {
+                    const mineBtn = document.getElementById('viewMineBtn');
+                    const allBtn = document.getElementById('viewAllBtn');
+                    const mineView = document.getElementById('myMatchesView');
+                    const allView = document.getElementById('allMatchesView');
+                    if (!mineBtn || !allBtn || !mineView || !allView) return;
+                    const KEY = 'matchView:{{ tournament.id }}';
+                    function apply(view) {
+                        const mine = view !== 'all';
+                        mineView.classList.toggle('d-none', !mine);
+                        allView.classList.toggle('d-none', mine);
+                        mineBtn.classList.toggle('active', mine);
+                        allBtn.classList.toggle('active', !mine);
+                        mineBtn.setAttribute('aria-pressed', mine ? 'true' : 'false');
+                        allBtn.setAttribute('aria-pressed', mine ? 'false' : 'true');
+                    }
+                    apply(localStorage.getItem(KEY) === 'all' ? 'all' : 'mine');
+                    mineBtn.addEventListener('click', function() { localStorage.setItem(KEY, 'mine'); apply('mine'); });
+                    allBtn.addEventListener('click', function() { localStorage.setItem(KEY, 'all'); apply('all'); });
+                })();
+                </script>
                 {% endif %}
             </div>
         </div>

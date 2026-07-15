@@ -3,7 +3,8 @@ from django.views.generic import RedirectView
 from .views.tournament_views import (
     TournamentListView, TournamentCreateView, TournamentDetailView,
     TournamentDeleteView, TournamentDownloadResultsView, record_match_result,
-    manual_tiebreak_resolution, tournament_settings, generate_next_stage
+    manual_tiebreak_resolution, tournament_settings, generate_next_stage,
+    reset_sandbox_scores
 )
 from .views.player_views import (
     PlayerListView, PlayerCreateView, PlayerUpdateView, PlayerDeleteView
@@ -26,6 +27,7 @@ urlpatterns = [
          record_match_result, name='record_match_result'),
     path('tournaments/<int:tournament_id>/tiebreak/', manual_tiebreak_resolution, name='manual_tiebreak_resolution'),
     path('tournaments/<int:tournament_id>/generate-next-stage/', generate_next_stage, name='generate_next_stage'),
+    path('tournaments/<int:tournament_id>/reset-sandbox/', reset_sandbox_scores, name='reset_sandbox_scores'),
     path('players/', PlayerListView.as_view(), name='player_list'),
     path('players/create/', PlayerCreateView.as_view(), name='player_create'),
     path('players/<int:pk>/update/', PlayerUpdateView.as_view(), name='player_update'),

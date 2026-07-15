@@ -371,6 +371,24 @@ class EurosStandingsTest(EurosFormatTestBase):
         self.assertFalse(any(e.get('manually_resolved') for e in standings))
 
 
+class EurosScoreRulesTest(EurosFormatTestBase):
+    """Each phase declares its expected game format for score validation."""
+
+    def test_rules_per_phase(self):
+        self.assertEqual(self.impl.get_score_rules(self.stages[0].matchups.first()),
+                         {'points_to': 21, 'cap': 23, 'best_of': 1})
+        self.advance_through_phase2()
+        self.assertEqual(self.impl.get_score_rules(self.stages[1].matchups.first()),
+                         {'points_to': 15, 'cap': 18, 'best_of': 1})
+        semi = self.stages[2].matchups.filter(round_number=1).first()
+        self.assertEqual(self.impl.get_score_rules(semi),
+                         {'points_to': 15, 'cap': 18, 'best_of': 3})
+        self.play_finals()
+        placement = self.stages[2].matchups.filter(round_number=2).first()
+        self.assertEqual(self.impl.get_score_rules(placement),
+                         {'points_to': 21, 'cap': 23, 'best_of': 3})
+
+
 class EurosViewsTest(EurosFormatTestBase):
     """The detail page renders (all template branches) and the advancement endpoint works."""
 
@@ -456,6 +474,50 @@ class EurosViewsTest(EurosFormatTestBase):
         self.record_win(matchups[frozenset((1, 20))], self.pair_by_seed(20))
         response = self.detail()
         self.assertContains(response, 'H2H:')
+
+    def test_sandbox_reset_tears_down_generated_phases(self):
+        self.tournament.is_sandbox = True
+        self.tournament.save()
+        self.advance_through_phase2()  # phases 1+2 played, finals semis generated
+        self.assertTrue(self.stages[1].matchups.exists())
+        self.assertTrue(self.stages[2].pools.exists())
+
+        response = self.client.post(reverse('reset_sandbox_scores',
+                                            kwargs={'tournament_id': self.tournament.pk}))
+        self.assertRedirects(response, reverse('tournament_detail', kwargs={'pk': self.tournament.pk}))
+        self.assertEqual(
+            MatchScore.objects.filter(matchup__tournament_chart=self.tournament).count(), 0)
+        # Generated later phases are torn down; phase 1 structure survives unscored.
+        self.assertFalse(self.stages[1].matchups.exists())
+        self.assertFalse(self.stages[1].pools.exists())
+        self.assertFalse(self.stages[2].matchups.exists())
+        self.assertEqual(self.stages[0].matchups.count(), 30)
+        self.assertEqual(self.stages[0].pools.count(), 5)
+
+    def test_record_score_warn_and_confirm(self):
+        matchup = self.stages[0].matchups.first()
+        url = reverse('record_match_result', kwargs={
+            'tournament_id': self.tournament.pk, 'matchup_id': matchup.id})
+
+        # Pool Phase 1 is one game to 21 — a game recorded to 15 gets flagged
+        # and nothing is saved yet.
+        response = self.client.post(url, {'team1_scores': '[15]', 'team2_scores': '[13]'})
+        data = response.json()
+        self.assertEqual(data['status'], 'needs_confirmation')
+        self.assertTrue(data['warnings'])
+        self.assertEqual(matchup.scores.count(), 0)
+
+        # A confirmed resubmit is accepted (forfeits, retirements, ...).
+        response = self.client.post(url, {'team1_scores': '[15]', 'team2_scores': '[13]',
+                                          'confirmed': '1'})
+        self.assertEqual(response.json()['status'], 'success')
+        self.assertEqual(matchup.scores.count(), 1)
+
+        # Conforming scores save without any confirmation round-trip.
+        for team1, team2 in [('[21]', '[19]'), ('[22]', '[20]'), ('[23]', '[22]')]:
+            response = self.client.post(url, {'team1_scores': team1, 'team2_scores': team2})
+            self.assertEqual(response.json()['status'], 'success',
+                             f"{team1}–{team2} should be accepted directly")
 
     def test_manual_tiebreak_page_lists_pool_ties_and_saves(self):
         self.play_stage_lower_seed_wins(self.stages[0])

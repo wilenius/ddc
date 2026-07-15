@@ -200,7 +200,10 @@ class Command(BaseCommand):
         request = RequestFactory().post(
             f'/tournament/{tournament.id}/matchup/{matchup.id}/record/',
             {'team1_scores': json.dumps(team1_scores),
-             'team2_scores': json.dumps(team2_scores)},
+             'team2_scores': json.dumps(team2_scores),
+             # Skip the warn-and-confirm format check; the --points/--cap the
+             # simulation ran with need not match the format's game structure.
+             'confirmed': '1'},
         )
         request.user = user
         response = record_match_result(request, tournament.id, matchup.id)

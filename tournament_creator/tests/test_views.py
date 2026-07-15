@@ -1,9 +1,13 @@
-from django.test import TestCase, Client
+from django.test import TestCase, SimpleTestCase, Client
 from django.urls import reverse
 from datetime import timedelta
-from ..models import Player, TournamentChart, TournamentArchetype, User, Matchup
+from unittest.mock import patch
+from ..models import Player, TournamentChart, TournamentArchetype, User, Matchup, MatchScore
 from ..models.notifications import NotificationBackendSetting # Added
+from ..models.logging import MatchResultLog
+from ..models.scoring import PlayerScore
 from ..forms import TournamentCreationForm # Added
+from ..views.tournament_views import _score_rule_warnings
 from django.utils import timezone
 
 class ViewTests(TestCase):
@@ -342,3 +346,144 @@ class TournamentListTabsTests(TestCase):
         # Archived stays out of upcoming/past even for admins.
         past_names = {t.name for t in response.context['past_tournaments']}
         self.assertNotIn('Iloranta Open', past_names)
+
+class ScoreRuleWarningsTests(SimpleTestCase):
+    """Unit tests for the warn-and-confirm score validation logic."""
+
+    BO1_21 = {'points_to': 21, 'cap': 23, 'best_of': 1}
+    BO3_15 = {'points_to': 15, 'cap': 18, 'best_of': 3}
+    SETS_FREE = {'points_to': 21, 'cap': 23, 'best_of': None}
+
+    def assertConforms(self, rules, team1, team2):
+        self.assertEqual(_score_rule_warnings(rules, team1, team2), [])
+
+    def assertFlagged(self, rules, team1, team2, expected_warnings=1):
+        warnings = _score_rule_warnings(rules, team1, team2)
+        self.assertEqual(len(warnings), expected_warnings,
+                         f"{team1} vs {team2}: {warnings}")
+
+    def test_conforming_single_games(self):
+        self.assertConforms(self.BO1_21, [21], [15])   # straight win
+        self.assertConforms(self.BO1_21, [21], [19])   # minimal win-by-2
+        self.assertConforms(self.BO1_21, [22], [20])   # deuce
+        self.assertConforms(self.BO1_21, [23], [21])   # win-by-2 exactly at the cap
+        self.assertConforms(self.BO1_21, [23], [22])   # cap win by 1
+        self.assertConforms(self.BO1_21, [15], [21])   # team order doesn't matter
+
+    def test_flagged_single_games(self):
+        self.assertFlagged(self.BO1_21, [21], [20])    # win by 1
+        self.assertFlagged(self.BO1_21, [24], [20])    # over the cap
+        self.assertFlagged(self.BO1_21, [15], [10])    # underplayed
+        self.assertFlagged(self.BO1_21, [21], [21])    # tie
+        self.assertFlagged(self.BO1_21, [22], [19])    # unreachable past deuce
+        self.assertFlagged(self.BO1_21, [23], [19])    # unreachable cap score
+
+    def test_set_count_single_game(self):
+        # Right per-set scores, but a single-game match with two sets entered.
+        self.assertFlagged(self.BO1_21, [21, 21], [15, 15])
+
+    def test_best_of_three(self):
+        self.assertConforms(self.BO3_15, [15, 15], [10, 12])        # 2-0
+        self.assertConforms(self.BO3_15, [15, 10, 15], [8, 15, 13])  # 2-1
+        self.assertFlagged(self.BO3_15, [15], [10])                 # incomplete: 1-0
+        self.assertFlagged(self.BO3_15, [15, 10], [10, 15])         # incomplete: 1-1
+        self.assertFlagged(self.BO3_15, [15, 15, 15], [10, 10, 10])  # dead third set
+
+    def test_free_set_count_validates_sets_only(self):
+        # best_of None (sandbox): any number of sets, each set still checked.
+        self.assertConforms(self.SETS_FREE, [21, 21, 21], [15, 15, 15])
+        self.assertFlagged(self.SETS_FREE, [21, 5], [15, 3])
+
+
+class SandboxTournamentTests(TestCase):
+    """Sandbox (practice) tournaments: recording open to any logged-in user,
+    warn-and-confirm score checks, no notifications, and a reset endpoint."""
+
+    def setUp(self):
+        self.client = Client()
+        # A spectator who is NOT competing — normally the most restricted role.
+        self.spectator_user = User.objects.create_user(
+            username='sandbox_spectator', password='test123', role='SPECTATOR')
+        self.players = [
+            Player.objects.create(first_name=f'S{i}', last_name='Box', ranking=i + 1)
+            for i in range(4)
+        ]
+        # Dated in the past on purpose: sandboxes must never lock.
+        self.tournament = TournamentChart.objects.create(
+            name='Recording Practice',
+            date=timezone.now().date() - timedelta(days=30),
+            number_of_rounds=3, number_of_courts=1,
+            is_sandbox=True, notify_by_signal=True, notify_by_email=True,
+        )
+        self.tournament.players.set(self.players)
+        self.matchup = Matchup.objects.create(
+            tournament_chart=self.tournament, round_number=1, court_number=1,
+            pair1_player1=self.players[0], pair1_player2=self.players[1],
+            pair2_player1=self.players[2], pair2_player2=self.players[3])
+        self.record_url = reverse('record_match_result', kwargs={
+            'tournament_id': self.tournament.id, 'matchup_id': self.matchup.id})
+        self.reset_url = reverse('reset_sandbox_scores', kwargs={
+            'tournament_id': self.tournament.id})
+        self.client.login(username='sandbox_spectator', password='test123')
+
+    def record(self, team1='[21]', team2='[15]', **extra):
+        return self.client.post(self.record_url, {
+            'team1_scores': team1, 'team2_scores': team2, **extra})
+
+    def test_any_logged_in_user_can_record_even_when_past(self):
+        response = self.record()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'success')
+        self.assertEqual(self.matchup.scores.count(), 1)
+
+    def test_nonconforming_score_prompts_confirmation(self):
+        # Sandboxes rehearse the Euros pool-phase format (to 21, cap 23).
+        response = self.record(team1='[15]', team2='[10]')
+        data = response.json()
+        self.assertEqual(data['status'], 'needs_confirmation')
+        self.assertTrue(data['warnings'])
+        self.assertEqual(self.matchup.scores.count(), 0)
+
+        response = self.record(team1='[15]', team2='[10]', confirmed='1')
+        self.assertEqual(response.json()['status'], 'success')
+        self.assertEqual(self.matchup.scores.count(), 1)
+
+    def test_sandbox_never_notifies(self):
+        with patch('tournament_creator.views.tournament_views.send_email_notification') as email_mock, \
+             patch('tournament_creator.views.tournament_views.send_signal_notification') as signal_mock:
+            response = self.record()
+        self.assertEqual(response.json()['status'], 'success')
+        email_mock.assert_not_called()
+        signal_mock.assert_not_called()
+
+    def test_reset_clears_results(self):
+        self.record()
+        self.assertTrue(PlayerScore.objects.filter(tournament=self.tournament).exists())
+        self.assertTrue(MatchResultLog.objects.filter(matchup=self.matchup).exists())
+
+        response = self.client.post(self.reset_url)
+        self.assertRedirects(response, reverse('tournament_detail', kwargs={'pk': self.tournament.pk}))
+        self.assertEqual(self.matchup.scores.count(), 0)
+        self.assertFalse(MatchResultLog.objects.filter(matchup=self.matchup).exists())
+        self.assertFalse(PlayerScore.objects.filter(tournament=self.tournament).exists())
+
+    def test_reset_refused_for_regular_tournament(self):
+        self.tournament.is_sandbox = False
+        self.tournament.save()
+        # Have something recorded (as admin, since the sandbox rules no longer apply).
+        MatchScore.objects.create(matchup=self.matchup, set_number=1,
+                                  team1_score=21, team2_score=15)
+        response = self.client.post(self.reset_url)
+        self.assertRedirects(response, reverse('tournament_detail', kwargs={'pk': self.tournament.pk}))
+        self.assertEqual(self.matchup.scores.count(), 1)
+
+    def test_detail_page_shows_banner_and_reset_button(self):
+        response = self.client.get(reverse('tournament_detail', kwargs={'pk': self.tournament.pk}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Practice tournament')
+        self.assertContains(response, 'Reset all results')
+        # A sandbox never shows the past-tournament lock notice.
+        self.assertNotContains(response, 'results can no longer be edited')
+
+    def test_regular_formats_have_no_score_rules(self):
+        self.assertIsNone(TournamentArchetype().get_score_rules(self.matchup))

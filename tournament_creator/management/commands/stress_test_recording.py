@@ -147,6 +147,9 @@ class Command(BaseCommand):
             data = {
                 'team1_scores': json.dumps([points]),
                 'team2_scores': json.dumps([max(points - 2, 0)]),
+                # Skip the warn-and-confirm format check; generated scores
+                # don't necessarily match the tournament's game structure.
+                'confirmed': '1',
                 'csrfmiddlewaretoken': session.cookies['csrftoken'],
             }
             barrier.wait()

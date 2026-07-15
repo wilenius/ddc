@@ -6,6 +6,7 @@
                     <div class="card-body">
                         <h5 class="card-title">
                             {{ tournament.name }}
+                            {% if tournament.is_sandbox %}<span class="badge bg-info text-dark">Practice</span>{% endif %}
                             {% if archived %}<i class="bi bi-archive text-muted" title="Archived"></i>{% endif %}
                         </h5>
                         <p class="card-text">

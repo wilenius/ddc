@@ -1,0 +1,13 @@
+{% comment %}
+Opens the score-recording modal. The modal JS reads the matchup id, team
+labels and any existing set scores from these data attributes, so every
+record/edit button must be rendered through this partial.
+Parameters: matchup, label, button_class (e.g. "btn-outline-primary btn-sm").
+{% endcomment %}
+<button class="btn {{ button_class }} record-result"
+        data-matchup-id="{{ matchup.id }}"
+        data-team1="{{ matchup.get_team1_player1.display_name }} & {{ matchup.get_team1_player2.display_name }}"
+        data-team2="{{ matchup.get_team2_player1.display_name }} & {{ matchup.get_team2_player2.display_name }}"
+        data-scores="{% for score in matchup.scores.all %}{{ score.team1_score }}-{{ score.team2_score }}{% if not forloop.last %},{% endif %}{% endfor %}"
+        data-bs-toggle="modal"
+        data-bs-target="#recordScoreModal">{{ label }}</button>

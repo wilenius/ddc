@@ -41,7 +41,7 @@ class TournamentCreationForm(forms.ModelForm):
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
             'signal_recipient_usernames', 'signal_recipient_group_ids',
             'name_display_format', 'show_structure', 'default_sets_per_match',
-            'archived'
+            'archived', 'is_sandbox'
         ]
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Summer League 2025'}),

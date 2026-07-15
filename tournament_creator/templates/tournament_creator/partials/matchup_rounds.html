@@ -60,23 +60,13 @@
                                 {% endfor %}
                                 <div class="text-center mt-3">
                                     {% if can_record_scores %}
-                                        <button class="btn btn-outline-primary btn-sm record-result"
-                                                data-matchup-id="{{ matchup.id }}"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#recordScoreModal">
-                                            Edit Result
-                                        </button>
+                                        {% include "tournament_creator/partials/record_result_button.html" with label="Edit Result" button_class="btn-outline-primary btn-sm" %}
                                     {% endif %}
                                 </div>
                             {% else %}
                                 <div class="text-center mt-3">
                                     {% if can_record_scores %}
-                                        <button class="btn btn-primary btn-sm record-result"
-                                                data-matchup-id="{{ matchup.id }}"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#recordScoreModal">
-                                            Record Result
-                                        </button>
+                                        {% include "tournament_creator/partials/record_result_button.html" with label="Record Result" button_class="btn-primary btn-sm" %}
                                     {% endif %}
                                 </div>
                             {% endif %}

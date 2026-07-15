@@ -224,6 +224,22 @@ class EurosFormat(PairsTournamentArchetype):
     def calculate_courts(self, num_pairs):
         return self.number_of_fields
 
+    def get_score_rules(self, matchup):
+        """Euros match formats (all games win by 2):
+        Pool Phase 1: one game to 21, cap 23.  Pool Phase 2: one game to 15, cap 18.
+        Finals semis (round 1): best-of-3 to 15, cap 18.
+        Placement finals (round 2): best-of-3 to 21, cap 23.
+        """
+        if matchup.stage is None:
+            return None
+        if matchup.stage.stage_number == 1:
+            return {'points_to': 21, 'cap': 23, 'best_of': 1}
+        if matchup.stage.stage_number == 2:
+            return {'points_to': 15, 'cap': 18, 'best_of': 1}
+        if matchup.round_number == 1:
+            return {'points_to': 15, 'cap': 18, 'best_of': 3}
+        return {'points_to': 21, 'cap': 23, 'best_of': 3}
+
     def create_stages(self, tournament) -> List[Stage]:
         """Create the three stages. Each stage's standings are computed from its own matches."""
         return [

@@ -15,6 +15,23 @@
                 Date: {{ tournament.date }}
             {% endif %}
         </p>
+        {% if tournament.is_sandbox %}
+            <div class="alert alert-info py-2 mb-0 d-flex align-items-center flex-wrap">
+                <span>
+                    <i class="bi bi-cone-striped"></i>
+                    <strong>Practice tournament</strong> &mdash; results don't count, feel free to try recording scores.
+                </span>
+                {% if user.is_authenticated %}
+                    <form method="post" action="{% url 'reset_sandbox_scores' tournament.id %}" class="ms-auto mb-0 ps-2"
+                          onsubmit="return confirm('Clear ALL recorded results of this practice tournament?')">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-arrow-counterclockwise"></i> Reset all results
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        {% endif %}
         {% if results_locked_past %}
             <div class="alert alert-secondary py-2 mb-0">
                 <i class="bi bi-lock"></i>
@@ -82,12 +99,7 @@
                                     </div>
                                     {% if can_record_scores %}
                                         <div class="text-center mt-3">
-                                            <button class="btn btn-primary record-result"
-                                                    data-matchup-id="{{ my_next_matchup.id }}"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#recordScoreModal">
-                                                Record result
-                                            </button>
+                                            {% include "tournament_creator/partials/record_result_button.html" with matchup=my_next_matchup label="Record result" button_class="btn-primary" %}
                                         </div>
                                     {% endif %}
                                 </div>
@@ -171,21 +183,11 @@
                                                         {% endfor %}
                                                     </span>
                                                     {% if can_record_scores %}
-                                                        <button class="btn btn-outline-primary btn-sm record-result ms-2"
-                                                                data-matchup-id="{{ matchup.id }}"
-                                                                data-bs-toggle="modal"
-                                                                data-bs-target="#recordScoreModal">
-                                                            Edit
-                                                        </button>
+                                                        {% include "tournament_creator/partials/record_result_button.html" with label="Edit" button_class="btn-outline-primary btn-sm ms-2" %}
                                                     {% endif %}
                                                 {% else %}
                                                     {% if can_record_scores %}
-                                                        <button class="btn btn-primary btn-sm record-result"
-                                                                data-matchup-id="{{ matchup.id }}"
-                                                                data-bs-toggle="modal"
-                                                                data-bs-target="#recordScoreModal">
-                                                            Record Score
-                                                        </button>
+                                                        {% include "tournament_creator/partials/record_result_button.html" with label="Record Score" button_class="btn-primary btn-sm" %}
                                                     {% else %}
                                                         <span class="text-muted">Not played</span>
                                                     {% endif %}
@@ -639,100 +641,30 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Handle record result button clicks
+    // Handle record result button clicks. The button (see
+    // partials/record_result_button.html) carries the matchup id, the team
+    // labels and any existing set scores in its data attributes.
     document.querySelectorAll('.record-result').forEach(button => {
         button.addEventListener('click', function() {
-            const matchupId = this.dataset.matchupId;
-            document.getElementById('matchupId').value = matchupId;
-
-            let team1Players, team2Players, existingScoresText;
-
-            // Check if we're in a table row (league format) or card (standard format)
-            const tableRow = this.closest('tr');
-            if (tableRow) {
-                // League format - extract from matchup-display element
-                const matchupDisplay = tableRow.querySelector('.matchup-display');
-                if (matchupDisplay) {
-                    const matchupText = matchupDisplay.textContent.replace(/\s+/g, ' ').trim();
-                    
-                    // Parse "Player1 & Player2 vs Player3 & Player4"
-                    const parts = matchupText.split(' vs ');
-                    if (parts.length === 2) {
-                        team1Players = parts[0].trim();
-                        team2Players = parts[1].trim();
-                    } else {
-                        // Fallback if parsing fails
-                        team1Players = 'Team 1';
-                        team2Players = 'Team 2';
-                    }
-                } else {
-                    // Fallback if matchup-display not found
-                    team1Players = 'Team 1';
-                    team2Players = 'Team 2';
-                }
-
-                // Check if there are existing scores - look for the span with class 'match-scores'
-                const cells = tableRow.querySelectorAll('td');
-                const scoresSpan = cells[1].querySelector('.match-scores');
-                existingScoresText = scoresSpan ? scoresSpan.textContent.trim() : null;
-            } else {
-                // Standard format - extract from card
-                const matchupCard = this.closest('.card');
-                team1Players = matchupCard.querySelectorAll('.col:first-child strong')[0].textContent.trim();
-                team2Players = matchupCard.querySelectorAll('.col:last-child strong')[0].textContent.trim();
-
-                // Check for existing scores in the card
-                const scoreElements = matchupCard.querySelectorAll('.col:first-of-type');
-                existingScoresText = scoreElements.length > 1 ? 'card' : null;
-            }
-
-            // Update labels with player names
-            document.getElementById('team1Label').value = team1Players;
-            document.getElementById('team2Label').value = team2Players;
+            document.getElementById('matchupId').value = this.dataset.matchupId;
+            document.getElementById('team1Label').value = this.dataset.team1;
+            document.getElementById('team2Label').value = this.dataset.team2;
 
             // Reset the form
             document.getElementById('setScores').innerHTML = '';
             currentSets = 0;
+            document.getElementById('addSet').disabled = false;
 
-            // If there are existing scores, populate them
-            if (existingScoresText === 'card') {
-                // Standard format - parse from card structure
-                const matchupCard = this.closest('.card');
-                const scoreElements = matchupCard.querySelectorAll('.col:first-of-type');
-                const team1Scores = [];
-                const team2Scores = [];
-
-                // Skip first element (team names) and process score elements
-                for (let i = 1; i < scoreElements.length; i++) {
-                    const team1Score = scoreElements[i].textContent.trim();
-                    const team2ScoreElement = matchupCard.querySelectorAll('.col:last-of-type')[i];
-                    const team2Score = team2ScoreElement.textContent.trim();
-
-                    team1Scores.push(team1Score);
-                    team2Scores.push(team2Score);
-                }
-
-                // Create set inputs and populate with scores
-                team1Scores.forEach((score1, index) => {
+            // Pre-fill existing set scores ("21-15,13-21"), or start with one empty set
+            if (this.dataset.scores) {
+                this.dataset.scores.split(',').forEach(pair => {
+                    const [team1Score, team2Score] = pair.split('-');
                     addNewSet();
-                    const lastSetContainer = document.querySelector('.set-container:last-child');
-                    lastSetContainer.querySelector('[name="team1_scores[]"]').value = score1;
-                    lastSetContainer.querySelector('[name="team2_scores[]"]').value = team2Scores[index];
-                });
-            } else if (existingScoresText) {
-                // League format - parse scores like "11–9, 11–7"
-                const scorePairs = existingScoresText.split(',').map(s => s.trim());
-                scorePairs.forEach(pair => {
-                    const scores = pair.split('–');
-                    addNewSet();
-                    const lastSetContainer = document.querySelector('.set-container:last-child');
-                    if (lastSetContainer) {
-                        lastSetContainer.querySelector('[name="team1_scores[]"]').value = scores[0].trim();
-                        lastSetContainer.querySelector('[name="team2_scores[]"]').value = scores[1].trim();
-                    }
+                    const setContainer = document.querySelector('.set-container:last-child');
+                    setContainer.querySelector('[name="team1_scores[]"]').value = team1Score;
+                    setContainer.querySelector('[name="team2_scores[]"]').value = team2Score;
                 });
             } else {
-                // Add one empty set for new scores
                 addNewSet();
             }
         });
@@ -750,9 +682,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Handle save score button
-    document.getElementById('saveScore').addEventListener('click', function() {
-        const saveButton = this;
+    // Handle save score button. `confirmed` re-submits scores the server
+    // flagged as not matching the expected game format (warn-and-confirm).
+    function submitScores(confirmed) {
+        const saveButton = document.getElementById('saveScore');
         const form = document.getElementById('scoreForm');
         const formData = new FormData();
 
@@ -767,6 +700,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         formData.append('team1_scores', JSON.stringify(team1Scores));
         formData.append('team2_scores', JSON.stringify(team2Scores));
+        if (confirmed) {
+            formData.append('confirmed', '1');
+        }
 
         // Disable button and show loading state
         saveButton.disabled = true;
@@ -798,6 +734,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 setTimeout(() => {
                     location.reload();
                 }, 800);
+            } else if (data.status === 'needs_confirmation') {
+                // The scores don't match the expected game format — let the
+                // recorder double-check, then save anyway (forfeits etc.).
+                saveButton.disabled = false;
+                saveButton.textContent = originalText;
+                const message = 'Check the scores:\n\n• ' +
+                    data.warnings.join('\n• ') +
+                    '\n\nSave anyway?';
+                if (window.confirm(message)) {
+                    submitScores(true);
+                }
             } else {
                 // Re-enable button and restore text
                 saveButton.disabled = false;
@@ -812,6 +759,10 @@ document.addEventListener('DOMContentLoaded', function() {
             saveButton.textContent = originalText;
             alert('Error saving score. Please try again.');
         });
+    }
+
+    document.getElementById('saveScore').addEventListener('click', function() {
+        submitScores(false);
     });
 });
 </script>

@@ -132,6 +132,20 @@
                         {% if form.show_structure.errors %}<div class="invalid-feedback d-block">{{ form.show_structure.errors|join:", " }}</div>{% endif %}
                     </div>
 
+                    <div class="mb-3">
+                        <div class="form-check" style="padding-left: 0;">
+                            {{ form.is_sandbox }}
+                            <label class="form-check-label" for="{{ form.is_sandbox.id_for_label }}" style="padding-left: 1.5em;">
+                                Practice tournament (sandbox)
+                                <i class="bi bi-info-circle text-muted"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="right"
+                                   title="Results don't count: any logged-in user can record and reset scores, and no notifications are sent. Use it to let players try out score recording."></i>
+                            </label>
+                        </div>
+                        {% if form.is_sandbox.errors %}<div class="invalid-feedback d-block">{{ form.is_sandbox.errors|join:", " }}</div>{% endif %}
+                    </div>
+
                     <hr class="my-4">
 
                     <h6 class="mb-3">Notifications</h6>
@@ -342,6 +356,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var notifyBySignal = document.querySelector('input[name="notify_by_signal"]').checked;
             var notifyByMatrix = document.querySelector('input[name="notify_by_matrix"]').checked;
             var showStructure = document.querySelector('input[name="show_structure"]').checked;
+            var isSandbox = document.querySelector('input[name="is_sandbox"]').checked;
             // sets-per-match field only exists in the DOM after MoC is selected; preserve if present
             var setsPerMatchEl = document.querySelector('select[name="default_sets_per_match"]');
             var setsPerMatch = setsPerMatchEl ? setsPerMatchEl.value : '';
@@ -356,6 +371,7 @@ document.addEventListener('DOMContentLoaded', function() {
                       "&notify_by_signal=" + notifyBySignal +
                       "&notify_by_matrix=" + notifyByMatrix +
                       "&show_structure=" + showStructure +
+                      "&is_sandbox=" + isSandbox +
                       (setsPerMatch ? "&default_sets_per_match=" + encodeURIComponent(setsPerMatch) : "");
             window.location = url;
         });

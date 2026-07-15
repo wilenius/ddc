@@ -129,6 +129,9 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         # Preserve show_structure checkbox state
         if 'show_structure' in self.request.GET:
             initial['show_structure'] = self.request.GET.get('show_structure') == 'true'
+        # Preserve practice tournament checkbox state
+        if 'is_sandbox' in self.request.GET:
+            initial['is_sandbox'] = self.request.GET.get('is_sandbox') == 'true'
         # Preserve sets per match (MoC only)
         if 'default_sets_per_match' in self.request.GET:
             initial['default_sets_per_match'] = self.request.GET.get('default_sets_per_match')
@@ -512,8 +515,10 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         ).select_related('recorded_by', 'matchup').order_by('-recorded_at')[:10]
         context['can_record_scores'] = tournament.user_can_edit_results(self.request.user)
         # Surface why recording is unavailable so players aren't left guessing.
+        # Sandbox tournaments never lock, so don't claim otherwise.
         context['results_locked_past'] = (
             tournament.is_past()
+            and not tournament.is_sandbox
             and not getattr(self.request.user, 'is_admin', lambda: False)()
         )
 
@@ -1185,6 +1190,43 @@ def generate_next_stage(request, tournament_id):
     return redirect('tournament_detail', pk=tournament_id)
 
 @login_required
+@require_POST
+def reset_sandbox_scores(request, tournament_id):
+    """
+    Wipe all recorded results of a sandbox (practice) tournament so the next
+    player can try recording from a clean slate. Open to every logged-in user,
+    but only for tournaments explicitly marked as sandbox.
+    """
+    tournament = get_object_or_404(TournamentChart, id=tournament_id)
+    if not tournament.is_sandbox:
+        messages.error(request, "Only practice tournaments can be reset.")
+        return redirect('tournament_detail', pk=tournament_id)
+
+    from ..models.scoring import PairScore
+    from ..models.tournament_types import get_implementation
+    MatchScore.objects.filter(matchup__tournament_chart=tournament).delete()
+    MatchResultLog.objects.filter(matchup__tournament_chart=tournament).delete()
+    # Aggregate standings are only recomputed on recording, so wipe them too;
+    # they are recreated (get_or_create) as new results come in.
+    PairScore.objects.filter(tournament=tournament).delete()
+    PlayerScore.objects.filter(tournament=tournament).delete()
+    # Manual tiebreak decisions belong to the cleared results.
+    ManualPoolTiebreakResolution.objects.filter(pool__stage__tournament=tournament).delete()
+    ManualTiebreakResolution.objects.filter(tournament=tournament).delete()
+    # Multi-phase formats (euros) generate later stages from earlier results, so a
+    # reset also tears down the generated structure; phase 1 is created with the
+    # tournament and is kept, and "Generate next phase" starts over.
+    impl = get_implementation(tournament.archetype) if tournament.archetype else None
+    if impl and getattr(impl, 'is_multi_phase', False):
+        for stage in tournament.stages.filter(stage_number__gte=2).order_by('stage_number'):
+            stage.matchups.all().delete()
+            stage.pools.all().delete()
+
+    messages.success(request, "Practice tournament reset — all recorded results were cleared.")
+    return redirect('tournament_detail', pk=tournament_id)
+
+
+@login_required
 def manual_tiebreak_resolution(request, tournament_id):
     """
     View to manually resolve tiebreaks for tournament directors.
@@ -1324,6 +1366,80 @@ def _is_moc_tournament_helper(tournament):
                 sample_matchup.pair1_player2_id is not None)
     return False
 
+# Practice (sandbox) tournaments rehearse the Euros pool-phase game format so
+# players meet the score-check dialog before the real event; the set count is
+# left free so people can play around with multi-set entries.
+SANDBOX_SCORE_RULES = {'points_to': 21, 'cap': 23, 'best_of': None}
+
+
+def _score_rule_warnings(rules, team1_scores, team2_scores):
+    """Human-readable warnings for scores that don't fit the expected match format.
+
+    ``rules`` is the dict from TournamentArchetype.get_score_rules(): games are
+    played to ``points_to`` win-by-2, ``cap`` ends a game early, ``best_of`` is
+    the sets per match (None: any number of sets, validate each set only).
+    Returns [] when everything conforms.
+    """
+    points_to, cap, best_of = rules['points_to'], rules['cap'], rules['best_of']
+    warnings = []
+    multiple_sets = len(team1_scores) > 1
+    for set_num, (s1, s2) in enumerate(zip(team1_scores, team2_scores), 1):
+        prefix = f"Set {set_num}: " if multiple_sets else ""
+        hi, lo = max(s1, s2), min(s1, s2)
+        if s1 == s2:
+            warnings.append(f"{prefix}{s1}–{s2} is a tie — every game needs a winner.")
+        elif hi > cap:
+            warnings.append(f"{prefix}{hi} points is over the point cap of {cap}.")
+        elif hi < points_to:
+            warnings.append(f"{prefix}the game is played to {points_to}, but the winner has only {hi} points.")
+        elif hi == points_to:
+            if hi - lo < 2:
+                warnings.append(
+                    f"{prefix}the winner must lead by 2 points — at {hi}–{lo} "
+                    f"the game continues up to the cap of {cap}.")
+        elif hi - lo != 2 and not (hi == cap and hi - lo < 2):
+            # Past points_to a game only continues at deuce, so the final margin is
+            # exactly 2 — except a cap game, which can also end with a 1-point lead.
+            warnings.append(
+                f"{prefix}{hi}–{lo} isn't reachable playing to {points_to} "
+                f"win-by-2 (cap {cap}).")
+    if best_of == 1:
+        if multiple_sets:
+            warnings.append(f"This match is a single game, but {len(team1_scores)} sets were entered.")
+    elif best_of:
+        sets_needed = best_of // 2 + 1
+        wins1 = wins2 = 0
+        decided_after = None
+        for set_num, (s1, s2) in enumerate(zip(team1_scores, team2_scores), 1):
+            wins1 += 1 if s1 > s2 else 0
+            wins2 += 1 if s2 > s1 else 0
+            if decided_after is None and max(wins1, wins2) >= sets_needed:
+                decided_after = set_num
+        if decided_after is None:
+            warnings.append(
+                f"Best-of-{best_of} match: the winner needs {sets_needed} set wins, "
+                f"but these sets don't give either team {sets_needed}.")
+        elif decided_after < len(team1_scores):
+            warnings.append(
+                f"The match was already decided after set {decided_after} — "
+                f"the remaining sets shouldn't have been played.")
+    return warnings
+
+
+def _expected_score_rules(tournament, matchup):
+    """The score rules to validate ``matchup`` against, or None (no validation)."""
+    from ..models.tournament_types import get_implementation
+    if tournament.archetype:
+        impl = get_implementation(tournament.archetype)
+        if impl:
+            rules = impl.get_score_rules(matchup)
+            if rules:
+                return rules
+    if tournament.is_sandbox:
+        return SANDBOX_SCORE_RULES
+    return None
+
+
 @login_required
 @require_POST
 def record_match_result(request, tournament_id, matchup_id):
@@ -1348,7 +1464,18 @@ def record_match_result(request, tournament_id, matchup_id):
         # Convert scores to integers
         team1_scores = [int(score) for score in team1_scores]
         team2_scores = [int(score) for score in team2_scores]
-        
+
+        # Warn-and-confirm structural validation: scores that don't fit the
+        # format's game structure prompt the recorder to double-check. A
+        # resubmit with confirmed=1 saves anyway — forfeits, injury retirements
+        # and director decisions produce legitimately non-conforming scores.
+        if not request.POST.get('confirmed'):
+            rules = _expected_score_rules(tournament, matchup)
+            if rules:
+                rule_warnings = _score_rule_warnings(rules, team1_scores, team2_scores)
+                if rule_warnings:
+                    return JsonResponse({'status': 'needs_confirmation', 'warnings': rule_warnings})
+
         # Calculate totals before we use them
         team1_total = sum(team1_scores)
         team2_total = sum(team2_scores)
@@ -1415,10 +1542,12 @@ def record_match_result(request, tournament_id, matchup_id):
         # Send email/Signal notifications without blocking the response — a Signal
         # send takes ~0.5–2s (10s on timeout) and must not hold a gunicorn worker.
         # Synchronous under test (NOTIFICATIONS_ASYNC=False) so mocks can assert.
-        if getattr(settings, 'NOTIFICATIONS_ASYNC', True):
-            _send_match_notifications_async(request.user, match_log_entry, tournament)
-        else:
-            _send_match_notifications(request.user, match_log_entry, tournament)
+        # Sandbox (practice) tournaments never notify, whatever their settings say.
+        if not tournament.is_sandbox:
+            if getattr(settings, 'NOTIFICATIONS_ASYNC', True):
+                _send_match_notifications_async(request.user, match_log_entry, tournament)
+            else:
+                _send_match_notifications(request.user, match_log_entry, tournament)
 
         # Update player scores
         # Get automatic wins from the tournament archetype if applicable.

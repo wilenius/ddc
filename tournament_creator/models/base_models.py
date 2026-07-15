@@ -124,6 +124,7 @@ class TournamentChart(models.Model):
     name_display_format = models.CharField(max_length=10, choices=NAME_DISPLAY_CHOICES, default='FIRST', help_text="How to display player names in notifications and tournament view")
     show_structure = models.BooleanField(default=False, help_text="Show tournament structure in a separate block")
     archived = models.BooleanField(default=False, help_text="Archived tournaments are hidden from the normal list and only visible to admins (e.g. tournaments that were never finished properly).")
+    is_sandbox = models.BooleanField(default=False, help_text="Practice tournament: results don't count, any logged-in user can record and reset scores, and no notifications are sent.")
     # Tournament format type
     FORMAT_TYPE_CHOICES = [
         ('STANDARD', 'Standard (round/court based)'),
@@ -173,12 +174,16 @@ class TournamentChart(models.Model):
     def user_can_edit_results(self, user):
         """Whether ``user`` may record or edit match results for this tournament.
 
+        - Sandbox (practice) tournaments are open to every logged-in user,
+          with no past-date lock.
         - Admins can always edit (including past tournaments).
         - For non-admins, past tournaments are locked.
         - For current tournaments, non-admins must be competing participants.
         """
         if not user or not getattr(user, 'is_authenticated', False):
             return False
+        if self.is_sandbox:
+            return True
         if getattr(user, 'is_admin', lambda: False)():
             return True
         if self.is_past():
@@ -349,6 +354,20 @@ class TournamentArchetype(models.Model):
         # calculate_rounds, calculate_courts, and generate_matchups instead
         # For now, we raise an error since this method might not be needed
         raise NotImplementedError("Use calculate_rounds, calculate_courts, and generate_matchups instead")
+
+    def get_score_rules(self, matchup):
+        """Expected score structure for ``matchup``, or None if this format leaves it open.
+
+        When defined, returns a dict with:
+          - ``points_to``: points a game is played to (always win by 2)
+          - ``cap``: hard point cap — first team to reach it wins the game regardless of margin
+          - ``best_of``: sets per match (1 or 3); None means any number of sets,
+            in which case only the individual set scores are validated
+
+        Score recording uses this for warn-and-confirm validation: non-conforming
+        scores prompt the recorder to double-check but can still be saved.
+        """
+        return None
         
     def calculate_rounds(self, num_entrants: int) -> int:
         """Calculate the number of rounds needed for the tournament."""

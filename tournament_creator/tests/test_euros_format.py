@@ -375,18 +375,29 @@ class EurosScoreRulesTest(EurosFormatTestBase):
     """Each phase declares its expected game format for score validation."""
 
     def test_rules_per_phase(self):
+        one_game_to_21 = {'points_to': 21, 'cap': 23, 'best_of': 1}
         self.assertEqual(self.impl.get_score_rules(self.stages[0].matchups.first()),
-                         {'points_to': 21, 'cap': 23, 'best_of': 1})
+                         one_game_to_21)
         self.advance_through_phase2()
         self.assertEqual(self.impl.get_score_rules(self.stages[1].matchups.first()),
-                         {'points_to': 15, 'cap': 18, 'best_of': 1})
-        semi = self.stages[2].matchups.filter(round_number=1).first()
-        self.assertEqual(self.impl.get_score_rules(semi),
-                         {'points_to': 15, 'cap': 18, 'best_of': 3})
+                         one_game_to_21)
+
+        finals = self.stages[2]
+        top_group = finals.pools.get(order=0)
+        consolation_group = finals.pools.get(order=1)
+        for semi in top_group.matchups.filter(round_number=1):
+            self.assertEqual(self.impl.get_score_rules(semi),
+                             {'points_to': 15, 'cap': 18, 'best_of': 3})
+        for consolation_semi in consolation_group.matchups.filter(round_number=1):
+            self.assertEqual(self.impl.get_score_rules(consolation_semi), one_game_to_21)
+
         self.play_finals()
-        placement = self.stages[2].matchups.filter(round_number=2).first()
-        self.assertEqual(self.impl.get_score_rules(placement),
+        final, third_place = top_group.matchups.filter(round_number=2).order_by('court_number')
+        self.assertEqual(self.impl.get_score_rules(final),
                          {'points_to': 21, 'cap': 23, 'best_of': 3})
+        self.assertEqual(self.impl.get_score_rules(third_place), one_game_to_21)
+        for placement in consolation_group.matchups.filter(round_number=2):
+            self.assertEqual(self.impl.get_score_rules(placement), one_game_to_21)
 
 
 class EurosViewsTest(EurosFormatTestBase):

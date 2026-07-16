@@ -226,19 +226,25 @@ class EurosFormat(PairsTournamentArchetype):
 
     def get_score_rules(self, matchup):
         """Euros match formats (all games win by 2):
-        Pool Phase 1: one game to 21, cap 23.  Pool Phase 2: one game to 15, cap 18.
-        Finals semis (round 1): best-of-3 to 15, cap 18.
-        Placement finals (round 2): best-of-3 to 21, cap 23.
+        One game to 21, cap 23, everywhere — pool phases, consolation semis,
+        placement matches, and the third-place playoff — except in the
+        "Places 1-4" group: its semis are best-of-3 to 15 (cap 18) and its
+        final is best-of-3 to 21 (cap 23).
         """
         if matchup.stage is None:
             return None
-        if matchup.stage.stage_number == 1:
-            return {'points_to': 21, 'cap': 23, 'best_of': 1}
-        if matchup.stage.stage_number == 2:
-            return {'points_to': 15, 'cap': 18, 'best_of': 1}
+        one_game_to_21 = {'points_to': 21, 'cap': 23, 'best_of': 1}
+        if matchup.stage.stage_number != 3:
+            return one_game_to_21
+        if matchup.pool is None or matchup.pool.order != 0:
+            return one_game_to_21
         if matchup.round_number == 1:
             return {'points_to': 15, 'cap': 18, 'best_of': 3}
-        return {'points_to': 21, 'cap': 23, 'best_of': 3}
+        # Round 2: the winners' match (the final) is on the odd court,
+        # the losers' match (third-place playoff) on the even one.
+        if matchup.court_number % 2 == 1:
+            return {'points_to': 21, 'cap': 23, 'best_of': 3}
+        return one_game_to_21
 
     def create_stages(self, tournament) -> List[Stage]:
         """Create the three stages. Each stage's standings are computed from its own matches."""

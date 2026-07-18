@@ -112,7 +112,7 @@ class TournamentChartAdmin(admin.ModelAdmin):
     list_filter = ('archived',)
     ordering = ('-date',)
     fieldsets = [
-        (None, {'fields': ('name', 'date', 'end_date', 'name_display_format', 'show_structure', 'archived')}),
+        (None, {'fields': ('name', 'short_name', 'date', 'end_date', 'name_display_format', 'show_structure', 'archived')}),
         ('Notification Settings', {
             'fields': ('notify_by_email', 'notify_by_signal', 'notify_by_matrix')
         }),

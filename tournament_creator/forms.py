@@ -37,7 +37,7 @@ class TournamentCreationForm(forms.ModelForm):
     class Meta:
         model = TournamentChart
         fields = [
-            'name', 'date', 'end_date', 'number_of_stages', 'format_type',
+            'name', 'short_name', 'date', 'end_date', 'number_of_stages', 'format_type',
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
             'signal_recipient_usernames', 'signal_recipient_group_ids',
             'name_display_format', 'show_structure', 'default_sets_per_match',
@@ -45,6 +45,7 @@ class TournamentCreationForm(forms.ModelForm):
         ]
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Summer League 2025'}),
+            'short_name': forms.TextInput(attrs={'class': 'form-control', 'style': 'max-width: 200px;', 'placeholder': 'e.g., EO26'}),
             'notify_by_email': forms.CheckboxInput,
             'notify_by_signal': forms.CheckboxInput,
             'notify_by_matrix': forms.CheckboxInput,

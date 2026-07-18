@@ -111,6 +111,52 @@ def get_player_name(player, tournament=None):
     all_players = list(tournament.players.all())
     return player.get_display_name_last_name_mode(all_players)
 
+
+def _matchup_team_displays(matchup, tournament):
+    """Return (team1, team2) display strings for a matchup, respecting name preference."""
+    if matchup.pair1:
+        team1 = str(matchup.pair1)
+        team2 = str(matchup.pair2) if matchup.pair2 else "Unknown"
+        return team1, team2
+    if matchup.pair1_player1:
+        team1 = f"{get_player_name(matchup.pair1_player1, tournament)} & {get_player_name(matchup.pair1_player2, tournament)}"
+        team2 = f"{get_player_name(matchup.pair2_player1, tournament)} & {get_player_name(matchup.pair2_player2, tournament)}"
+        return team1, team2
+    return "Team 1", "Team 2"
+
+
+def build_match_notification_body(match_result_log_instance, tournament):
+    """Build the compact, parseable match-result message shared by all backends.
+
+    Two lines:
+        <tag> · [<pool or stage> · ] R<round> C<court>
+        <team1> <set scores> <team2>
+
+    The set-score block (``\\d+–\\d+`` joined by ``, ``) is the anchor a parser
+    keys on to split the two teams, so team names may contain spaces and ``&``.
+    """
+    matchup = match_result_log_instance.matchup
+
+    tag = tournament.short_name.strip() if tournament.short_name and tournament.short_name.strip() else tournament.name
+
+    locator_parts = [tag]
+    if matchup.pool:
+        locator_parts.append(matchup.pool.name)
+    elif matchup.stage and tournament.number_of_stages > 1:
+        locator_parts.append(matchup.stage.name)
+    locator_parts.append(f"R{matchup.round_number} C{matchup.court_number}")
+    header = " · ".join(locator_parts)
+
+    team1, team2 = _matchup_team_displays(matchup, tournament)
+
+    scores_data = match_result_log_instance.details
+    team1_scores = scores_data.get('team1_scores', [])
+    team2_scores = scores_data.get('team2_scores', [])
+    score_pairs = [f"{t1}–{t2}" for t1, t2 in zip(team1_scores, team2_scores)]
+    scores_str = ", ".join(score_pairs) if score_pairs else "No scores"
+
+    return f"{header}\n{team1} {scores_str} {team2}"
+
 def send_email_notification(user_who_recorded: User, match_result_log_instance, tournament_chart_instance: TournamentChart):
     """
     Sends an email notification based on a match result log using custom SMTP settings
@@ -189,56 +235,7 @@ def send_email_notification(user_who_recorded: User, match_result_log_instance, 
     tournament_name = match_result_log_instance.matchup.tournament_chart.name
     subject = f"Match Result Update - {tournament_name}"
 
-    matchup = match_result_log_instance.matchup
-    team1_display = "Team 1"
-    team2_display = "Team 2"
-
-    if matchup.pair1:
-        team1_display = str(matchup.pair1)
-        team2_display = str(matchup.pair2) if matchup.pair2 else "Unknown Opponent"
-    elif matchup.pair1_player1:
-        p1_name = get_player_name(matchup.pair1_player1, tournament_chart_instance)
-        p2_name = get_player_name(matchup.pair1_player2, tournament_chart_instance)
-        team1_display = f"{p1_name} & {p2_name}"
-
-        p3_name = get_player_name(matchup.pair2_player1, tournament_chart_instance)
-        p4_name = get_player_name(matchup.pair2_player2, tournament_chart_instance)
-        team2_display = f"{p3_name} & {p4_name}"
-    
-    matchup_str = f"{team1_display} vs {team2_display} (Round {matchup.round_number}, Court {matchup.court_number})"
-
-    scores_data = match_result_log_instance.details
-    team1_scores = scores_data.get('team1_scores', [])
-    team2_scores = scores_data.get('team2_scores', [])
-
-    # Format scores as "21-15" or "21-15, 18-21, 15-13" for multiple sets
-    score_pairs = []
-    for t1_score, t2_score in zip(team1_scores, team2_scores):
-        score_pairs.append(f"{t1_score}–{t2_score}")
-    scores_str = ", ".join(score_pairs) if score_pairs else "No scores"
-
-    # Format team names according to tournament preference
-    if matchup.pair1:
-        team1_compact = str(matchup.pair1)
-        team2_compact = str(matchup.pair2) if matchup.pair2 else "Unknown"
-    elif matchup.pair1_player1:
-        team1_compact = f"{get_player_name(matchup.pair1_player1, tournament_chart_instance)} & {get_player_name(matchup.pair1_player2, tournament_chart_instance)}"
-        team2_compact = f"{get_player_name(matchup.pair2_player1, tournament_chart_instance)} & {get_player_name(matchup.pair2_player2, tournament_chart_instance)}"
-    else:
-        team1_compact = "Team 1"
-        team2_compact = "Team 2"
-
-    # Compact match result line
-    result_line = f"{team1_compact} {scores_str} {team2_compact}"
-
-    action_text = match_result_log_instance.action.lower()
-
-    message_body = (
-        f"Match result {action_text} – {tournament_name}\n"
-        f"Round {matchup.round_number}, Court {matchup.court_number}\n"
-        f"{result_line}\n"
-        f"(by {user_who_recorded.username})"
-    )
+    message_body = build_match_notification_body(match_result_log_instance, tournament_chart_instance)
 
     try:
         custom_email_backend = SMTPEmailBackend(
@@ -353,56 +350,7 @@ def send_signal_notification(user_who_recorded: User, match_result_log_instance,
         )
         return
 
-    tournament_name = match_result_log_instance.matchup.tournament_chart.name
-    matchup = match_result_log_instance.matchup
-    team1_display = "Team 1"
-    team2_display = "Team 2"
-
-    if matchup.pair1:
-        team1_display = str(matchup.pair1)
-        team2_display = str(matchup.pair2) if matchup.pair2 else "Unknown Opponent"
-    elif matchup.pair1_player1:
-        p1_name = get_player_name(matchup.pair1_player1, tournament_chart_instance)
-        p2_name = get_player_name(matchup.pair1_player2, tournament_chart_instance)
-        team1_display = f"{p1_name} & {p2_name}"
-        p3_name = get_player_name(matchup.pair2_player1, tournament_chart_instance)
-        p4_name = get_player_name(matchup.pair2_player2, tournament_chart_instance)
-        team2_display = f"{p3_name} & {p4_name}"
-    
-    matchup_str = f"{team1_display} vs {team2_display} (Round {matchup.round_number}, Court {matchup.court_number})"
-
-    scores_data = match_result_log_instance.details
-    team1_scores = scores_data.get('team1_scores', [])
-    team2_scores = scores_data.get('team2_scores', [])
-
-    # Format scores as "21-15" or "21-15, 18-21, 15-13" for multiple sets
-    score_pairs = []
-    for t1_score, t2_score in zip(team1_scores, team2_scores):
-        score_pairs.append(f"{t1_score}–{t2_score}")
-    scores_str = ", ".join(score_pairs) if score_pairs else "No scores"
-
-    # Format team names according to tournament preference
-    if matchup.pair1:
-        team1_compact = str(matchup.pair1)
-        team2_compact = str(matchup.pair2) if matchup.pair2 else "Unknown"
-    elif matchup.pair1_player1:
-        team1_compact = f"{get_player_name(matchup.pair1_player1, tournament_chart_instance)} & {get_player_name(matchup.pair1_player2, tournament_chart_instance)}"
-        team2_compact = f"{get_player_name(matchup.pair2_player1, tournament_chart_instance)} & {get_player_name(matchup.pair2_player2, tournament_chart_instance)}"
-    else:
-        team1_compact = "Team 1"
-        team2_compact = "Team 2"
-
-    # Compact match result line
-    result_line = f"{team1_compact} {scores_str} {team2_compact}"
-
-    action_text = match_result_log_instance.action.lower()
-
-    message_body = (
-        f"Match result {action_text} – {tournament_name}\n"
-        f"Round {matchup.round_number}, Court {matchup.court_number}\n"
-        f"{result_line}\n"
-        f"(by {user_who_recorded.username})"
-    )
+    message_body = build_match_notification_body(match_result_log_instance, tournament_chart_instance)
 
     # Send messages using JSON-RPC - need separate calls for recipients vs groups
     all_errors = []

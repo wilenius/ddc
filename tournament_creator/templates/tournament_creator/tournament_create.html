@@ -68,6 +68,18 @@
                     </div>
 
                     <div class="mb-3">
+                        <label for="{{ form.short_name.id_for_label }}">
+                            Short name <span class="text-muted">(optional)</span>
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="Compact tag used in match notifications (e.g. 'EO26'). Falls back to the full name when blank."></i>
+                        </label>
+                        {{ form.short_name }}
+                        {% if form.short_name.errors %}<div class="invalid-feedback d-block">{{ form.short_name.errors|join:", " }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
                         {{ form.date.label_tag }}
                         {{ form.date }}
                         {% if form.date.errors %}<div class="invalid-feedback d-block">{{ form.date.errors|join:", " }}</div>{% endif %}

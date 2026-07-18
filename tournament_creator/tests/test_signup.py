@@ -1,3 +1,4 @@
+import json
 from datetime import date, timedelta
 
 from django.contrib.admin.sites import AdminSite
@@ -132,3 +133,42 @@ class AdminLinkTests(TestCase):
         self._save(None)
         self.p1.refresh_from_db()
         self.assertIsNone(self.p1.user)
+
+
+class LinkablePlayerAutocompleteTests(TestCase):
+    """Autocomplete backing the admin 'Linked player' field: staff-only,
+    unclaimed players plus the one linked to the user being edited."""
+
+    def setUp(self):
+        self.url = reverse('linkable-player-autocomplete')
+        self.staff = User.objects.create_user(username='boss', password='x', is_staff=True)
+        self.owner = User.objects.create_user(username='owner', password='x')
+        self.free = Player.objects.create(first_name='Viktor', last_name='Immonen', ranking=122)
+        self.claimed = Player.objects.create(
+            first_name='Kristiina', last_name='Hämäläinen', ranking=232, user=self.owner
+        )
+
+    def _result_ids(self, resp):
+        return [int(r['id']) for r in json.loads(resp.content)['results']]
+
+    def test_requires_staff(self):
+        resp = self.client.get(self.url, {'q': 'Immonen'})
+        self.assertEqual(self._result_ids(resp), [])
+        self.client.force_login(User.objects.create_user(username='pleb', password='x'))
+        resp = self.client.get(self.url, {'q': 'Immonen'})
+        self.assertEqual(self._result_ids(resp), [])
+
+    def test_searches_last_name_and_excludes_claimed(self):
+        self.client.force_login(self.staff)
+        resp = self.client.get(self.url, {'q': 'Immonen'})
+        self.assertEqual(self._result_ids(resp), [self.free.pk])
+        resp = self.client.get(self.url, {'q': 'Hämäläinen'})
+        self.assertEqual(self._result_ids(resp), [])
+
+    def test_forwarded_user_keeps_own_linked_player(self):
+        self.client.force_login(self.staff)
+        resp = self.client.get(self.url, {
+            'q': 'Hämäläinen',
+            'forward': json.dumps({'for_user': self.owner.pk}),
+        })
+        self.assertEqual(self._result_ids(resp), [self.claimed.pk])

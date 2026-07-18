@@ -53,3 +53,23 @@ class PlayerAutocomplete(autocomplete.Select2QuerySetView):
         except Exception as e:
             logger.error("Error in autocomplete get: %s", e)
             raise
+
+
+class LinkablePlayerAutocomplete(autocomplete.Select2QuerySetView):
+    """Players selectable as a login's linked player (admin user form).
+
+    Suggests only unclaimed players, plus the player already linked to the
+    user being edited (its pk arrives via the widget's 'for_user' forward),
+    so the current link can be re-selected after clearing the field.
+    """
+    def get_queryset(self):
+        if not self.request.user.is_staff:
+            return Player.objects.none()
+        linkable = Q(user__isnull=True)
+        for_user = self.forwarded.get('for_user')
+        if for_user:
+            linkable |= Q(user_id=for_user)
+        qs = Player.objects.filter(linkable)
+        if self.q:
+            qs = qs.filter(Q(first_name__icontains=self.q) | Q(last_name__icontains=self.q))
+        return qs.order_by('last_name', 'first_name')

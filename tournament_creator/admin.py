@@ -1,3 +1,4 @@
+from dal import autocomplete, forward
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
@@ -25,6 +26,10 @@ class UserChangeAdminForm(UserChangeForm):
         queryset=Player.objects.all(),
         required=False,
         label='Linked player',
+        widget=autocomplete.ModelSelect2(
+            url='linkable-player-autocomplete',
+            attrs={'data-placeholder': 'Search by first or last name…'},
+        ),
         help_text="Ranking player this login belongs to. Only unlinked players are listed.",
     )
 
@@ -33,6 +38,10 @@ class UserChangeAdminForm(UserChangeForm):
         current = None
         if self.instance and self.instance.pk:
             current = Player.objects.filter(user=self.instance).first()
+            # Let the autocomplete view include the already-linked player too.
+            self.fields['player'].widget.forward = [
+                forward.Const(self.instance.pk, 'for_user')
+            ]
         # Offer unlinked players, plus the one already linked to this user.
         self.fields['player'].queryset = Player.objects.filter(
             Q(user__isnull=True) | Q(pk=current.pk if current else None)

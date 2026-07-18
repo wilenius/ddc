@@ -38,6 +38,9 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv(
 # Application definition
 
 INSTALLED_APPS = [
+    # dal must precede django.contrib.admin so its select2 assets are used in admin
+    'dal',
+    'dal_select2',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -45,8 +48,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'tournament_creator.apps.TournamentCreatorConfig',
-    'dal',
-    'dal_select2',
 ]
 
 AUTH_USER_MODEL = 'tournament_creator.User'

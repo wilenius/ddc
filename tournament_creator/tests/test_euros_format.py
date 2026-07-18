@@ -559,6 +559,52 @@ class EurosViewsTest(EurosFormatTestBase):
         self.assertEqual([e['pair'].seed for e in standings], [10, 1, 11, 20])
         self.assertTrue(standings[0]['manually_resolved'])
 
+    def test_my_matches_show_format_for_every_finals_match_type(self):
+        """'My matches' labels each finals match with its format: top-group semis
+        best-of-3 to 15, the final best-of-3 to 21, and everything else (third
+        place, consolation semis, consolation placements) one game to 21."""
+        self.advance_through_phase2()
+        finals = self.stages[2]
+
+        # With lower-seed-wins throughout, the 'Places 1-4' group holds seeds 1-4
+        # (semis 1v4 and 2v3) and 'Places 5-8' holds seeds 5-8. player_test is
+        # already linked to seed 1; add viewers for seed 4 (semi loser -> third
+        # place) and seed 5 (consolation group).
+        for seed in (4, 5):
+            user = User.objects.create_user(
+                username=f'seed{seed}', password='test123', role='PLAYER')
+            player = self.pair_by_seed(seed).player1
+            player.user = user
+            player.save()
+
+        def my_unplayed(username):
+            self.client.login(username=username, password='test123')
+            response = self.detail()
+            return [(m.round_number, m.score_rules_text)
+                    for m in response.context['my_matchups'] if not m.scores.exists()]
+
+        # Semis: best-of-3 in the top group, one game in consolation groups.
+        self.assertEqual(my_unplayed('player_test'),
+                         [(1, 'Best of 3 to 15, win by 2, cap 18')])
+        self.assertEqual(my_unplayed('seed5'),
+                         [(1, 'One game to 21, win by 2, cap 23')])
+
+        # Score the semis of both groups; placement matches get auto-generated.
+        for pool in finals.pools.filter(order__in=(0, 1)):
+            for semi in pool.matchups.filter(round_number=1):
+                winner = semi.pair1 if semi.pair1.seed < semi.pair2.seed else semi.pair2
+                self.record_win(semi, winner)
+                self.impl.maybe_generate_placement_matches(self.tournament, semi)
+
+        # Final (seed 1 won its semi) is best-of-3 to 21; the third-place match
+        # (seed 4 lost) and the consolation placement (seed 5) are one game to 21.
+        self.assertEqual(my_unplayed('player_test'),
+                         [(2, 'Best of 3 to 21, win by 2, cap 23')])
+        self.assertEqual(my_unplayed('seed4'),
+                         [(2, 'One game to 21, win by 2, cap 23')])
+        self.assertEqual(my_unplayed('seed5'),
+                         [(2, 'One game to 21, win by 2, cap 23')])
+
 
 class EurosCreationViewTest(TestCase):
     """Creating a PAIRS tournament with 40 players auto-detects the euros format."""

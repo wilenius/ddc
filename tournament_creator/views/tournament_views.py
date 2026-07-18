@@ -353,7 +353,7 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         all_matchups = list(Matchup.objects.filter(tournament_chart=tournament).select_related(
             'pair1', 'pair2', 'pair1__player1', 'pair1__player2', 'pair2__player1', 'pair2__player2',
             'pair1_player1', 'pair1_player2', 'pair2_player1', 'pair2_player2', 'stage', 'pool'
-        ).order_by('stage__stage_number', 'round_number', 'court_number'))
+        ).prefetch_related('scores').order_by('stage__stage_number', 'round_number', 'court_number'))
         stages = list(Stage.objects.filter(tournament=tournament).order_by('stage_number'))
 
         context['archetype'] = tournament.archetype  # Include archetype for notes access
@@ -420,16 +420,20 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         # long tournaments open right on the match that needs recording.
         my_next_matchup = None
         if my_matchups:
-            scored_ids = set(
-                MatchScore.objects.filter(matchup__in=my_matchups).values_list('matchup_id', flat=True)
-            )
             for matchup in my_matchups:
                 matchup.is_next = False
-                if my_next_matchup is None and matchup.id not in scored_ids:
+                if my_next_matchup is None and not matchup.scores.all():
                     my_next_matchup = matchup
             if my_next_matchup is not None:
                 my_next_matchup.is_next = True
         context['my_next_matchup'] = my_next_matchup
+
+        # Show the expected match format (sets / points / cap) on the viewer's own
+        # unplayed matches, so "My matches" answers not just who you play next but
+        # what you're playing to. Reuses the same rules score validation runs on.
+        for matchup in my_matchups:
+            if not matchup.scores.all():
+                matchup.score_rules_text = _score_rules_text(_expected_score_rules(tournament, matchup))
 
         # NOW group matchups by stage (after display names are set)
         matchups_by_stage = {}
@@ -1424,6 +1428,19 @@ def _score_rule_warnings(rules, team1_scores, team2_scores):
                 f"The match was already decided after set {decided_after} — "
                 f"the remaining sets shouldn't have been played.")
     return warnings
+
+
+def _score_rules_text(rules):
+    """One-line human description of a match format, e.g. "Best of 3 to 15, cap 18"."""
+    if not rules:
+        return None
+    if rules['best_of'] == 1:
+        prefix = "One game"
+    elif rules['best_of']:
+        prefix = f"Best of {rules['best_of']}"
+    else:
+        prefix = "Games"
+    return f"{prefix} to {rules['points_to']}, win by 2, cap {rules['cap']}"
 
 
 def _expected_score_rules(tournament, matchup):

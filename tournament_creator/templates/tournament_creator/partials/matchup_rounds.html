@@ -64,6 +64,9 @@
                                     {% endif %}
                                 </div>
                             {% else %}
+                                {% if show_format and matchup.score_rules_text %}
+                                    <div class="text-center text-muted small">{{ matchup.score_rules_text }}</div>
+                                {% endif %}
                                 <div class="text-center mt-3">
                                     {% if can_record_scores %}
                                         {% include "tournament_creator/partials/record_result_button.html" with label="Record Result" button_class="btn-primary btn-sm" %}

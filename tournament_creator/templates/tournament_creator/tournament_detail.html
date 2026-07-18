@@ -97,6 +97,11 @@
                                             <strong>{{ my_next_matchup.get_team2_player1.display_name }} &<br>{{ my_next_matchup.get_team2_player2.display_name }}</strong>
                                         </div>
                                     </div>
+                                    {% if my_next_matchup.score_rules_text %}
+                                        <div class="text-center text-muted mt-2">
+                                            <i class="bi bi-flag"></i> {{ my_next_matchup.score_rules_text }}
+                                        </div>
+                                    {% endif %}
                                     {% if can_record_scores %}
                                         <div class="text-center mt-3">
                                             {% include "tournament_creator/partials/record_result_button.html" with matchup=my_next_matchup label="Record result" button_class="btn-primary" %}
@@ -115,12 +120,12 @@
                             {% for sgroup in my_stage_list %}
                                 <h5 class="mt-2 mb-3">{{ sgroup.grouper.name }}</h5>
                                 {% regroup sgroup.list by round_number as round_list %}
-                                {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores show_pool=is_multi_phase mark_next=True %}
+                                {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores show_pool=is_multi_phase mark_next=True show_format=True %}
                                 {% if not forloop.last %}<hr class="my-4">{% endif %}
                             {% endfor %}
                         {% else %}
                             {% regroup my_matchups by round_number as round_list %}
-                            {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores mark_next=True %}
+                            {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores mark_next=True show_format=True %}
                         {% endif %}
                     </div>
                 {% endif %}

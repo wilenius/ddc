@@ -515,7 +515,36 @@ class EurosFormat(PairsTournamentArchetype):
             for entry in group:
                 entry['manually_resolved'] = order_differs
                 entry['manual_reason'] = resolution.reason if order_differs else ''
+        else:
+            # Entries level on every automatic criterion are ordered by seed
+            # alone — the rules resolve that with a disc flip, so flag them for
+            # the pre-advancement warning (get_unresolved_seed_ties).
+            def auto_key(entry):
+                r = records[entry['pair'].id]
+                return (r['h2h_wins'], r['h2h_pd'], r['above_wins'], r['above_pd'],
+                        entry['point_difference'])
+            for a, b in zip(group, group[1:]):
+                if a['matches_played'] and b['matches_played'] and auto_key(a) == auto_key(b):
+                    a['seed_decided'] = b['seed_decided'] = True
         return group
+
+    def get_unresolved_seed_ties(self, stage) -> List[Dict]:
+        """
+        Tie groups in ``stage`` whose order is currently decided by seed alone
+        (every automatic tiebreak criterion is level — the rules call for a disc
+        flip) and that have no manual resolution saved. Shown as a warning before
+        the next phase is generated from these standings.
+        Returns a list of {'pool', 'wins', 'pairs'} in pool order.
+        """
+        ties = []
+        for pool in stage.pools.order_by('order'):
+            by_wins = {}
+            for entry in self.get_pool_standings(pool):
+                if entry.get('seed_decided'):
+                    by_wins.setdefault(entry['wins'], []).append(entry['pair'])
+            for wins, pairs in sorted(by_wins.items(), reverse=True):
+                ties.append({'pool': pool, 'wins': wins, 'pairs': pairs})
+        return ties
 
     def get_final_standings(self, tournament) -> Optional[List[Dict]]:
         """

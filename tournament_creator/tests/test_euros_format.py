@@ -67,6 +67,21 @@ class EurosFormatTestBase(TestCase):
         self.play_stage_lower_seed_wins(self.stages[1])
         self.impl.advance_to_next_stage(self.tournament)
 
+    def _make_seed_only_tie_in_pool_a(self):
+        """Pool A (seeds 1, 10, 11, 20): seed 1 beats everyone by 5; the rest beat
+        each other in a circle, all by 4. Seeds 10/11/20 are then level on every
+        automatic criterion (h2h 1-1, h2h PD 0, 0 wins / -5 PD vs above, -5 overall
+        PD), so only the seed orders them — a disc-flip situation."""
+        pool_a = self.stages[0].pools.order_by('order').first()
+        matchups = {frozenset((m.pair1.seed, m.pair2.seed)): m for m in pool_a.matchups.all()}
+        p1, p10, p11, p20 = (self.pair_by_seed(s) for s in (1, 10, 11, 20))
+        for other in (p10, p11, p20):
+            self.record_win(matchups[frozenset((1, other.seed))], p1, 11, 6)
+        self.record_win(matchups[frozenset((10, 11))], p10, 11, 7)
+        self.record_win(matchups[frozenset((11, 20))], p11, 11, 7)
+        self.record_win(matchups[frozenset((10, 20))], p20, 11, 7)
+        return pool_a
+
     def play_finals(self):
         """Play semis (lower seed wins), generate placement matches, play those too."""
         finals = self.stages[2]
@@ -351,6 +366,42 @@ class EurosStandingsTest(EurosFormatTestBase):
             else:
                 self.assertFalse(e.get('manually_resolved'))
 
+    def test_seed_only_tie_flagged_for_disc_flip(self):
+        pool_a = self._make_seed_only_tie_in_pool_a()
+
+        standings = self.impl.get_pool_standings(pool_a)
+        self.assertEqual([e['pair'].seed for e in standings], [1, 10, 11, 20])
+        self.assertEqual([e['pair'].seed for e in standings if e.get('seed_decided')],
+                         [10, 11, 20])
+
+        ties = self.impl.get_unresolved_seed_ties(self.stages[0])
+        self.assertEqual(len(ties), 1)
+        self.assertEqual(ties[0]['pool'].id, pool_a.id)
+        self.assertEqual(ties[0]['wins'], 1)
+        self.assertEqual([p.seed for p in ties[0]['pairs']], [10, 11, 20])
+
+        # A saved manual resolution (the recorded disc flip) clears the warning.
+        ManualPoolTiebreakResolution.objects.create(
+            pool=pool_a, wins_tied_at=1, reason='Disc flip',
+            resolved_order=[self.pair_by_seed(20).id, self.pair_by_seed(10).id,
+                            self.pair_by_seed(11).id])
+        self.assertEqual(self.impl.get_unresolved_seed_ties(self.stages[0]), [])
+        standings = self.impl.get_pool_standings(pool_a)
+        self.assertEqual([e['pair'].seed for e in standings], [1, 20, 10, 11])
+        self.assertFalse(any(e.get('seed_decided') for e in standings))
+
+    def test_resolvable_tie_not_flagged_for_disc_flip(self):
+        """A circular tie that h2h point difference can order is no disc flip."""
+        pool_a = self.stages[0].pools.order_by('order').first()
+        matchups = {frozenset((m.pair1.seed, m.pair2.seed)): m for m in pool_a.matchups.all()}
+        p1, p10, p11, p20 = (self.pair_by_seed(s) for s in (1, 10, 11, 20))
+        for other in (p10, p11, p20):
+            self.record_win(matchups[frozenset((1, other.seed))], p1)
+        self.record_win(matchups[frozenset((10, 11))], p10, 11, 1)
+        self.record_win(matchups[frozenset((11, 20))], p11, 11, 9)
+        self.record_win(matchups[frozenset((10, 20))], p20, 11, 9)
+        self.assertEqual(self.impl.get_unresolved_seed_ties(self.stages[0]), [])
+
     def test_no_tiebreak_info_before_any_games_played(self):
         """Pairs at 0 wins with 0 games played are not presented as a resolved tie."""
         pool_a = self.stages[0].pools.order_by('order').first()
@@ -558,6 +609,25 @@ class EurosViewsTest(EurosFormatTestBase):
         standings = self.impl.get_pool_standings(pool_a)
         self.assertEqual([e['pair'].seed for e in standings], [10, 1, 11, 20])
         self.assertTrue(standings[0]['manually_resolved'])
+
+    def test_advance_warning_for_unresolved_disc_flip_tie(self):
+        """A seed-only tie in a completed phase shows a warning next to the
+        'Generate next phase' button until a manual resolution is saved."""
+        self.play_stage_lower_seed_wins(self.stages[0])
+        pool_a = self._make_seed_only_tie_in_pool_a()
+
+        response = self.detail()
+        self.assertTrue(response.context['can_advance_stage'])
+        ties = response.context['advance_seed_ties']
+        self.assertEqual([(t['pool'].id, t['wins']) for t in ties], [(pool_a.id, 1)])
+        self.assertContains(response, 'disc flip needed')
+
+        ManualPoolTiebreakResolution.objects.create(
+            pool=pool_a, wins_tied_at=1, reason='Disc flip',
+            resolved_order=[self.pair_by_seed(s).id for s in (20, 10, 11)])
+        response = self.detail()
+        self.assertEqual(response.context['advance_seed_ties'], [])
+        self.assertNotContains(response, 'disc flip needed')
 
     def test_my_matches_show_format_for_every_finals_match_type(self):
         """'My matches' labels each finals match with its format: top-group semis

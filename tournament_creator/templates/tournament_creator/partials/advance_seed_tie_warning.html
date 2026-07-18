@@ -1,0 +1,17 @@
+{% if advance_seed_ties %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        <strong>Unresolved tie{{ advance_seed_ties|length|pluralize }} — disc flip needed:</strong>
+        the automatic tiebreaks cannot separate these pairs, so their current order
+        comes from the original seeding only. Flip a disc and record the outcome via
+        "Resolve Tiebreaks" before generating the next phase (generation cannot be undone):
+        <ul class="mb-0 mt-1">
+            {% for tie in advance_seed_ties %}
+                <li>
+                    {{ tie.pool.name }}, tied at {{ tie.wins }} win{{ tie.wins|pluralize }}:
+                    {% for pair in tie.pairs %}{% if not forloop.first %} / {% endif %}{{ pair.player1.display_name }} &amp; {{ pair.player2.display_name }}{% endfor %}
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endif %}

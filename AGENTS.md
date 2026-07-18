@@ -356,7 +356,11 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
     director can override the order via `ManualPoolTiebreakResolution` ("Resolve
     Tiebreaks" button — rules step 7; also the fallback for forfeits, which can't be
     recorded yet — rules step 1, TODO). Tied entries carry their tiebreak stats and
-    the standings table shows how each tie was resolved. Final placements 1-20 come
+    the standings table shows how each tie was resolved. Ties left level on every
+    automatic criterion (ordered by seed alone — a disc-flip call) are flagged via
+    `get_unresolved_seed_ties` and shown as a warning next to the "Generate next
+    phase" button until a manual resolution is saved; generation is warned about,
+    not blocked. Final placements 1-20 come
     from the finals groups (`get_final_standings`); the global `PairScore` standings
     are hidden for this format
   - Tests: `tournament_creator/tests/test_euros_format.py`

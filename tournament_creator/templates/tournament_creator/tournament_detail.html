@@ -275,6 +275,7 @@
                                             {% endfor %}
                                             {% if next_stage and can_advance_stage and stage.stage_number|add:1 == next_stage.stage_number %}
                                                 <hr class="my-4">
+                                                {% include "tournament_creator/partials/advance_seed_tie_warning.html" %}
                                                 <form method="post" action="{% url 'generate_next_stage' tournament.id %}"
                                                       onsubmit="return confirm('Generate {{ next_stage.name }} from the {{ stage.name }} results? This cannot be undone.')">
                                                     {% csrf_token %}
@@ -289,6 +290,7 @@
                                                 the previous phase's results once all of its matches are played.
                                             </div>
                                             {% if next_stage and next_stage.id == stage.id and can_advance_stage %}
+                                                {% include "tournament_creator/partials/advance_seed_tie_warning.html" %}
                                                 <form method="post" action="{% url 'generate_next_stage' tournament.id %}"
                                                       onsubmit="return confirm('Generate {{ stage.name }} from the previous phase results? This cannot be undone.')">
                                                     {% csrf_token %}

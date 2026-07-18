@@ -594,6 +594,17 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
             context['next_stage'] = next_stage
             context['can_advance_stage'] = can_advance_stage and context['can_record_scores']
 
+            # Warn before generating the next phase if a completed-stage tie is
+            # ordered by seed alone — the rules want a disc flip recorded as a
+            # manual resolution first (advancement is one-way).
+            advance_seed_ties = []
+            if context['can_advance_stage']:
+                advance_seed_ties = archetype_impl.get_unresolved_seed_ties(previous_stage)
+                for tie in advance_seed_ties:
+                    for pair in tie['pairs']:
+                        set_pair_display_names(pair)
+            context['advance_seed_ties'] = advance_seed_ties
+
             # Final standings once the finals placement matches are all played
             final_standings = archetype_impl.get_final_standings(tournament)
             if final_standings:

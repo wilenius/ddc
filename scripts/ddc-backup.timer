@@ -1,0 +1,9 @@
+[Unit]
+Description=Run DDC database snapshot every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

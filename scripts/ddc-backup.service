@@ -1,0 +1,6 @@
+[Unit]
+Description=Snapshot DDC sqlite database into Syncthing folder
+
+[Service]
+Type=oneshot
+ExecStart=%h/git/ddc/scripts/backup_db.sh

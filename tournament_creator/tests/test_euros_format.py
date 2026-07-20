@@ -1,5 +1,9 @@
+from io import StringIO
+
 from django.test import TestCase, Client
 from django.urls import reverse
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from ..models import (Player, Pair, TournamentChart, TournamentArchetype, Matchup, MatchScore,
                       Pool, PoolPair, User, ManualPoolTiebreakResolution)
 from ..models.tournament_types import EurosFormat, get_implementation
@@ -710,3 +714,82 @@ class EurosCreationViewTest(TestCase):
         # Later stages exist but have no matchups yet
         self.assertEqual(tournament.stages.get(stage_number=2).matchups.count(), 0)
         self.assertEqual(tournament.stages.get(stage_number=3).matchups.count(), 0)
+
+
+class EurosReseedPhase1CommandTest(EurosFormatTestBase):
+    """Tests for the reseed_phase1 management command (used after a rankings
+    refresh changes pair seeds before play starts)."""
+
+    def _bump_pair_to_seed_4(self):
+        """Raise the original seed-8 pair's points so it reseeds to 4 (landing
+        between the current seed-3 and seed-4 pairs), mirroring the European Open
+        2026 scenario. Returns that pair."""
+        pair8 = self.pair_by_seed(8)  # sum 2*(1000-8) = 1984
+        # seed-4 sum = 1992, seed-3 sum = 1994; target a sum of 1993.
+        pair8.player1.ranking_points = 1001
+        pair8.player2.ranking_points = 992
+        pair8.player1.save()
+        pair8.player2.save()
+        return pair8
+
+    def _pool_name_of(self, stage, pair):
+        pp = PoolPair.objects.select_related('pool').get(pool__stage=stage, pair=pair)
+        return pp.pool.name
+
+    def test_reseed_reassigns_seeds_and_regenerates_pools(self):
+        pair8 = self._bump_pair_to_seed_4()
+        old_matchup_ids = set(self.stages[0].matchups.values_list('id', flat=True))
+
+        out = StringIO()
+        call_command('reseed_phase1', self.tournament.id, '--yes', stdout=out)
+
+        pair8.refresh_from_db()
+        self.assertEqual(pair8.seed, 4)
+        # Seeds 4..7 each shift down by one.
+        for pair in self.pairs:
+            pair.refresh_from_db()
+        seeds = sorted(p.seed for p in self.pairs)
+        self.assertEqual(seeds, list(range(1, 21)))  # still a clean 1..20 permutation
+
+        # Phase 1 was regenerated: same count, brand-new matchup rows.
+        new_matchup_ids = set(self.stages[0].matchups.values_list('id', flat=True))
+        self.assertEqual(len(new_matchup_ids), 30)
+        self.assertTrue(old_matchup_ids.isdisjoint(new_matchup_ids))
+        # New seed 4 lands in Pool D (snake: seeds 1-5 -> pools A-E).
+        self.assertEqual(self._pool_name_of(self.stages[0], pair8), 'Pool D')
+
+    def test_reseed_noop_when_seeding_unchanged(self):
+        old_matchup_ids = set(self.stages[0].matchups.values_list('id', flat=True))
+        out = StringIO()
+        call_command('reseed_phase1', self.tournament.id, '--yes', stdout=out)
+
+        self.assertIn('unchanged', out.getvalue().lower())
+        # Matchups untouched (not deleted/regenerated).
+        new_matchup_ids = set(self.stages[0].matchups.values_list('id', flat=True))
+        self.assertEqual(old_matchup_ids, new_matchup_ids)
+
+    def test_reseed_refuses_when_scores_recorded(self):
+        self._bump_pair_to_seed_4()
+        self.record_win(self.stages[0].matchups.first(), self.pair_by_seed(1))
+
+        with self.assertRaises(CommandError):
+            call_command('reseed_phase1', self.tournament.id, '--yes', stdout=StringIO())
+
+        # Seeds untouched by the aborted run.
+        pair8 = self.pair_by_seed(8)
+        pair8.refresh_from_db()
+        self.assertEqual(pair8.seed, 8)
+
+    def test_reseed_refuses_when_later_phase_generated(self):
+        self.advance_through_phase2()  # generates phase 2 matchups
+        with self.assertRaises(CommandError):
+            call_command('reseed_phase1', self.tournament.id, '--yes', stdout=StringIO())
+
+    def test_reseed_rejects_non_multi_phase_tournament(self):
+        archetype = TournamentArchetype.objects.get(name="4 pairs doubles tournament")
+        tournament = TournamentChart.objects.create(
+            name='Plain RR', date='2026-07-01', number_of_rounds=3,
+            number_of_courts=2, number_of_stages=1, archetype=archetype)
+        tournament.pairs.set(self.pairs[:4])
+        with self.assertRaises(CommandError):
+            call_command('reseed_phase1', tournament.id, '--yes', stdout=StringIO())

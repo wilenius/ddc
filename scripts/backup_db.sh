@@ -22,9 +22,21 @@ if ! cmp -s "$ENV_FILE" "$DEST/env-backup"; then
     cp "$ENV_FILE" "$DEST/env-backup"
 fi
 
-# Timestamped copy every 10 minutes, pruned after 7 days, in case the latest
-# snapshot ever contains a mistake worth stepping back from.
+# Timestamped copy every 10 minutes. Keep all of today's snapshots (the real
+# recovery window — a tournament-day failure is noticed within the hour) plus
+# the single newest snapshot from yesterday as a hedge against a bad "latest".
+# Everything older is pruned. Long-term backups are a separate concern.
 if (( 10#$(date +%M) % 10 == 0 )); then
     cp "$DEST/db-latest.sqlite3" "$DEST/db-$(date +%Y%m%d-%H%M).sqlite3"
-    find "$DEST" -name 'db-2*.sqlite3' -mtime +7 -delete
+
+    today=$(date +%Y%m%d)
+    keep_yesterday=$(ls "$DEST"/db-"$(date -d yesterday +%Y%m%d)"-*.sqlite3 2>/dev/null | sort | tail -1 || true)
+    for f in "$DEST"/db-2*.sqlite3; do
+        [ -e "$f" ] || continue
+        case "$f" in
+            "$DEST"/db-"$today"-*.sqlite3) ;;   # keep all of today
+            "$keep_yesterday") ;;               # keep one from yesterday
+            *) rm -f "$f" ;;
+        esac
+    done
 fi

@@ -130,6 +130,15 @@
                     </div>
                 {% endif %}
                 <div id="allMatchesView"{% if viewer_is_participant and not is_league_format %} class="d-none"{% endif %}>
+                {% if not is_league_format %}
+                    {# Quick way for a director to spot which matches still need a result. #}
+                    <div class="form-check mb-3" style="padding-left: 0;">
+                        <input class="form-check-input" type="checkbox" id="unplayedOnlyToggle" style="margin-left: 0;">
+                        <label class="form-check-label" for="unplayedOnlyToggle" style="padding-left: 1.5em;">
+                            Show unplayed only <span class="text-muted small" id="unplayedCount"></span>
+                        </label>
+                    </div>
+                {% endif %}
                 {% if is_league_format %}
                     {# League format - display by date #}
                     {% if not all_matches_have_dates %}
@@ -334,6 +343,35 @@
                     {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores %}
                 {% endif %}
                 </div>{# /#allMatchesView #}
+                {% if not is_league_format %}
+                <script>
+                // "Show unplayed only" filter: hide matches that already have a result
+                // so a director can see at a glance what's still outstanding. Round
+                // blocks (and their "Round N" headings) that end up empty are hidden too.
+                (function() {
+                    const toggle = document.getElementById('unplayedOnlyToggle');
+                    const scope = document.getElementById('allMatchesView');
+                    const count = document.getElementById('unplayedCount');
+                    if (!toggle || !scope) return;
+                    const cols = Array.from(scope.querySelectorAll('.matchup-col'));
+                    if (count) {
+                        const unplayed = cols.filter(c => c.dataset.recorded === '0').length;
+                        count.textContent = `(${unplayed} of ${cols.length} unplayed)`;
+                    }
+                    function apply(on) {
+                        cols.forEach(col => {
+                            col.classList.toggle('d-none', on && col.dataset.recorded === '1');
+                        });
+                        scope.querySelectorAll('.round-block').forEach(block => {
+                            const anyVisible = Array.from(block.querySelectorAll('.matchup-col'))
+                                .some(c => !c.classList.contains('d-none'));
+                            block.classList.toggle('d-none', on && !anyVisible);
+                        });
+                    }
+                    toggle.addEventListener('change', function() { apply(this.checked); });
+                })();
+                </script>
+                {% endif %}
                 {% if viewer_is_participant and not is_league_format %}
                 <script>
                 // "My matches" / "All matches" segmented toggle. Defaults to My matches

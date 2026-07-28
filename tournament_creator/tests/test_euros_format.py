@@ -4,6 +4,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from ..forms import TournamentCreationForm
 from ..models import (Player, Pair, TournamentChart, TournamentArchetype, Matchup, MatchScore,
                       Pool, PoolPair, User, ManualPoolTiebreakResolution)
 from ..models.tournament_types import EurosFormat, get_implementation
@@ -725,7 +726,7 @@ class EurosCreationViewTest(TestCase):
             'name': 'EO 2026',
             'place': 'Helsinki',
             'country': 'Finland',
-            'confirm_new_location': '1',
+            'confirm_new_location': TournamentCreationForm.location_token('Helsinki', 'Finland'),
             'date': '2026-07-01',
             'tournament_category': 'PAIRS',
             'number_of_stages': 1,  # overridden by the multi-phase format

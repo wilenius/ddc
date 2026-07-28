@@ -55,6 +55,9 @@
                     {% if form.unconfirmed_location %}
                         {# Location is free text, so an unseen spelling is more often a typo #}
                         {# than a genuinely new venue. One confirmation click, then it's saved. #}
+                        {# The token below is what confirms it, so submitting from either button #}
+                        {# works — while editing the place/country makes it stale and asks again. #}
+                        <input type="hidden" name="confirm_new_location" value="{{ form.location_confirmation_token }}">
                         <div class="alert alert-warning">
                             <h6 class="alert-heading"><i class="bi bi-geo-alt"></i> Check the location</h6>
                             <ul class="mb-2">
@@ -66,8 +69,11 @@
                                     </li>
                                 {% endfor %}
                             </ul>
-                            <p class="mb-2 small">Correct the spelling below, or confirm that this is a new location.</p>
-                            <button type="submit" name="confirm_new_location" value="1" class="btn btn-sm btn-warning">
+                            <p class="mb-2 small">
+                                Correct the spelling below, or create the tournament anyway &mdash;
+                                either button confirms the new location.
+                            </p>
+                            <button type="submit" class="btn btn-sm btn-warning">
                                 <i class="bi bi-check-lg"></i> It's correct &mdash; create anyway
                             </button>
                         </div>
@@ -147,10 +153,10 @@
                         {% if form.end_date.errors %}<div class="invalid-feedback d-block">{{ form.end_date.errors|join:", " }}</div>{% endif %}
                     </div>
 
-                    {# Stages is hidden until a format actually uses it: the only multi-stage
-                       format is euros, which sets its own three stages. For every other format
-                       a value > 1 just repeats the identical round robin N times. The field is
-                       still rendered (as 1) because the category/archetype reload JS reads it. #}
+                    {# Stages is hidden until a format actually uses it: the only multi-stage #}
+                    {# format is euros, which sets its own three stages. For every other format #}
+                    {# a value > 1 just repeats the identical round robin N times. The field is #}
+                    {# still rendered (as 1) because the category/archetype reload JS reads it. #}
                     <div class="mb-3 d-none">
                         <label for="{{ form.number_of_stages.id_for_label }}">Stages</label>
                         {{ form.number_of_stages }}
@@ -389,7 +395,11 @@
                 </script>
             {% endif %}
             <div class="text-center">
-                <button type="submit" class="btn btn-primary">Create Tournament</button>
+                {% if form.unconfirmed_location %}
+                    <button type="submit" class="btn btn-warning">Create Tournament anyway</button>
+                {% else %}
+                    <button type="submit" class="btn btn-primary">Create Tournament</button>
+                {% endif %}
                 <a href="{% url 'tournament_list' %}" class="btn btn-secondary">Cancel</a>
             </div>
         </form>

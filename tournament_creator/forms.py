@@ -27,9 +27,11 @@ class TournamentCreationForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
 
-    # Set by the "create anyway" button when the director confirms a place or
-    # country that no previous tournament has used (see clean()).
-    confirm_new_location = forms.BooleanField(required=False, widget=forms.HiddenInput)
+    # Carries the place/country the director has confirmed as genuinely new (see
+    # clean()). It holds a token of the confirmed values rather than a plain flag,
+    # so that any resubmit of the warned-about form confirms it — but editing the
+    # location afterwards asks again instead of waving a second typo through.
+    confirm_new_location = forms.CharField(required=False, widget=forms.HiddenInput)
 
     # Group picker for tournaments (same as Signal backend, but without refresh button)
     signal_groups_picker = forms.MultipleChoiceField(
@@ -166,13 +168,18 @@ class TournamentCreationForm(forms.ModelForm):
 
         Location is free text, so a typo would silently create a new entry in
         the location filter ("Hlsinki"). Unknown values therefore need one
-        confirmation click; the "create anyway" button sets
-        ``confirm_new_location`` and the second submit goes through.
+        confirmation click: the warned-about form carries the location back in a
+        hidden ``confirm_new_location`` token, so submitting it again — from
+        either button — goes through, while a location edited in between is
+        checked afresh.
         """
         cleaned = super().clean()
-        # ``unconfirmed_location`` drives the confirm banner in the template.
+        # These two drive the confirm banner and its hidden token in the template.
         self.unconfirmed_location = None
-        if not self.require_location_confirmation or cleaned.get('confirm_new_location'):
+        self.location_confirmation_token = self.location_token(
+            cleaned.get('place'), cleaned.get('country'))
+        if (not self.require_location_confirmation
+                or cleaned.get('confirm_new_location') == self.location_confirmation_token):
             return cleaned
 
         unknown = []
@@ -196,6 +203,11 @@ class TournamentCreationForm(forms.ModelForm):
             raise forms.ValidationError(' '.join(parts) + ' Check the spelling, or confirm to create it anyway.')
 
         return cleaned
+
+    @staticmethod
+    def location_token(place, country):
+        """Value a confirmation applies to; a changed place or country invalidates it."""
+        return '|'.join(((place or '').strip().lower(), (country or '').strip().lower()))
 
     @staticmethod
     def _closest_known(field, value):

@@ -233,8 +233,12 @@ anything tournament-scoped.
   options follow the selected country
 - Free text invites typos, so `TournamentCreationForm.clean()` blocks a place or
   country no previous tournament has used, offers the closest existing spelling
-  (difflib) and requires one confirmation click (`confirm_new_location`). The Django
-  admin subclass sets `require_location_confirmation = False`
+  (difflib) and requires one confirmation click. The warned-about form carries a
+  hidden `confirm_new_location` token (`TournamentCreationForm.location_token()`,
+  i.e. lowercased `place|country`), so resubmitting from either the alert's button
+  or the bottom "Create Tournament anyway" confirms it, while editing the place or
+  country makes the token stale and asks again. The Django admin subclass sets
+  `require_location_confirmation = False`
 - Migration 0030 backfilled all pre-existing tournaments to Helsinki, Finland
 
 ### Name Display
@@ -314,8 +318,9 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
   a failure means the change under test broke something
 - `tests/test_tournament_access.py` covers location metadata/filtering and
   per-tournament director rights; tournament-creating tests need a `TC` (or
-  `ADMIN`) user and must send `place`/`country` (plus `confirm_new_location`
-  when the location is new to the test DB)
+  `ADMIN`) user and must send `place`/`country` (plus `confirm_new_location`,
+  built with `TournamentCreationForm.location_token(place, country)`, when the
+  location is new to the test DB)
 - Signal notification tests mock `requests.post` against the JSON-RPC daemon
   protocol (one `send` call per recipient to `/api/v1/rpc`); disabled
   per-tournament notifications are skipped silently (no send, no NotificationLog)

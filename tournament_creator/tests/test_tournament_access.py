@@ -3,6 +3,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
 
+from ..forms import TournamentCreationForm
 from ..models import Player, TournamentChart, TournamentDirector, User
 
 
@@ -63,10 +64,25 @@ class LocationMetadataTests(TestCase):
         self.assertEqual(unconfirmed[0]['suggestion'], 'Helsinki')
 
     def test_confirmed_new_location_is_created(self):
-        data = self._create_data(place='Tampere', country='Finland', confirm_new_location='1')
+        data = self._create_data(
+            place='Tampere', country='Finland',
+            confirm_new_location=TournamentCreationForm.location_token('Tampere', 'Finland'),
+        )
         response = self.client.post(reverse('tournament_create'), data)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(TournamentChart.objects.get(name='New Tournament').place, 'Tampere')
+
+    def test_confirmation_does_not_carry_over_to_an_edited_location(self):
+        """A confirmation applies to the values it was given for, not to a later typo."""
+        data = self._create_data(
+            place='Tmpere', country='Finland',
+            confirm_new_location=TournamentCreationForm.location_token('Tampere', 'Finland'),
+        )
+        response = self.client.post(reverse('tournament_create'), data)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TournamentChart.objects.filter(name='New Tournament').exists())
+        self.assertEqual(
+            [item['value'] for item in response.context['form'].unconfirmed_location], ['Tmpere'])
 
     def test_unknown_country_needs_confirmation_too(self):
         response = self.client.post(reverse('tournament_create'), self._create_data(country='Grmany'))
@@ -140,7 +156,7 @@ class TournamentCreatorRoleTests(TestCase):
             'number_of_stages': 1,
             'format_type': 'STANDARD',
             'name_display_format': 'FIRST',
-            'confirm_new_location': '1',
+            'confirm_new_location': TournamentCreationForm.location_token('Helsinki', 'Finland'),
             'players': [p.id for p in self.players],
         }
 

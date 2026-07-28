@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh DDC rankings weekly, Monday 07:45 Finnish time
+
+[Timer]
+OnCalendar=Mon 07:45:00
+# The machine may be asleep or off at 07:45; catch up on the next start.
+Persistent=true
+# Nothing depends on the exact minute, and it spares the upstream API a
+# thundering herd if this is ever deployed more than once.
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

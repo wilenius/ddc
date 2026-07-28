@@ -1,0 +1,7 @@
+[Unit]
+Description=Refresh DDC player rankings from doubledisccourt.com
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/git/ddc
+ExecStart=%h/git/ddc/venv/bin/python manage.py update_rankings

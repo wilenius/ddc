@@ -227,21 +227,34 @@ When a match result is recorded or updated, and the Signal backend is active and
 
 ## User Roles
 
+Global roles are set on the user in `/admin/` (single users, or several at once with
+the bulk "Set role: …" actions on the user list).
+
 1. Admin
    - Create/edit/delete tournaments
    - Manage players
    - Record and edit match results
    - Access all features
 
-2. Player
-   - Create tournaments
-   - Record match results
+2. Tournament Creator
+   - Create tournaments, and add players who aren't ranked yet
+   - Full director rights on the tournaments they create, and none elsewhere
    - View all tournament data
 
-3. Spectator
+3. Player
+   - Add players to the ranking list
+   - Record match results for tournaments they play in
+   - View all tournament data
+
+4. Spectator
    - View tournaments
    - View match results and standings
-   - No editing capabilities
+   - No editing capabilities, except scoring in sandbox tournaments
+
+On top of these, rights can be granted per tournament: a tournament's creator, anyone
+listed under "Manage → Tournament directors", and global admins may record and edit
+results at any time, resolve tiebreaks, appoint further directors, and delete the
+tournament.
 
 ## Development
 
@@ -260,12 +273,21 @@ When a match result is recorded or updated, and the Signal backend is active and
 
 ## TODO
 
-1. Tournament creator role
-2. Group support for individual pods
-3. per pod player / creator / admin rights
-4. Tournament types: doubles league (Helsinki winter), MoC league (Florida winter), dynamic MoC (German/Finnish style)
-5. Tournament sign-up system
-6. What else?
+1. ~~Tournament creator role~~ **done** — global `TC` role, assigned in `/admin/`
+   (bulk role actions available on the user list). Creators get director rights on
+   their own tournaments and can appoint further directors per tournament.
+2. ~~Group support for individual pods~~ / ~~per pod player / creator / admin rights~~
+   **kinda done**, and solved differently: instead of explicit pods, every tournament
+   carries a mandatory place/country and the tournament list filters by them, while
+   rights are granted per tournament (creator + `TournamentDirector` rows) rather than
+   per group. This turned out to make more sense than modelling pods as first-class
+   objects.
+3. Tournament types:
+   - ~~doubles league (Helsinki winter)~~ **done**
+   - MoC league (Florida winter)
+   - dynamic MoC (German/Finnish style)
+4. Tournament sign-up system
+5. What else?
 
 ## License
 

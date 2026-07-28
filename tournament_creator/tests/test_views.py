@@ -9,6 +9,7 @@ from ..models.scoring import PlayerScore
 from ..forms import TournamentCreationForm # Added
 from ..views.tournament_views import _score_rule_warnings
 from django.utils import timezone
+from django.db.models import Max
 
 class ViewTests(TestCase):
     def setUp(self):
@@ -487,3 +488,55 @@ class SandboxTournamentTests(TestCase):
 
     def test_regular_formats_have_no_score_rules(self):
         self.assertIsNone(TournamentArchetype().get_score_rules(self.matchup))
+
+
+class PlayerCreateTests(TestCase):
+    """New players get 0 ranking points and the last spot on the ranking list."""
+
+    def setUp(self):
+        self.client = Client()
+        self.admin_user = User.objects.create_user(
+            username='admin_pc', password='test123', role='ADMIN')
+        self.player_user = User.objects.create_user(
+            username='player_pc', password='test123', role='PLAYER')
+        self.spectator_user = User.objects.create_user(
+            username='spectator_pc', password='test123', role='SPECTATOR')
+        Player.objects.create(first_name='Alice', last_name='Smith',
+                              ranking=1, ranking_points=100.0)
+        Player.objects.create(first_name='Bob', last_name='Jones',
+                              ranking=2, ranking_points=90.0)
+
+    def test_created_player_is_ranked_last_with_zero_points(self):
+        # Migration-seeded players use a 9999 sentinel ranking, so "last" is
+        # relative to whatever is already there, not to the fixture count.
+        last_ranking = Player.objects.aggregate(Max('ranking'))['ranking__max']
+        self.client.login(username='admin_pc', password='test123')
+        response = self.client.post(reverse('player_create'),
+                                    {'first_name': 'Cecil', 'last_name': 'New'})
+        self.assertRedirects(response, reverse('player_list'))
+        player = Player.objects.get(first_name='Cecil')
+        self.assertEqual(player.ranking, last_ranking + 1)
+        self.assertEqual(player.ranking_points, 0)
+        self.assertEqual(Player.objects.order_by('ranking').last(), player)
+
+    def test_first_player_gets_ranking_one(self):
+        Player.objects.all().delete()
+        self.client.login(username='admin_pc', password='test123')
+        self.client.post(reverse('player_create'),
+                         {'first_name': 'Solo', 'last_name': 'Player'})
+        self.assertEqual(Player.objects.get(first_name='Solo').ranking, 1)
+
+    def test_players_may_add_players_but_spectators_may_not(self):
+        self.client.login(username='player_pc', password='test123')
+        self.assertEqual(self.client.get(reverse('player_create')).status_code, 200)
+
+        self.client.login(username='spectator_pc', password='test123')
+        self.assertEqual(self.client.get(reverse('player_create')).status_code, 403)
+
+    def test_player_list_shows_ranking_points(self):
+        self.client.login(username='spectator_pc', password='test123')
+        response = self.client.get(reverse('player_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'tournament_creator/player_list.html')
+        self.assertContains(response, 'Alice')
+        self.assertContains(response, '100.0')

@@ -6,13 +6,9 @@ from .views.tournament_views import (
     manual_tiebreak_resolution, tournament_settings, generate_next_stage,
     reset_sandbox_scores
 )
-from .views.player_views import (
-    PlayerListView, PlayerCreateView, PlayerUpdateView, PlayerDeleteView
-)
+from .views.player_views import PlayerListView, PlayerCreateView
 from .views.autocomplete import PlayerAutocomplete, LinkablePlayerAutocomplete
-from .views.rankings_views import (
-    RankingsListView, update_rankings, check_update_status
-)
+from .views.rankings_views import update_rankings, check_update_status
 from .views.notifications_views import refresh_signal_groups
 
 urlpatterns = [
@@ -30,13 +26,10 @@ urlpatterns = [
     path('tournaments/<int:tournament_id>/reset-sandbox/', reset_sandbox_scores, name='reset_sandbox_scores'),
     path('players/', PlayerListView.as_view(), name='player_list'),
     path('players/create/', PlayerCreateView.as_view(), name='player_create'),
-    path('players/<int:pk>/update/', PlayerUpdateView.as_view(), name='player_update'),
-    path('players/<int:pk>/delete/', PlayerDeleteView.as_view(), name='player_delete'),
     path('player-autocomplete/', PlayerAutocomplete.as_view(), name='player-autocomplete'),
     path('linkable-player-autocomplete/', LinkablePlayerAutocomplete.as_view(), name='linkable-player-autocomplete'),
     
     # Rankings URLs
-    path('rankings/', RankingsListView.as_view(), name='rankings_list'),
     path('rankings/update/', update_rankings, name='update_rankings'),
     path('rankings/status/', check_update_status, name='check_rankings_status'),
 

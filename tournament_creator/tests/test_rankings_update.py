@@ -78,11 +78,11 @@ class RankingsViewTest(TestCase):
         self.client = Client()
         self.client.login(username='testuser', password='password123')
     
-    def test_rankings_list_view(self):
-        """Test the rankings list view."""
-        response = self.client.get(reverse('rankings_list'))
+    def test_player_list_view(self):
+        """Test the players list view."""
+        response = self.client.get(reverse('player_list'))
         self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'tournament_creator/rankings_list.html')
+        self.assertTemplateUsed(response, 'tournament_creator/player_list.html')
         
         # Check that all players are in the response
         for player in [self.player1, self.player2, self.player3]:
@@ -94,7 +94,7 @@ class RankingsViewTest(TestCase):
     
     def test_rankings_search(self):
         """Test the search functionality in rankings view."""
-        response = self.client.get(reverse('rankings_list'), {'search': 'Alice'})
+        response = self.client.get(reverse('player_list'), {'search': 'Alice'})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Alice')
         self.assertNotContains(response, 'Bob')
@@ -103,7 +103,7 @@ class RankingsViewTest(TestCase):
     def test_rankings_sorting(self):
         """Test the sorting functionality in rankings view."""
         # Test sorting by first name
-        response = self.client.get(reverse('rankings_list'), {
+        response = self.client.get(reverse('player_list'), {
             'sort_by': 'first_name', 
             'sort_order': 'asc'
         })
@@ -116,7 +116,7 @@ class RankingsViewTest(TestCase):
         self.assertTrue(alice_pos < bob_pos < charlie_pos)
         
         # Test reverse sorting
-        response = self.client.get(reverse('rankings_list'), {
+        response = self.client.get(reverse('player_list'), {
             'sort_by': 'first_name', 
             'sort_order': 'desc'
         })

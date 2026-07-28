@@ -147,14 +147,12 @@
                         {% if form.end_date.errors %}<div class="invalid-feedback d-block">{{ form.end_date.errors|join:", " }}</div>{% endif %}
                     </div>
 
-                    <div class="mb-3">
-                        <label for="{{ form.number_of_stages.id_for_label }}">
-                            Stages
-                            <i class="bi bi-info-circle text-muted"
-                               data-bs-toggle="tooltip"
-                               data-bs-placement="right"
-                               title="1 for single-stage tournament, 2+ for multi-stage tournaments with pools/playoffs"></i>
-                        </label>
+                    {# Stages is hidden until a format actually uses it: the only multi-stage
+                       format is euros, which sets its own three stages. For every other format
+                       a value > 1 just repeats the identical round robin N times. The field is
+                       still rendered (as 1) because the category/archetype reload JS reads it. #}
+                    <div class="mb-3 d-none">
+                        <label for="{{ form.number_of_stages.id_for_label }}">Stages</label>
                         {{ form.number_of_stages }}
                         {% if form.number_of_stages.errors %}<div class="invalid-feedback d-block">{{ form.number_of_stages.errors|join:", " }}</div>{% endif %}
                     </div>
@@ -254,7 +252,14 @@
                     </div>
                     
                     <div class="mb-3">
-                        {{ form.tournament_category.label_tag }}
+                        <label for="{{ form.tournament_category.id_for_label }}">
+                            {{ form.tournament_category.label }}
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               data-bs-html="true"
+                               title="<strong>Monarch of the Court:</strong> Cade Loving's formats for 5&ndash;16 players.<br><br><strong>Doubles:</strong> single round robin for 2&ndash;10 pairs. For exactly 20 pairs, the Euros format (originally devised by Malte &amp; Marc for the EO 2024)."></i>
+                        </label>
                         {{ form.tournament_category }}
                         {% if form.tournament_category.errors %}<div class="invalid-feedback d-block">{{ form.tournament_category.errors|join:", " }}</div>{% endif %}
                         {% if form.tournament_category.help_text %}<small class="form-text text-muted">{{ form.tournament_category.help_text }}</small>{% endif %}

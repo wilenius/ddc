@@ -1,12 +1,12 @@
 {% for round in round_list %}
     <div class="mb-4">
-        <h5 class="border-bottom pb-2">Round {{ round.grouper }}</h5>
+        {% if not playoff %}<h5 class="border-bottom pb-2">Round {{ round.grouper }}</h5>{% endif %}
         <div class="row">
             {% for matchup in round.list %}
                 <div class="col-md-6 mb-3">
                     <div class="card h-100{% if mark_next and matchup.is_next %} border-primary border-2{% endif %}">
                         <div class="card-header{% if mark_next and matchup.is_next %} d-flex align-items-center{% endif %}">
-                            <span>{% if show_pool and matchup.pool %}{{ matchup.pool.name }} &middot; {% endif %}Court {{ matchup.court_number }}</span>
+                            <span>{% if matchup.label %}{{ matchup.label }} <span class="text-muted fw-normal">&middot; Court {{ matchup.court_number }}</span>{% else %}{% if show_pool and matchup.pool %}{{ matchup.pool.name }} &middot; {% endif %}Court {{ matchup.court_number }}{% endif %}</span>
                             {% if mark_next and matchup.is_next %}<span class="badge bg-primary ms-auto">Up next</span>{% endif %}
                         </div>
                         <div class="card-body">

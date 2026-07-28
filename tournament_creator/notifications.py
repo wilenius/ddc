@@ -132,6 +132,9 @@ def build_match_notification_body(match_result_log_instance, tournament):
         <tag> · [<pool or stage> · ] R<round> C<court>
         <team1> <set scores> <team2>
 
+    Bracket matches with a stakes label ("Semifinal", "Final", "Places 5–6", …)
+    show ``<label> C<court>`` in place of ``R<round> C<court>``.
+
     The set-score block (``\\d+–\\d+`` joined by ``, ``) is the anchor a parser
     keys on to split the two teams, so team names may contain spaces and ``&``.
     """
@@ -144,7 +147,10 @@ def build_match_notification_body(match_result_log_instance, tournament):
         locator_parts.append(matchup.pool.name)
     elif matchup.stage and tournament.number_of_stages > 1:
         locator_parts.append(matchup.stage.name)
-    locator_parts.append(f"R{matchup.round_number} C{matchup.court_number}")
+    if matchup.label:
+        locator_parts.append(f"{matchup.label} C{matchup.court_number}")
+    else:
+        locator_parts.append(f"R{matchup.round_number} C{matchup.court_number}")
     header = " · ".join(locator_parts)
 
     team1, team2 = _matchup_team_displays(matchup, tournament)

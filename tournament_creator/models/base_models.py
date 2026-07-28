@@ -289,6 +289,12 @@ class Matchup(models.Model):
     
     round_number = models.IntegerField()
     court_number = models.IntegerField()
+    label = models.CharField(
+        max_length=50, blank=True, default='',
+        help_text="Human-readable stakes of a bracket match (e.g. 'Semifinal', "
+                  "'Final', 'Bronze match', 'Places 5–6'); blank for ordinary "
+                  "round-robin matches, which display by round/court instead",
+    )
     match_date = models.DateField(null=True, blank=True, help_text="For league-format tournaments, the date this match will be played")
     match_time = models.TimeField(null=True, blank=True, help_text="For league-format tournaments, the time this match will be played")
 

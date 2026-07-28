@@ -580,6 +580,7 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
                         'matchups': [m for m in all_matchups if m.pool_id == pool.id],
                         'standings': standings,
                         'has_manual_resolution': any(e.get('manually_resolved') for e in standings),
+                        'is_playoff': stage.stage_type == 'PLAYOFF',
                     })
                 if pool_blocks:
                     pool_data_by_stage[stage.id] = pool_blocks

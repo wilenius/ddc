@@ -205,6 +205,10 @@ class EurosAdvancementTest(EurosFormatTestBase):
                 frozenset((base + 1, base + 4)),
                 frozenset((base + 2, base + 3)),
             })
+            # Stakes label: the top-four group plays plain "Semifinal"s; every
+            # lower group plays "Placement semifinal"s.
+            expected = "Semifinal" if base == 0 else "Placement semifinal"
+            self.assertEqual({m.label for m in semis}, {expected})
 
     def test_group_9_to_12_mixes_a_and_b_pool(self):
         """The 2 worst from the A Pool and the 2 best from the B Pool share a finals group."""
@@ -239,10 +243,27 @@ class EurosFinalsTest(EurosFormatTestBase):
         self.assertEqual(len(placement), 2)
         self.assertEqual({placement[0].pair1.seed, placement[0].pair2.seed}, {1, 2})
         self.assertEqual({placement[1].pair1.seed, placement[1].pair2.seed}, {3, 4})
+        # Top-four group: winners' match is the Final, losers' the Bronze match
+        self.assertEqual(placement[0].label, "Final")
+        self.assertEqual(placement[1].label, "Bronze match")
 
         # Calling again must not duplicate the placement matches
         self.impl.maybe_generate_placement_matches(self.tournament, semis[1])
         self.assertEqual(pool.matchups.filter(round_number=2).count(), 2)
+
+    def test_placement_match_labels_for_lower_group(self):
+        """A non-top group labels its placement matches with the exact placings
+        on the line, not "Final"/"Bronze"."""
+        self.advance_through_phase2()
+        finals = self.stages[2]
+        pool = finals.pools.get(name='Places 5-8')
+        semis = list(pool.matchups.filter(round_number=1).order_by('court_number'))
+        for semi in semis:
+            self.record_win(semi, semi.pair1)
+            self.impl.maybe_generate_placement_matches(self.tournament, semi)
+        placement = list(pool.matchups.filter(round_number=2).order_by('court_number'))
+        self.assertEqual(placement[0].label, "Places 5–6")
+        self.assertEqual(placement[1].label, "Places 7–8")
 
     def test_final_standings(self):
         self.advance_through_phase2()

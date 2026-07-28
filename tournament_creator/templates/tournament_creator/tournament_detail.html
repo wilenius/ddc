@@ -84,7 +84,7 @@
                                 <div class="card-header bg-primary text-white d-flex flex-wrap align-items-center">
                                     <span><i class="bi bi-play-fill"></i> <strong>Up next</strong></span>
                                     <span class="ms-auto small">
-                                        {% if my_next_matchup.stage %}{{ my_next_matchup.stage.name }} &middot; {% endif %}{% if my_next_matchup.pool %}{{ my_next_matchup.pool.name }} &middot; {% endif %}Round {{ my_next_matchup.round_number }} &middot; Court {{ my_next_matchup.court_number }}
+                                        {% if my_next_matchup.stage %}{{ my_next_matchup.stage.name }} &middot; {% endif %}{% if my_next_matchup.pool %}{{ my_next_matchup.pool.name }} &middot; {% endif %}{% if my_next_matchup.label %}{{ my_next_matchup.label }}{% else %}Round {{ my_next_matchup.round_number }}{% endif %} &middot; Court {{ my_next_matchup.court_number }}
                                     </span>
                                 </div>
                                 <div class="card-body">
@@ -270,7 +270,7 @@
                                                     </div>
                                                 {% endif %}
                                                 {% regroup block.matchups by round_number as round_list %}
-                                                {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores %}
+                                                {% include "tournament_creator/partials/matchup_rounds.html" with round_list=round_list can_record_scores=can_record_scores playoff=block.is_playoff %}
                                                 {% if not forloop.last %}<hr class="my-4">{% endif %}
                                             {% endfor %}
                                             {% if next_stage and can_advance_stage and stage.stage_number|add:1 == next_stage.stage_number %}

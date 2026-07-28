@@ -356,16 +356,37 @@ class EurosFormat(PairsTournamentArchetype):
                 ordered_pairs=group,
             )
             # Semifinals: 1v4 and 2v3 (positions within the group)
+            semi_label = self._semifinal_label(base)
             Matchup.objects.create(
                 tournament_chart=tournament, stage=stage3, pool=pool,
                 pair1=group[0], pair2=group[3],
                 round_number=1, court_number=group_idx * 2 + 1,
+                label=semi_label,
             )
             Matchup.objects.create(
                 tournament_chart=tournament, stage=stage3, pool=pool,
                 pair1=group[1], pair2=group[2],
                 round_number=1, court_number=group_idx * 2 + 2,
+                label=semi_label,
             )
+
+    @staticmethod
+    def _semifinal_label(base):
+        """Stakes label for a finals group's semifinals. ``base`` is the 0-indexed
+        placement the group starts at (0 → the top-four group)."""
+        return "Semifinal" if base == 0 else "Placement semifinal"
+
+    @staticmethod
+    def _placement_match_label(base, winners):
+        """Stakes label for a round-2 placement match. ``winners`` is the match
+        between the two semifinal winners (the higher-placing match)."""
+        if winners:
+            if base == 0:
+                return "Final"
+            return f"Places {base + 1}–{base + 2}"
+        if base == 0:
+            return "Bronze match"
+        return f"Places {base + 3}–{base + 4}"
 
     def maybe_generate_placement_matches(self, tournament, matchup):
         """
@@ -384,15 +405,18 @@ class EurosFormat(PairsTournamentArchetype):
 
         winner1, loser1 = self._matchup_winner_loser(semis[0])
         winner2, loser2 = self._matchup_winner_loser(semis[1])
+        base = pool.order * 4
         Matchup.objects.create(
             tournament_chart=tournament, stage=matchup.stage, pool=pool,
             pair1=winner1, pair2=winner2,
             round_number=2, court_number=semis[0].court_number,
+            label=self._placement_match_label(base, winners=True),
         )
         Matchup.objects.create(
             tournament_chart=tournament, stage=matchup.stage, pool=pool,
             pair1=loser1, pair2=loser2,
             round_number=2, court_number=semis[1].court_number,
+            label=self._placement_match_label(base, winners=False),
         )
 
     def get_pool_standings(self, pool) -> List[Dict]:

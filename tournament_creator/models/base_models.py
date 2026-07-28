@@ -102,6 +102,8 @@ class TournamentChart(models.Model):
     """Model storing tournament-level information, including participants and structure."""
     name = models.CharField(max_length=255, default="Unnamed Tournament")
     short_name = models.CharField(max_length=32, blank=True, help_text="Short tag used in notifications (e.g. 'EO26'). Falls back to the full name when blank.")
+    place = models.CharField(max_length=100, default="", help_text="Town or city the tournament is played in (e.g. 'Helsinki').")
+    country = models.CharField(max_length=100, default="", help_text="Country the tournament is played in (e.g. 'Finland').")
     date = models.DateField()  # Start date (kept for backward compatibility)
     end_date = models.DateField(null=True, blank=True, help_text="End date for multi-day tournaments. Leave blank for single-day tournaments.")
     number_of_rounds = models.IntegerField()
@@ -139,6 +141,27 @@ class TournamentChart(models.Model):
         default=2,
         help_text="MoC only: typical sets played per match. Used to scale the free win awarded to seeds 1 & 2 in formats where their pairing is eliminated."
     )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_tournaments',
+        help_text="User who created this tournament. Has director rights over it.",
+    )
+    directors = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through='TournamentDirector',
+        through_fields=('tournament', 'user'),
+        blank=True,
+        related_name='directed_tournaments',
+    )
+
+    @property
+    def location(self):
+        """'Place, Country' for display; falls back gracefully if either is blank."""
+        return ', '.join(part for part in (self.place, self.country) if part)
+
     def __str__(self):
         return self.name
 
@@ -172,20 +195,45 @@ class TournamentChart(models.Model):
             models.Q(player1=player) | models.Q(player2=player)
         ).exists()
 
+    def user_can_administer(self, user):
+        """Whether ``user`` has director (admin) rights over *this* tournament.
+
+        Global admins can administer everything; a tournament creator and the
+        directors they appoint can administer only their own tournaments.
+        """
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        if getattr(user, 'is_admin', lambda: False)():
+            return True
+        if self.created_by_id and self.created_by_id == user.pk:
+            return True
+        if not self.pk:
+            return False
+        return self.directors.filter(pk=user.pk).exists()
+
+    def user_can_manage_directors(self, user):
+        """Whether ``user`` may add or remove tournament directors.
+
+        Per the role rules, only the creator, the existing directors, and
+        global admins can appoint more directors.
+        """
+        return self.user_can_administer(user)
+
     def user_can_edit_results(self, user):
         """Whether ``user`` may record or edit match results for this tournament.
 
         - Sandbox (practice) tournaments are open to every logged-in user,
           with no past-date lock.
-        - Admins can always edit (including past tournaments).
-        - For non-admins, past tournaments are locked.
-        - For current tournaments, non-admins must be competing participants.
+        - Directors (creator, appointed TDs, global admins) can always edit,
+          including past tournaments.
+        - For everyone else, past tournaments are locked.
+        - For current tournaments, non-directors must be competing participants.
         """
         if not user or not getattr(user, 'is_authenticated', False):
             return False
         if self.is_sandbox:
             return True
-        if getattr(user, 'is_admin', lambda: False)():
+        if self.user_can_administer(user):
             return True
         if self.is_past():
             return False
@@ -193,6 +241,27 @@ class TournamentChart(models.Model):
 
     class Meta:
         ordering = ['-date']
+
+
+class TournamentDirector(models.Model):
+    """A user granted director (admin) rights over a single tournament."""
+    tournament = models.ForeignKey(TournamentChart, on_delete=models.CASCADE, related_name='director_roles')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='director_roles')
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='directors_added',
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['tournament', 'user']
+        ordering = ['added_at']
+
+    def __str__(self):
+        return f"{self.user} — director of {self.tournament.name}"
 
 class TournamentPlayer(models.Model):
     tournament_chart = models.ForeignKey(TournamentChart, on_delete=models.CASCADE)

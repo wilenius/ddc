@@ -9,6 +9,11 @@
                             {% if tournament.is_sandbox %}<span class="badge bg-info text-dark">Practice</span>{% endif %}
                             {% if archived %}<i class="bi bi-archive text-muted" title="Archived"></i>{% endif %}
                         </h5>
+                        {% if tournament.location %}
+                            <h6 class="card-subtitle mb-2 text-muted">
+                                <i class="bi bi-geo-alt"></i> {{ tournament.location }}
+                            </h6>
+                        {% endif %}
                         <p class="card-text">
                             Date: {{ tournament.date }}{% if tournament.end_date %} &ndash; {{ tournament.end_date }}{% endif %}<br>
                             Players: {{ tournament.players.count }}<br>
@@ -23,6 +28,10 @@
     </div>
 {% else %}
     <div class="alert alert-info">
-        {{ empty_text }}
+        {% if location_filter_active %}
+            {{ empty_text }} Try clearing the location filter.
+        {% else %}
+            {{ empty_text }}
+        {% endif %}
     </div>
 {% endif %}

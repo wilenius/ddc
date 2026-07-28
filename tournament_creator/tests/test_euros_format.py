@@ -493,6 +493,12 @@ class EurosViewsTest(EurosFormatTestBase):
         self.tournament.save()
         self.pairs[0].player1.user = self.player_user
         self.pairs[0].player1.save()
+        # Director-only actions (tiebreak resolution) need someone with rights
+        # over this tournament.
+        self.director_user = User.objects.create_user(
+            username='director_test', password='test123', role='TC')
+        self.tournament.created_by = self.director_user
+        self.tournament.save()
         self.client.login(username='player_test', password='test123')
 
     def detail(self):
@@ -616,6 +622,7 @@ class EurosViewsTest(EurosFormatTestBase):
         self.assertEqual([e['pair'].seed for e in standings], [1, 10, 11, 20])
 
         url = reverse('manual_tiebreak_resolution', kwargs={'tournament_id': self.tournament.pk})
+        self.client.login(username='director_test', password='test123')
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['is_multi_phase'])
@@ -706,8 +713,8 @@ class EurosCreationViewTest(TestCase):
 
     def test_create_with_40_players(self):
         client = Client()
-        User.objects.create_user(username='player_test', password='test123', role='PLAYER')
-        client.login(username='player_test', password='test123')
+        User.objects.create_user(username='creator_test', password='test123', role='TC')
+        client.login(username='creator_test', password='test123')
 
         players = [
             Player.objects.create(
@@ -716,6 +723,9 @@ class EurosCreationViewTest(TestCase):
         ]
         response = client.post(reverse('tournament_create'), data={
             'name': 'EO 2026',
+            'place': 'Helsinki',
+            'country': 'Finland',
+            'confirm_new_location': '1',
             'date': '2026-07-01',
             'tournament_category': 'PAIRS',
             'number_of_stages': 1,  # overridden by the multi-phase format

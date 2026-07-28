@@ -52,7 +52,26 @@
                     Tournament Settings
                 </div>
                 <div class="card-body">
-                    {% if form.non_field_errors %}
+                    {% if form.unconfirmed_location %}
+                        {# Location is free text, so an unseen spelling is more often a typo #}
+                        {# than a genuinely new venue. One confirmation click, then it's saved. #}
+                        <div class="alert alert-warning">
+                            <h6 class="alert-heading"><i class="bi bi-geo-alt"></i> Check the location</h6>
+                            <ul class="mb-2">
+                                {% for item in form.unconfirmed_location %}
+                                    <li>
+                                        No tournaments have previously been created in
+                                        <strong>{{ item.value }}</strong>{% if item.suggestion %} &mdash;
+                                        did you mean <strong>{{ item.suggestion }}</strong>?{% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                            <p class="mb-2 small">Correct the spelling below, or confirm that this is a new location.</p>
+                            <button type="submit" name="confirm_new_location" value="1" class="btn btn-sm btn-warning">
+                                <i class="bi bi-check-lg"></i> It's correct &mdash; create anyway
+                            </button>
+                        </div>
+                    {% elif form.non_field_errors %}
                         <div class="alert alert-danger">
                             {% for error in form.non_field_errors %}
                                 <p>{{ error }}</p>
@@ -77,6 +96,36 @@
                         </label>
                         {{ form.short_name }}
                         {% if form.short_name.errors %}<div class="invalid-feedback d-block">{{ form.short_name.errors|join:", " }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="{{ form.place.id_for_label }}">
+                            Place
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="Town or city the tournament is played in. Pick an existing one from the list where possible — it keeps the location filter tidy."></i>
+                        </label>
+                        {{ form.place }}
+                        <datalist id="known-places">
+                            {% for place in known_places %}<option value="{{ place }}"></option>{% endfor %}
+                        </datalist>
+                        {% if form.place.errors %}<div class="invalid-feedback d-block">{{ form.place.errors|join:", " }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="{{ form.country.id_for_label }}">
+                            Country
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="Country the tournament is played in. Used to filter the tournament list."></i>
+                        </label>
+                        {{ form.country }}
+                        <datalist id="known-countries">
+                            {% for country in known_countries %}<option value="{{ country }}"></option>{% endfor %}
+                        </datalist>
+                        {% if form.country.errors %}<div class="invalid-feedback d-block">{{ form.country.errors|join:", " }}</div>{% endif %}
                     </div>
 
                     <div class="mb-3">
@@ -359,6 +408,8 @@ document.addEventListener('DOMContentLoaded', function() {
         categorySelect.addEventListener('change', function() {
             // Collect form values
             var name = document.querySelector('input[name="name"]').value;
+            var place = document.querySelector('input[name="place"]').value;
+            var country = document.querySelector('input[name="country"]').value;
             var date = document.querySelector('input[name="date"]').value;
             var endDate = document.querySelector('input[name="end_date"]').value;
             var numberOfStages = document.querySelector('input[name="number_of_stages"]').value;
@@ -374,6 +425,8 @@ document.addEventListener('DOMContentLoaded', function() {
             var setsPerMatch = setsPerMatchEl ? setsPerMatchEl.value : '';
             var url = "{% url 'tournament_create' %}?tournament_category=" + this.value +
                       "&name=" + encodeURIComponent(name) +
+                      "&place=" + encodeURIComponent(place) +
+                      "&country=" + encodeURIComponent(country) +
                       "&date=" + encodeURIComponent(date) +
                       "&end_date=" + encodeURIComponent(endDate) +
                       "&number_of_stages=" + encodeURIComponent(numberOfStages) +

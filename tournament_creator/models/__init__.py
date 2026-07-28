@@ -1,5 +1,5 @@
 from .auth import User
-from .base_models import Player, Pair, TournamentChart, TournamentPlayer, TournamentPair, Matchup, TournamentArchetype, Stage, Pool, PoolPair
+from .base_models import Player, Pair, TournamentChart, TournamentPlayer, TournamentPair, TournamentDirector, Matchup, TournamentArchetype, Stage, Pool, PoolPair
 from .logging import MatchResultLog
 from .rankings import RankingsUpdate
 from .scoring import MatchScore, PlayerScore, PairScore, ManualTiebreakResolution, ManualPoolTiebreakResolution
@@ -13,7 +13,7 @@ from .notifications import NotificationBackendSetting, NotificationLog
 
 __all__ = [
     'User',
-    'Player', 'Pair', 'TournamentChart', 'TournamentPlayer', 'TournamentPair', 'Matchup', 'TournamentArchetype', 'Stage', 'Pool', 'PoolPair',
+    'Player', 'Pair', 'TournamentChart', 'TournamentPlayer', 'TournamentPair', 'TournamentDirector', 'Matchup', 'TournamentArchetype', 'Stage', 'Pool', 'PoolPair',
     'MatchResultLog',
     'RankingsUpdate',
     'MatchScore', 'PlayerScore', 'PairScore', 'ManualTiebreakResolution',

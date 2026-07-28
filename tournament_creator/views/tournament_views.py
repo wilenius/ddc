@@ -12,13 +12,20 @@ import json
 import logging
 import threading
 from datetime import time
-from ..models.base_models import TournamentChart, Matchup, TournamentArchetype, Player, Pair, Pool
+from ..models.base_models import (
+    TournamentChart, Matchup, TournamentArchetype, Player, Pair, Pool, TournamentDirector
+)
 from ..models.tournament_types import PairsTournamentArchetype
 from ..models.scoring import MatchScore, PlayerScore, ManualTiebreakResolution, ManualPoolTiebreakResolution
 from ..models.logging import MatchResultLog
 from ..models.notifications import NotificationBackendSetting # Added import
-from ..views.auth import SpectatorAccessMixin, PlayerOrAdminRequiredMixin, AdminRequiredMixin
-from ..forms import PairFormSet, MoCPlayerSelectForm, TournamentCreationForm # Added import
+from ..views.auth import (
+    SpectatorAccessMixin, PlayerOrAdminRequiredMixin, AdminRequiredMixin,
+    TournamentCreatorRequiredMixin, TournamentAdminRequiredMixin,
+)
+from ..forms import (
+    PairFormSet, MoCPlayerSelectForm, TournamentCreationForm, TournamentDirectorAddForm
+)
 from ..notifications import send_email_notification, send_signal_notification
 
 logger = logging.getLogger(__name__)
@@ -58,16 +65,61 @@ class TournamentListView(SpectatorAccessMixin, ListView):
     template_name = 'tournament_creator/tournament_list.html'
     context_object_name = 'tournaments'
 
+    def selected_location(self):
+        """The location filter from the query string, as (country, place)."""
+        return (
+            (self.request.GET.get('country') or '').strip(),
+            (self.request.GET.get('place') or '').strip(),
+        )
+
     def get_queryset(self):
         # Non-archived tournaments only; archived ones are handled separately
         # and only shown to admins.
-        return TournamentChart.objects.filter(archived=False)
+        return self.filter_by_location(TournamentChart.objects.filter(archived=False))
+
+    def filter_by_location(self, queryset):
+        country, place = self.selected_location()
+        if country:
+            queryset = queryset.filter(country__iexact=country)
+        if place:
+            queryset = queryset.filter(place__iexact=place)
+        return queryset
+
+    def location_options(self):
+        """Country and place choices for the filter bar, with tournament counts.
+
+        Places are narrowed to the selected country so the two selects can't be
+        combined into an empty result.
+        """
+        from collections import Counter
+        country, _ = self.selected_location()
+        visible = TournamentChart.objects.filter(archived=False)
+
+        countries = Counter(
+            t.country for t in visible.exclude(country='').only('country')
+        )
+        place_source = visible.exclude(place='')
+        if country:
+            place_source = place_source.filter(country__iexact=country)
+        places = Counter(t.place for t in place_source.only('place'))
+
+        return (
+            [{'value': name, 'count': n} for name, n in sorted(countries.items())],
+            [{'value': name, 'count': n} for name, n in sorted(places.items())],
+        )
 
     def get_context_data(self, **kwargs):
         from datetime import date
         context = super().get_context_data(**kwargs)
         today = date.today()
         tournaments = context['tournaments']
+
+        country, place = self.selected_location()
+        context['selected_country'] = country
+        context['selected_place'] = place
+        context['location_filter_active'] = bool(country or place)
+        context['country_options'], context['place_options'] = self.location_options()
+        context['can_create_tournaments'] = self.request.user.can_create_tournaments()
 
         # A tournament is "past" once its last day has gone by. Use end_date
         # when set (multi-day tournaments), otherwise the start date.
@@ -85,14 +137,14 @@ class TournamentListView(SpectatorAccessMixin, ListView):
 
         if self.request.user.is_admin():
             context['archived_tournaments'] = list(
-                TournamentChart.objects.filter(archived=True)
+                self.filter_by_location(TournamentChart.objects.filter(archived=True))
             )
         else:
             context['archived_tournaments'] = []
 
         return context
 
-class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
+class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
     model = TournamentChart
     form_class = TournamentCreationForm # Changed from fields
     template_name = 'tournament_creator/tournament_create.html'
@@ -107,6 +159,11 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             initial['date'] = self.request.GET.get('date')
         if 'end_date' in self.request.GET:
             initial['end_date'] = self.request.GET.get('end_date')
+        # Preserve location
+        if 'place' in self.request.GET:
+            initial['place'] = self.request.GET.get('place')
+        if 'country' in self.request.GET:
+            initial['country'] = self.request.GET.get('country')
         # Preserve number of stages
         if 'number_of_stages' in self.request.GET:
             initial['number_of_stages'] = self.request.GET.get('number_of_stages')
@@ -144,6 +201,15 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
         context['notification_backend_settings'] = {
             setting.backend_name: setting.is_active for setting in notification_settings
         }
+
+        # Suggestions for the place/country datalists, so directors reuse
+        # existing spellings instead of inventing new ones.
+        context['known_places'] = list(
+            TournamentChart.objects.exclude(place='').values_list('place', flat=True).distinct().order_by('place')
+        )
+        context['known_countries'] = list(
+            TournamentChart.objects.exclude(country='').values_list('country', flat=True).distinct().order_by('country')
+        )
 
         # Get tournament category from GET or POST
         tournament_category = self.request.GET.get('tournament_category') or self.request.POST.get('tournament_category')
@@ -224,6 +290,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
             # MoC tournaments use individual players
             tournament = form.save(commit=False)
             tournament.archetype = archetype
+            tournament.created_by = request.user
             tournament.number_of_rounds = archetype.calculate_rounds(num_players)
             tournament.number_of_courts = archetype.calculate_courts(num_players)
             tournament.save()
@@ -280,6 +347,7 @@ class TournamentCreateView(PlayerOrAdminRequiredMixin, CreateView):
 
             tournament = form.save(commit=False)
             tournament.archetype = archetype
+            tournament.created_by = request.user
             from ..models.tournament_types import get_implementation
             from ..models.base_models import Stage
             archetype_impl = get_implementation(archetype)
@@ -518,12 +586,20 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
             matchup__tournament_chart=tournament
         ).select_related('recorded_by', 'matchup').order_by('-recorded_at')[:10]
         context['can_record_scores'] = tournament.user_can_edit_results(self.request.user)
+        # Director rights are per tournament: its creator, the directors they
+        # appointed, and global admins.
+        context['can_administer'] = tournament.user_can_administer(self.request.user)
+        # Creator first, then the directors they appointed — players use this to
+        # know who to ask about the schedule.
+        directors = [tournament.created_by] if tournament.created_by else []
+        directors += [u for u in tournament.directors.all() if u != tournament.created_by]
+        context['directors'] = directors
         # Surface why recording is unavailable so players aren't left guessing.
         # Sandbox tournaments never lock, so don't claim otherwise.
         context['results_locked_past'] = (
             tournament.is_past()
             and not tournament.is_sandbox
-            and not getattr(self.request.user, 'is_admin', lambda: False)()
+            and not context['can_administer']
         )
 
         # Set display names for player scores
@@ -1124,7 +1200,7 @@ class TournamentDownloadResultsView(SpectatorAccessMixin, View):
 
         return response
 
-class TournamentDeleteView(AdminRequiredMixin, DeleteView):
+class TournamentDeleteView(TournamentAdminRequiredMixin, DeleteView):
     model = TournamentChart
     template_name = 'tournament_creator/tournamentchart_confirm_delete.html'
     success_url = reverse_lazy('tournament_list')
@@ -1140,6 +1216,10 @@ def tournament_settings(request, tournament_id):
     View for assigning dates and times to matchups in league-format tournaments.
     """
     tournament = get_object_or_404(TournamentChart, id=tournament_id)
+
+    if not tournament.user_can_administer(request.user):
+        messages.error(request, "Only this tournament's directors can assign match dates.")
+        return redirect('tournament_detail', pk=tournament_id)
 
     # Only allow for league format tournaments
     if tournament.format_type != 'LEAGUE':
@@ -1243,6 +1323,52 @@ def reset_sandbox_scores(request, tournament_id):
 
 
 @login_required
+def tournament_directors(request, tournament_id):
+    """
+    List, add and remove the directors of a single tournament. Only the
+    creator, the existing directors and global admins have access.
+    """
+    tournament = get_object_or_404(TournamentChart, id=tournament_id)
+
+    if not tournament.user_can_manage_directors(request.user):
+        messages.error(request, "Only this tournament's directors can manage the director list.")
+        return redirect('tournament_detail', pk=tournament_id)
+
+    if request.method == 'POST':
+        remove_user_id = request.POST.get('remove_user')
+        if remove_user_id:
+            role = TournamentDirector.objects.filter(
+                tournament=tournament, user_id=remove_user_id
+            ).select_related('user').first()
+            if role:
+                removed = role.user
+                role.delete()
+                messages.success(request, f"{removed.get_username()} is no longer a director of this tournament.")
+            else:
+                messages.error(request, "That user isn't a director of this tournament.")
+            return redirect('tournament_directors', tournament_id=tournament_id)
+
+        form = TournamentDirectorAddForm(tournament, request.POST)
+        if form.is_valid():
+            new_director = form.cleaned_data['user']
+            TournamentDirector.objects.get_or_create(
+                tournament=tournament,
+                user=new_director,
+                defaults={'added_by': request.user},
+            )
+            messages.success(request, f"{new_director.get_username()} can now direct this tournament.")
+            return redirect('tournament_directors', tournament_id=tournament_id)
+    else:
+        form = TournamentDirectorAddForm(tournament)
+
+    return render(request, 'tournament_creator/tournament_directors.html', {
+        'tournament': tournament,
+        'form': form,
+        'director_roles': tournament.director_roles.select_related('user', 'added_by').all(),
+    })
+
+
+@login_required
 def manual_tiebreak_resolution(request, tournament_id):
     """
     View to manually resolve tiebreaks for tournament directors.
@@ -1250,6 +1376,10 @@ def manual_tiebreak_resolution(request, tournament_id):
     formats (euros) the ties are per pool instead of global.
     """
     tournament = get_object_or_404(TournamentChart, id=tournament_id)
+
+    if not tournament.user_can_administer(request.user):
+        messages.error(request, "Only this tournament's directors can resolve tiebreaks.")
+        return redirect('tournament_detail', pk=tournament_id)
 
     from ..models.tournament_types import get_implementation
     archetype_impl = get_implementation(tournament.archetype) if tournament.archetype else None
@@ -1477,7 +1607,7 @@ def record_match_result(request, tournament_id, matchup_id):
         tournament = get_object_or_404(TournamentChart, id=tournament_id)
 
         if not tournament.user_can_edit_results(request.user):
-            if tournament.is_past() and not request.user.is_admin():
+            if tournament.is_past() and not tournament.user_can_administer(request.user):
                 message = 'This tournament is in the past; results can no longer be edited.'
             else:
                 message = "You don't have permission to record results for this tournament."

@@ -209,10 +209,33 @@ The application uses an archetypal inheritance pattern for tournament formats:
 
 ### User Authentication
 
-The system has three primary user roles:
-- **Admin**: Full access to create tournaments and manage players
-- **Player**: Can create tournaments and record scores
-- **Spectator**: Can view tournaments and record scores (same as Player for scoring)
+Global roles (`User.role`, see `models/auth.py`):
+- **Admin** (`ADMIN`): Full access — every tournament, the player list, rankings, archive
+- **Tournament Creator** (`TC`): Can create tournaments and add players; gets director
+  rights on the tournaments they create, and none elsewhere. Assigned in `/admin/`
+- **Player** (`PLAYER`): Can add players and record scores for tournaments they play in
+- **Spectator** (`SPECTATOR`): View only, plus scoring in sandbox tournaments
+
+Per-tournament rights (see `TournamentChart.user_can_administer`): a tournament's
+`created_by` user, everyone in its `TournamentDirector` rows, and global admins.
+Director rights cover recording/editing results at any time (including past
+tournaments), resolving tiebreaks, assigning league dates, appointing further
+directors (`tournament_directors` view — "Manage → Tournament directors"), and
+deleting the tournament. Only accounts linked to a ranking `Player` can be
+appointed directors. Use `can_administer` in templates, never `user.is_admin`, for
+anything tournament-scoped.
+
+### Tournament Location
+
+- `TournamentChart.place` and `.country` are mandatory free text; `.location` renders
+  "Place, Country"
+- The tournament list filters by country and/or place (`?country=&place=`); place
+  options follow the selected country
+- Free text invites typos, so `TournamentCreationForm.clean()` blocks a place or
+  country no previous tournament has used, offers the closest existing spelling
+  (difflib) and requires one confirmation click (`confirm_new_location`). The Django
+  admin subclass sets `require_location_confirmation = False`
+- Migration 0030 backfilled all pre-existing tournaments to Helsinki, Finland
 
 ### Name Display
 
@@ -287,8 +310,12 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
 ```
 
 ### Testing
-- Test suite has 97 tests, all passing as of 2026-07-11 — expect a green suite;
+- Test suite has 168 tests, all passing as of 2026-07-28 — expect a green suite;
   a failure means the change under test broke something
+- `tests/test_tournament_access.py` covers location metadata/filtering and
+  per-tournament director rights; tournament-creating tests need a `TC` (or
+  `ADMIN`) user and must send `place`/`country` (plus `confirm_new_location`
+  when the location is new to the test DB)
 - Signal notification tests mock `requests.post` against the JSON-RPC daemon
   protocol (one `send` call per recipient to `/api/v1/rpc`); disabled
   per-tournament notifications are skipped silently (no send, no NotificationLog)

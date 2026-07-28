@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.html import format_html
 from django.utils.http import urlsafe_base64_encode
-from .models.base_models import Player, TournamentChart, TournamentPlayer, Matchup, TournamentArchetype
+from .models.base_models import Player, TournamentChart, TournamentPlayer, TournamentDirector, Matchup, TournamentArchetype
 from .models.tournament_types import MonarchOfTheCourt8, FourPairsSwedishFormat, EightPairsSwedishFormat
 from .models.scoring import MatchScore, PlayerScore
 from .models.auth import User
@@ -104,15 +104,31 @@ class PlayerAdmin(admin.ModelAdmin):
     list_editable = ('nickname',)
     ordering = ('ranking',)
 
+class TournamentChartAdminForm(TournamentCreationForm):
+    """Admin variant: the unknown-location confirmation has no "create anyway"
+    button here, so an admin's spelling stands as entered."""
+    require_location_confirmation = False
+
+
+class TournamentDirectorInline(admin.TabularInline):
+    model = TournamentDirector
+    extra = 0
+    fk_name = 'tournament'
+    autocomplete_fields = []
+    raw_id_fields = ('user', 'added_by')
+
+
 @admin.register(TournamentChart)
 class TournamentChartAdmin(admin.ModelAdmin):
-    form = TournamentCreationForm
-    list_display = ('name', 'date', 'end_date', 'number_of_rounds', 'number_of_courts', 'archived')
+    form = TournamentChartAdminForm
+    list_display = ('name', 'place', 'country', 'date', 'end_date', 'created_by', 'number_of_rounds', 'number_of_courts', 'archived')
     list_editable = ('archived',)
-    list_filter = ('archived',)
+    list_filter = ('archived', 'country', 'place')
+    search_fields = ('name', 'place', 'country')
     ordering = ('-date',)
+    inlines = [TournamentDirectorInline]
     fieldsets = [
-        (None, {'fields': ('name', 'short_name', 'date', 'end_date', 'name_display_format', 'show_structure', 'archived')}),
+        (None, {'fields': ('name', 'short_name', 'place', 'country', 'date', 'end_date', 'name_display_format', 'show_structure', 'archived')}),
         ('Notification Settings', {
             'fields': ('notify_by_email', 'notify_by_signal', 'notify_by_matrix')
         }),

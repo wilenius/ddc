@@ -10,6 +10,10 @@ from .models.base_models import Player, TournamentChart
 from .models.notifications import NotificationBackendSetting # Added import
 
 class TournamentCreationForm(forms.ModelForm):
+    # The unknown-location confirmation needs the "create anyway" button of the
+    # create page; subclasses rendered elsewhere (Django admin) switch it off.
+    require_location_confirmation = True
+
     TOURNAMENT_CATEGORY_CHOICES = [
         ('', 'Select a tournament type'),
         ('MOC', 'Monarch of the Court'),
@@ -22,6 +26,10 @@ class TournamentCreationForm(forms.ModelForm):
         label='Tournament Type',
         widget=forms.Select(attrs={'class': 'form-select'})
     )
+
+    # Set by the "create anyway" button when the director confirms a place or
+    # country that no previous tournament has used (see clean()).
+    confirm_new_location = forms.BooleanField(required=False, widget=forms.HiddenInput)
 
     # Group picker for tournaments (same as Signal backend, but without refresh button)
     signal_groups_picker = forms.MultipleChoiceField(
@@ -37,7 +45,7 @@ class TournamentCreationForm(forms.ModelForm):
     class Meta:
         model = TournamentChart
         fields = [
-            'name', 'short_name', 'date', 'end_date', 'number_of_stages', 'format_type',
+            'name', 'short_name', 'place', 'country', 'date', 'end_date', 'number_of_stages', 'format_type',
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
             'signal_recipient_usernames', 'signal_recipient_group_ids',
             'name_display_format', 'show_structure', 'default_sets_per_match',
@@ -46,6 +54,14 @@ class TournamentCreationForm(forms.ModelForm):
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Summer League 2025'}),
             'short_name': forms.TextInput(attrs={'class': 'form-control', 'style': 'max-width: 200px;', 'placeholder': 'e.g., EO26'}),
+            'place': forms.TextInput(attrs={
+                'class': 'form-control', 'style': 'max-width: 320px;',
+                'placeholder': 'e.g., Helsinki', 'list': 'known-places', 'autocomplete': 'off',
+            }),
+            'country': forms.TextInput(attrs={
+                'class': 'form-control', 'style': 'max-width: 320px;',
+                'placeholder': 'e.g., Finland', 'list': 'known-countries', 'autocomplete': 'off',
+            }),
             'notify_by_email': forms.CheckboxInput,
             'notify_by_signal': forms.CheckboxInput,
             'notify_by_matrix': forms.CheckboxInput,
@@ -67,6 +83,8 @@ class TournamentCreationForm(forms.ModelForm):
             }),
         }
         labels = {
+            'place': 'Place',
+            'country': 'Country',
             'date': 'Start Date',
             'end_date': 'End Date',
             'number_of_stages': 'Stages',
@@ -76,6 +94,8 @@ class TournamentCreationForm(forms.ModelForm):
         }
         help_texts = {
             'name': '',
+            'place': '',
+            'country': '',
             'number_of_stages': '',
             'format_type': '',
             'name_display_format': '',
@@ -135,6 +155,61 @@ class TournamentCreationForm(forms.ModelForm):
                     if 'signal_recipient_group_ids' in self.fields:
                         self.fields['signal_recipient_group_ids'].initial = existing_group_ids
 
+    def clean_place(self):
+        return (self.cleaned_data.get('place') or '').strip()
+
+    def clean_country(self):
+        return (self.cleaned_data.get('country') or '').strip()
+
+    def clean(self):
+        """Flag places/countries no previous tournament has used.
+
+        Location is free text, so a typo would silently create a new entry in
+        the location filter ("Hlsinki"). Unknown values therefore need one
+        confirmation click; the "create anyway" button sets
+        ``confirm_new_location`` and the second submit goes through.
+        """
+        cleaned = super().clean()
+        # ``unconfirmed_location`` drives the confirm banner in the template.
+        self.unconfirmed_location = None
+        if not self.require_location_confirmation or cleaned.get('confirm_new_location'):
+            return cleaned
+
+        unknown = []
+        for field, label in (('country', 'country'), ('place', 'place')):
+            value = cleaned.get(field)
+            if not value:
+                continue
+            if TournamentChart.objects.filter(**{f'{field}__iexact': value}).exists():
+                continue
+            suggestion = self._closest_known(field, value)
+            unknown.append({'field': field, 'label': label, 'value': value, 'suggestion': suggestion})
+
+        if unknown:
+            self.unconfirmed_location = unknown
+            parts = []
+            for item in unknown:
+                part = f'No tournaments have previously been created in {item["value"]}'
+                if item['suggestion']:
+                    part += f' — did you mean {item["suggestion"]}?'
+                parts.append(part + '.')
+            raise forms.ValidationError(' '.join(parts) + ' Check the spelling, or confirm to create it anyway.')
+
+        return cleaned
+
+    @staticmethod
+    def _closest_known(field, value):
+        """Nearest existing value for ``field``, if one is close enough to be a likely typo."""
+        import difflib
+        known = list(
+            TournamentChart.objects.exclude(**{field: ''})
+            .values_list(field, flat=True).distinct()
+        )
+        matches = difflib.get_close_matches(value.lower(), [k.lower() for k in known], n=1, cutoff=0.75)
+        if not matches:
+            return None
+        return next((k for k in known if k.lower() == matches[0]), None)
+
     def clean_default_sets_per_match(self):
         # Fall back to the model's default when empty (the field is hidden for non-MoC).
         value = self.cleaned_data.get('default_sets_per_match')
@@ -163,6 +238,37 @@ class TournamentCreationForm(forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+class TournamentDirectorAddForm(forms.Form):
+    """Appoint another user as director of a single tournament.
+
+    Only accounts linked to a ranking player are offered, so a director always
+    has a real identity in the system.
+    """
+    user = forms.ModelChoiceField(
+        queryset=get_user_model().objects.none(),
+        label="Add a director",
+        empty_label="Select a person…",
+        widget=forms.Select(attrs={'class': 'form-select', 'style': 'max-width: 420px;'}),
+    )
+
+    def __init__(self, tournament, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tournament = tournament
+        User = get_user_model()
+        already = set(tournament.directors.values_list('pk', flat=True))
+        if tournament.created_by_id:
+            already.add(tournament.created_by_id)
+        self.fields['user'].queryset = (
+            User.objects.filter(player__isnull=False)
+            .exclude(pk__in=already)
+            .select_related('player')
+            .order_by('player__first_name', 'player__last_name')
+        )
+        self.fields['user'].label_from_instance = (
+            lambda user: f"{user.player.first_name} {user.player.last_name} ({user.username})"
+        )
+
 
 class PairForm(forms.Form):
     player1 = forms.ModelChoiceField(

@@ -1,0 +1,106 @@
+{% extends 'tournament_creator/base.html' %}
+
+{% block title %}Tournament Directors - {{ tournament.name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'tournament_list' %}">Tournaments</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'tournament_detail' tournament.pk %}">{{ tournament.name }}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Directors</li>
+            </ol>
+        </nav>
+
+        <h2 class="mb-1">Tournament directors</h2>
+        <p class="text-muted">
+            Directors can record and edit results at any time, resolve tiebreaks, appoint
+            further directors, and delete this tournament. They have no rights over other
+            tournaments.
+        </p>
+
+        <div class="card mb-4">
+            <div class="card-header">Current directors</div>
+            <ul class="list-group list-group-flush">
+                {% if tournament.created_by %}
+                    <li class="list-group-item d-flex align-items-center flex-wrap">
+                        <span>
+                            <strong>{{ tournament.created_by.display_name }}</strong>
+                            <span class="text-muted small">({{ tournament.created_by.username }})</span>
+                        </span>
+                        <span class="badge bg-secondary ms-2">Creator</span>
+                        <span class="ms-auto text-muted small">Cannot be removed</span>
+                    </li>
+                {% endif %}
+                {% for role in director_roles %}
+                    <li class="list-group-item d-flex align-items-center flex-wrap">
+                        <span>
+                            <strong>{{ role.user.display_name }}</strong>
+                            <span class="text-muted small">({{ role.user.username }})</span>
+                        </span>
+                        <span class="ms-auto d-flex align-items-center">
+                            <span class="text-muted small me-3">
+                                Added {{ role.added_at|date:"j M Y" }}{% if role.added_by %} by {{ role.added_by.display_name }}{% endif %}
+                            </span>
+                            <form method="post" class="mb-0"
+                                  onsubmit="return confirm('Remove {{ role.user.display_name|escapejs }} as a director of this tournament?')">
+                                {% csrf_token %}
+                                <input type="hidden" name="remove_user" value="{{ role.user.pk }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-x-lg"></i> Remove
+                                </button>
+                            </form>
+                        </span>
+                    </li>
+                {% empty %}
+                    {% if not tournament.created_by %}
+                        <li class="list-group-item text-muted">No directors yet.</li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">Add a director</div>
+            <div class="card-body">
+                {% if form.fields.user.queryset.exists %}
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="{{ form.user.id_for_label }}">
+                                Person
+                                <i class="bi bi-info-circle text-muted"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="right"
+                                   title="Only accounts linked to a ranking player can be made directors. Ask an administrator to link an account if someone is missing."></i>
+                            </label>
+                            {{ form.user }}
+                            {% if form.user.errors %}<div class="invalid-feedback d-block">{{ form.user.errors|join:", " }}</div>{% endif %}
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-person-plus"></i> Add director
+                        </button>
+                        <a href="{% url 'tournament_detail' tournament.pk %}" class="btn btn-secondary">Back to tournament</a>
+                    </form>
+                {% else %}
+                    <p class="text-muted mb-0">
+                        Everyone with a player-linked account is already a director of this tournament.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

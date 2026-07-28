@@ -26,6 +26,11 @@ class ViewTests(TestCase):
             password='test123',
             role='PLAYER'
         )
+        self.creator_user = User.objects.create_user(
+            username='creator_test',
+            password='test123',
+            role='TC'
+        )
         self.spectator_user = User.objects.create_user(
             username='spectator_test',
             password='test123',
@@ -51,6 +56,8 @@ class ViewTests(TestCase):
 
         self.tournament = TournamentChart.objects.create(
             name='Test Tournament',
+            place='Helsinki',
+            country='Finland',
             date=timezone.now().date(),
             number_of_rounds=7,
             number_of_courts=2
@@ -72,10 +79,12 @@ class ViewTests(TestCase):
         self.assertContains(response, 'Test Tournament')
 
     def test_tournament_create_permissions(self):
-        """Test tournament creation permissions"""
+        """Only tournament creators and admins can create tournaments."""
         url = reverse('tournament_create')
         data = {
             'name': 'New Tournament',
+            'place': 'Helsinki',
+            'country': 'Finland',
             'date': timezone.now().date(),
             'tournament_category': 'MOC',
             'number_of_stages': 1,
@@ -89,8 +98,13 @@ class ViewTests(TestCase):
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 403)
 
-        # Player should have access
+        # A plain player can record results, but not create tournaments
         self.client.login(username='player_test', password='test123')
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 403)
+
+        # Tournament creator should have access
+        self.client.login(username='creator_test', password='test123')
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 302)  # Redirect after success
 
@@ -188,7 +202,7 @@ class ViewTests(TestCase):
 
     # Tests for TournamentCreateView GET
     def test_get_tournament_create_view_no_notification_settings(self):
-        self.client.login(username='player_test', password='test123')
+        self.client.login(username='creator_test', password='test123')
         response = self.client.get(reverse('tournament_create'))
         self.assertEqual(response.status_code, 200)
         self.assertIsInstance(response.context['form'], TournamentCreationForm)
@@ -203,7 +217,7 @@ class ViewTests(TestCase):
         self.assertFalse(response.context['notification_backend_settings'].get('matrix'))
 
     def test_get_tournament_create_view_with_notification_settings(self):
-        self.client.login(username='player_test', password='test123')
+        self.client.login(username='creator_test', password='test123')
         NotificationBackendSetting.objects.create(backend_name='email', is_active=True, config={'host': 'test.com'})
         NotificationBackendSetting.objects.create(backend_name='signal', is_active=False, config={'url': 'http://signal.test'})
         # Matrix backend not created, should default to False
@@ -218,11 +232,13 @@ class ViewTests(TestCase):
 
     # Test for TournamentCreateView POST
     def test_post_tournament_create_view_success_with_notifications(self):
-        self.client.login(username='player_test', password='test123')
+        self.client.login(username='creator_test', password='test123')
         initial_tournament_count = TournamentChart.objects.count()
 
         post_data = {
             'name': 'Notify Test Tournament',
+            'place': 'Helsinki',
+            'country': 'Finland',
             'date': timezone.now().date().isoformat(),
             'tournament_category': 'MOC',
             'number_of_stages': 1,
@@ -251,7 +267,7 @@ class ViewTests(TestCase):
         self.assertTrue(new_tournament.notify_by_matrix)
 
     def test_tournament_creation_preserves_name_date_after_archetype_selection(self):
-        self.client.login(username='player_test', password='test123')
+        self.client.login(username='creator_test', password='test123')
 
         # Step 1: Initial GET (optional, but good for completeness)
         response_initial = self.client.get(reverse('tournament_create'))

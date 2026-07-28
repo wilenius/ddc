@@ -3,14 +3,49 @@
 {% block title %}Tournaments - DDC Tournament Manager{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
+<div class="row mb-3 align-items-center">
     <div class="col">
-        <h2>Tournaments</h2>
+        <h2 class="mb-0">Tournaments</h2>
     </div>
-    <div class="col text-end">
-        <a href="{% url 'tournament_create' %}" class="btn btn-primary">Create New Tournament</a>
+    {% if can_create_tournaments %}
+    <div class="col-auto">
+        <a href="{% url 'tournament_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Create New Tournament
+        </a>
     </div>
+    {% endif %}
 </div>
+
+{# Location filter: one quiet row above the tabs, applying to every tab at once. #}
+<form method="get" id="locationFilter" class="d-flex flex-wrap align-items-center gap-2 mb-4">
+    <span class="text-muted small text-nowrap">
+        <i class="bi bi-geo-alt"></i> Filter by location
+    </span>
+    <select name="country" id="filterCountry" class="form-select form-select-sm" style="width: auto; min-width: 12rem;"
+            aria-label="Filter by country">
+        <option value="">All countries</option>
+        {% for option in country_options %}
+            <option value="{{ option.value }}" {% if option.value == selected_country %}selected{% endif %}>
+                {{ option.value }} ({{ option.count }})
+            </option>
+        {% endfor %}
+    </select>
+    <select name="place" id="filterPlace" class="form-select form-select-sm" style="width: auto; min-width: 12rem;"
+            aria-label="Filter by place">
+        <option value="">All places</option>
+        {% for option in place_options %}
+            <option value="{{ option.value }}" {% if option.value == selected_place %}selected{% endif %}>
+                {{ option.value }} ({{ option.count }})
+            </option>
+        {% endfor %}
+    </select>
+    <noscript><button type="submit" class="btn btn-sm btn-secondary">Apply</button></noscript>
+    {% if location_filter_active %}
+        <a href="{% url 'tournament_list' %}" class="btn btn-sm btn-link text-decoration-none">
+            <i class="bi bi-x-lg"></i> Clear
+        </a>
+    {% endif %}
+</form>
 
 <ul class="nav nav-tabs mb-4" id="tournamentTabs" role="tablist">
     <li class="nav-item" role="presentation">
@@ -56,6 +91,20 @@
 </div>
 
 <script>
+    // Location filter: apply on change, no separate button to hunt for.
+    document.addEventListener('DOMContentLoaded', function () {
+        var filterForm = document.getElementById('locationFilter');
+        var country = document.getElementById('filterCountry');
+        var place = document.getElementById('filterPlace');
+        if (!filterForm) { return; }
+        country.addEventListener('change', function () {
+            // Places are listed per country, so a stale place would filter to nothing.
+            place.value = '';
+            filterForm.submit();
+        });
+        place.addEventListener('change', function () { filterForm.submit(); });
+    });
+
     // Persist the active tab across page reloads.
     document.addEventListener('DOMContentLoaded', function () {
         var storageKey = 'tournamentListActiveTab';

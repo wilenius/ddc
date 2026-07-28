@@ -7,12 +7,24 @@
 {% block content %}
 <div class="row mb-4">
     <div class="col">
-        <h2>{{ tournament.name }}</h2>
-        <p class="text-muted">
+        <h2 class="mb-1">{{ tournament.name }}</h2>
+        {# One meta line: where and when, in that order — the two things a visitor scans for. #}
+        <p class="text-muted mb-2">
+            {% if tournament.location %}
+                <i class="bi bi-geo-alt"></i> {{ tournament.location }}
+                <span class="mx-2">&middot;</span>
+            {% endif %}
+            <i class="bi bi-calendar3"></i>
             {% if tournament.end_date and tournament.end_date != tournament.date %}
-                Dates: {{ tournament.date }} - {{ tournament.end_date }}
+                {{ tournament.date }} &ndash; {{ tournament.end_date }}
             {% else %}
-                Date: {{ tournament.date }}
+                {{ tournament.date }}
+            {% endif %}
+            {% if directors %}
+                <span class="mx-2">&middot;</span>
+                <i class="bi bi-person-badge"></i>
+                Directed by
+                {% for director in directors %}{{ director.display_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
             {% endif %}
         </p>
         {% if tournament.is_sandbox %}
@@ -40,16 +52,34 @@
         {% endif %}
     </div>
     <div class="col-auto">
-        {% if user.is_authenticated and user.is_admin %}
-            <a href="{% url 'manual_tiebreak_resolution' tournament.pk %}" 
-               class="btn btn-warning me-2">
-                Resolve Tiebreaks
-            </a>
-            <a href="{% url 'tournament_delete' tournament.pk %}" 
-               class="btn btn-danger" 
-               onclick="return confirm('Are you sure you want to delete this tournament? This action cannot be undone.')">
-                Delete Tournament
-            </a>
+        {% if can_administer %}
+            {# Director-only actions live behind one menu: they're rare, and a row of #}
+            {# warning/danger buttons competes with the schedule for attention. #}
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button"
+                        id="tournamentManageMenu" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-sliders"></i> Manage
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tournamentManageMenu">
+                    <li>
+                        <a class="dropdown-item" href="{% url 'manual_tiebreak_resolution' tournament.pk %}">
+                            <i class="bi bi-shuffle"></i> Resolve tiebreaks
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'tournament_directors' tournament.id %}">
+                            <i class="bi bi-person-badge"></i> Tournament directors
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item text-danger" href="{% url 'tournament_delete' tournament.pk %}"
+                           onclick="return confirm('Are you sure you want to delete this tournament? This action cannot be undone.')">
+                            <i class="bi bi-trash"></i> Delete tournament
+                        </a>
+                    </li>
+                </ul>
+            </div>
         {% endif %}
     </div>
 </div>
@@ -60,7 +90,7 @@
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Match Schedule</h5>
-                {% if is_league_format %}
+                {% if is_league_format and can_administer %}
                     <a href="{% url 'tournament_settings' tournament_id=tournament.id %}" class="btn btn-sm btn-primary">
                         <i class="bi bi-calendar"></i> Assign Dates & Times
                     </a>

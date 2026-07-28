@@ -13,6 +13,10 @@
   avoid touching prod code right before the tournament.
 * Make Euros format work for 11–40 pairs (currently only exactly 20 pairs; needs
   per-count pool layouts and an explicit format selector in the creation UI)
+* better, modular tournament creation: pick starting pool sizes, pick amount of
+  pools for 2nd pool phase, pick logic for possible third phase: semis/finals or
+  another round-robin?   
+
 
 ## Done
 

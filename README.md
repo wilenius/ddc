@@ -1,23 +1,22 @@
 # DDC Tournament Manager
 
-A Django-based tournament management system specifically designed for Double Disc Court (DDC) tournaments. This initial release mostly supports Cade Loving's monarch of the court style tournaments.
+A Django-based tournament management system for Double Disc Court (DDC) tournaments.
 
 ## Features
 
 - Tournament Management
   - Create and manage tournaments
-  - Support for Cade Loving's 8-player King of the Court format
   - Multiple sets scoring system
-  - Point difference tracking
-  - Match history and statistics
+  - Tiebreak resolution
 
 - User Roles and Permissions
   - Admin: Full access to create tournaments and manage players
-  - Player: Can create tournaments and record scores
+  - Tournament Creator: create tournaments and share TD rights
+  - Player: Record scores
   - Spectator: View-only access to tournaments and results
 
 - Match Scoring
-  - Support for multiple sets (up to 3)
+  - Support for multiple sets
   - Automatic point difference calculation
   - Match result logging
   - Real-time standings updates

@@ -15,7 +15,12 @@
   per-count pool layouts and an explicit format selector in the creation UI)
 * better, modular tournament creation: pick starting pool sizes, pick amount of
   pools for 2nd pool phase, pick logic for possible third phase: semis/finals or
-  another round-robin?   
+  another round-robin?
+* More tournament types:
+  * MoC league (Florida winter)
+  * dynamic MoC (German/Finnish style)
+* Tournament sign-up system
+* What else?
 
 
 ## Done

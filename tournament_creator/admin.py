@@ -53,6 +53,7 @@ class CustomUserAdmin(UserAdmin):
     model = User
     form = UserChangeAdminForm
     list_display = ['username', 'email', 'role', 'linked_player', 'is_staff']
+    list_filter = ('role',) + UserAdmin.list_filter
     fieldsets = UserAdmin.fieldsets + (
         ('Role', {'fields': ('role',)}),
         ('Linked player', {'fields': ('player',)}),
@@ -60,7 +61,13 @@ class CustomUserAdmin(UserAdmin):
     add_fieldsets = UserAdmin.add_fieldsets + (
         ('Role', {'fields': ('role',)}),
     )
-    actions = ['make_password_reset_link']
+    actions = [
+        'make_password_reset_link',
+        'set_role_admin',
+        'set_role_tournament_creator',
+        'set_role_player',
+        'set_role_spectator',
+    ]
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -95,6 +102,34 @@ class CustomUserAdmin(UserAdmin):
                 format_html('Reset link for <strong>{}</strong>: {}', user.username, url),
                 level=messages.INFO,
             )
+
+    def _set_role(self, request, queryset, role):
+        """Bulk-assign a global role. Uses update() — role has no save-time side
+        effects, and this keeps large selections to one query."""
+        changed = queryset.exclude(role=role).update(role=role)
+        label = User.Role(role).label
+        self.message_user(
+            request,
+            f"{changed} user(s) changed to {label}."
+            if changed else f"No changes — all selected users were already {label}.",
+            level=messages.SUCCESS if changed else messages.INFO,
+        )
+
+    @admin.action(description='Set role: Administrator')
+    def set_role_admin(self, request, queryset):
+        self._set_role(request, queryset, User.Role.ADMIN)
+
+    @admin.action(description='Set role: Tournament Creator')
+    def set_role_tournament_creator(self, request, queryset):
+        self._set_role(request, queryset, User.Role.TOURNAMENT_CREATOR)
+
+    @admin.action(description='Set role: Player')
+    def set_role_player(self, request, queryset):
+        self._set_role(request, queryset, User.Role.PLAYER)
+
+    @admin.action(description='Set role: Spectator')
+    def set_role_spectator(self, request, queryset):
+        self._set_role(request, queryset, User.Role.SPECTATOR)
 
 admin.site.register(User, CustomUserAdmin)
 

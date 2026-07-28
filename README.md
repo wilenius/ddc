@@ -272,21 +272,7 @@ tournament.
 
 ## TODO
 
-1. ~~Tournament creator role~~ **done** — global `TC` role, assigned in `/admin/`
-   (bulk role actions available on the user list). Creators get director rights on
-   their own tournaments and can appoint further directors per tournament.
-2. ~~Group support for individual pods~~ / ~~per pod player / creator / admin rights~~
-   **kinda done**, and solved differently: instead of explicit pods, every tournament
-   carries a mandatory place/country and the tournament list filters by them, while
-   rights are granted per tournament (creator + `TournamentDirector` rows) rather than
-   per group. This turned out to make more sense than modelling pods as first-class
-   objects.
-3. Tournament types:
-   - ~~doubles league (Helsinki winter)~~ **done**
-   - MoC league (Florida winter)
-   - dynamic MoC (German/Finnish style)
-4. Tournament sign-up system
-5. What else?
+* See TODO.md.
 
 ## License
 

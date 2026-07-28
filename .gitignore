@@ -35,3 +35,7 @@ tags
 ehthumbs.db
 Thumbs.db
 **/.claude/settings.local.json
+commands.txt
+previous_session.md
+GEMINI.md
+CLAUDE.md

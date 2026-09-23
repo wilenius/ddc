@@ -314,7 +314,7 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
 ```
 
 ### Testing
-- Test suite has 189 tests. As of 2026-09-23 all pass except two `test_signup`
+- Test suite has 193 tests. As of 2026-09-23 all pass except two `test_signup`
   failures that predate the multi-phase formats work (also failing on main)
 - `tests/test_tournament_access.py` covers location metadata/filtering and
   per-tournament director rights; tournament-creating tests need a `TC` (or
@@ -388,6 +388,11 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
     round-robin rules
   - The old "number of stages" form field (repeated the same round robin N times) is gone
   - Tests: `tournament_creator/tests/test_multi_phase_formats.py`
+  - Practice (sandbox) tournaments have a "Simulate results" button
+    (`simulate_sandbox_scores`) that fills every unplayed match with a ranking-weighted
+    result following that match's score rules, including finals/bronze created along
+    the way. The simulation lives in `tournament_creator/simulation.py`, shared with
+    `manage.py simulate_scores`
 
 - **Euros format (multi-phase pairs, 20 pairs)** — used at European Open 2024/2026
   - Archetype: `EurosFormat` in `tournament_types.py` (DB row "20 pairs euros format");

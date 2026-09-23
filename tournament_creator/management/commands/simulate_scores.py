@@ -1,8 +1,7 @@
 """
-Populate tournament matchups with simulated scores for testing.
-
-Match outcomes are driven by ranking probabilities: the closer two teams'
-ranking points, the closer the simulated match, with a real chance of upsets.
+Populate tournament matchups with simulated scores for testing (the simulation
+itself lives in tournament_creator/simulation.py, shared with the practice
+tournament's "Simulate results" button).
 
 Examples:
     python manage.py simulate_scores 14
@@ -11,28 +10,16 @@ Examples:
     python manage.py simulate_scores 14 --stage 1 --overwrite
     python manage.py simulate_scores 14 --stage 1 --clear
 """
-import json
-import math
 import random
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
-from django.test import RequestFactory
 
 from tournament_creator.models.base_models import TournamentChart, Matchup, Stage
 from tournament_creator.models.logging import MatchResultLog
 from tournament_creator.models.scoring import PairScore, PlayerScore
-from tournament_creator.views.tournament_views import record_match_result
-
-# Per-point win probability for the strongest possible mismatch in the
-# tournament. 0.60 over a race to 15 gives the favourite roughly a 90% match
-# win probability, so upsets still happen; evenly ranked teams sit near 0.50
-# and produce close scores.
-MAX_POINT_EDGE = 0.10
-# Per-set "form of the day" jitter, so identical pairings don't always
-# produce identical-looking scorelines.
-FORM_JITTER = 0.03
+from tournament_creator.simulation import record_result, simulate_match, strength_spread
 
 
 class Command(BaseCommand):
@@ -106,7 +93,7 @@ class Command(BaseCommand):
                 self.stdout.write("All matchups already have scores; use --overwrite to re-simulate.")
                 return
 
-        spread = self._strength_spread(matchups)
+        spread = strength_spread(matchups)
         recorded = 0
 
         # Reuse the real scoring view so PairScore/PlayerScore aggregation and
@@ -114,18 +101,7 @@ class Command(BaseCommand):
         # keep test data from triggering notifications.
         with self._notifications_suppressed():
             for matchup in matchups:
-                s1, s2 = self._team_strengths(matchup)
-                # Best-of: stop as soon as one team has a majority of the sets
-                sets_to_win = sets // 2 + 1
-                team1_scores, team2_scores = [], []
-                while len(team1_scores) < sets:
-                    p1, p2 = self._simulate_set(s1, s2, spread, points, cap)
-                    team1_scores.append(p1)
-                    team2_scores.append(p2)
-                    sets_won = sum(1 for a, b in zip(team1_scores, team2_scores) if a > b)
-                    if max(sets_won, len(team1_scores) - sets_won) >= sets_to_win:
-                        break
-
+                team1_scores, team2_scores = simulate_match(matchup, spread, points, cap, sets)
                 self._record(tournament, matchup, team1_scores, team2_scores, user)
                 recorded += 1
                 self.stdout.write(
@@ -196,45 +172,7 @@ class Command(BaseCommand):
                               send_signal_notification=lambda **kw: None)
 
     def _record(self, tournament, matchup, team1_scores, team2_scores, user):
-        """Record a result through the real scoring view."""
-        request = RequestFactory().post(
-            f'/tournament/{tournament.id}/matchup/{matchup.id}/record/',
-            {'team1_scores': json.dumps(team1_scores),
-             'team2_scores': json.dumps(team2_scores),
-             # Skip the warn-and-confirm format check; the --points/--cap the
-             # simulation ran with need not match the format's game structure.
-             'confirmed': '1'},
-        )
-        request.user = user
-        response = record_match_result(request, tournament.id, matchup.id)
-        result = json.loads(response.content)
-        if result.get('status') != 'success':
-            raise CommandError(f"Failed to record matchup {matchup.id}: {result.get('message')}")
-
-    def _team_strengths(self, matchup):
-        """Ranking points of each side; works for pairs and MoC matchups."""
-        if matchup.pair1_id and matchup.pair2_id:
-            return matchup.pair1.ranking_points_sum, matchup.pair2.ranking_points_sum
-        team1 = [matchup.pair1_player1, matchup.pair1_player2]
-        team2 = [matchup.pair2_player1, matchup.pair2_player2]
-        return (sum(p.ranking_points for p in team1 if p),
-                sum(p.ranking_points for p in team2 if p))
-
-    def _strength_spread(self, matchups):
-        """Largest strength gap across the matchups, used to normalize edges."""
-        diffs = [abs(a - b) for a, b in (self._team_strengths(m) for m in matchups)]
-        return max(diffs) or 1.0
-
-    def _simulate_set(self, strength1, strength2, spread, points, cap):
-        """Play a set point by point: to `points`, win by 2, hard cap at `cap`."""
-        edge = MAX_POINT_EDGE * math.tanh(2.0 * (strength1 - strength2) / spread)
-        p_team1 = 0.5 + edge + random.uniform(-FORM_JITTER, FORM_JITTER)
-        points1 = points2 = 0
-        while True:
-            if random.random() < p_team1:
-                points1 += 1
-            else:
-                points2 += 1
-            leader, trailer = max(points1, points2), min(points1, points2)
-            if (leader >= points and leader - trailer >= 2) or leader >= cap:
-                return points1, points2
+        try:
+            record_result(tournament, matchup, team1_scores, team2_scores, user)
+        except ValueError as e:
+            raise CommandError(str(e))

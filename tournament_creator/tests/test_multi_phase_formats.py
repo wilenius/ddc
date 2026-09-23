@@ -330,3 +330,65 @@ class MultiPhaseCreationViewTest(TestCase):
         self.assertContains(response, 'Top 4')
         self.assertContains(response, 'Semifinal')
 
+
+class SimulateSandboxScoresTest(TestCase):
+    """The practice tournament's "Simulate results" button."""
+
+    def setUp(self):
+        self.client = Client()
+        User.objects.create_user(username='creator_test', password='test123', role='TC')
+        self.client.login(username='creator_test', password='test123')
+        players = [Player.objects.create(first_name=f'F{i}', last_name=f'L{i}', ranking=i,
+                                         ranking_points=1000 - 10 * i)
+                   for i in range(1, 13)]
+        self.client.post(reverse('tournament_create'), data={
+            'name': 'Practice', 'place': 'Helsinki', 'country': 'Finland',
+            'confirm_new_location': TournamentCreationForm.location_token('Helsinki', 'Finland'),
+            'date': '2026-10-01', 'tournament_category': 'PAIRS', 'format_type': 'STANDARD',
+            'name_display_format': 'FIRST', 'is_sandbox': 'on',
+            'players': [p.id for p in players], 'pairs_format': 'RR_PLAYOFFS',
+            'round_robin_points': 11, 'round_robin_cap': 13, 'round_robin_sets': 1,
+            'semifinal_points': 15, 'semifinal_cap': 18, 'semifinal_sets': 3,
+            'bronze_points': 21, 'bronze_cap': 23, 'bronze_sets': 1,
+            'final_points': 21, 'final_cap': 23, 'final_sets': 3,
+        })
+        self.tournament = TournamentChart.objects.latest('id')
+        self.url = reverse('simulate_sandbox_scores', args=[self.tournament.id])
+
+    def test_simulates_by_each_matchs_rules(self):
+        self.client.post(self.url)
+        round_robin = self.tournament.stages.get(stage_number=1)
+        self.assertFalse(round_robin.matchups.filter(scores__isnull=True).exists())
+        for matchup in round_robin.matchups.all():
+            (score,) = matchup.scores.all()  # one game
+            self.assertLessEqual(max(score.team1_score, score.team2_score), 13)
+            self.assertGreaterEqual(max(score.team1_score, score.team2_score), 11)
+
+        # Playoffs: semis, then the final and bronze match created along the way
+        self.client.post(reverse('generate_next_stage', args=[self.tournament.id]))
+        self.client.post(self.url)
+        playoffs = self.tournament.stages.get(stage_number=2)
+        self.assertEqual(playoffs.matchups.count(), 4)
+        self.assertFalse(playoffs.matchups.filter(scores__isnull=True).exists())
+        for semi in playoffs.matchups.filter(round_number=1):
+            self.assertIn(semi.scores.count(), (2, 3))  # best of 3
+        impl = get_implementation(self.tournament.archetype)
+        self.assertIsNotNone(impl.get_final_standings(self.tournament))
+
+    def test_only_for_practice_tournaments(self):
+        self.tournament.is_sandbox = False
+        self.tournament.save()
+        self.client.post(self.url)
+        self.assertFalse(MatchScore.objects.exists())
+
+    def test_button_shown_on_practice_tournament(self):
+        response = self.client.get(reverse('tournament_detail', args=[self.tournament.id]))
+        self.assertContains(response, 'Simulate results')
+
+    def test_management_command_still_simulates(self):
+        from io import StringIO
+        from django.core.management import call_command
+        call_command('simulate_scores', self.tournament.id, '--points', '21', '--sets', '1',
+                     stdout=StringIO())
+        stage1 = self.tournament.stages.get(stage_number=1)
+        self.assertFalse(stage1.matchups.filter(scores__isnull=True).exists())

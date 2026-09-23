@@ -1336,6 +1336,52 @@ def reset_sandbox_scores(request, tournament_id):
 
 
 @login_required
+@require_POST
+def simulate_sandbox_scores(request, tournament_id):
+    """
+    Fill every unplayed match of a sandbox (practice) tournament with a simulated,
+    ranking-weighted result, following each match's own score rules (points, cap,
+    best-of). Matches created along the way — a playoff group's final and bronze
+    match once its semis are in — are simulated too; later phases still need
+    "Generate next phase". Open to every logged-in user, sandbox only.
+    """
+    tournament = get_object_or_404(TournamentChart, id=tournament_id)
+    if not tournament.is_sandbox:
+        messages.error(request, "Only practice tournaments can be simulated.")
+        return redirect('tournament_detail', pk=tournament_id)
+
+    from ..simulation import record_result, simulate_match, strength_spread
+    all_matchups = list(tournament.matchups.all())
+    spread = strength_spread(all_matchups)
+    # Formats without score rules have no set count to follow: use the
+    # tournament's sets per match for MoC, one set for doubles.
+    fallback_sets = tournament.default_sets_per_match if _is_moc_tournament_helper(tournament) else 1
+
+    simulated = 0
+    done_ids = set()
+    while True:
+        unplayed = [m for m in tournament.matchups.filter(scores__isnull=True)
+                    .exclude(id__in=done_ids).order_by('stage__stage_number', 'round_number',
+                                                       'court_number')]
+        if not unplayed:
+            break
+        for matchup in unplayed:
+            rules = _expected_score_rules(tournament, matchup) or SANDBOX_SCORE_RULES
+            team1_scores, team2_scores = simulate_match(
+                matchup, spread, rules['points_to'], rules['cap'],
+                rules['best_of'] or fallback_sets)
+            record_result(tournament, matchup, team1_scores, team2_scores, request.user)
+            done_ids.add(matchup.id)
+            simulated += 1
+
+    if simulated:
+        messages.success(request, f"Simulated {simulated} match result{'s' if simulated != 1 else ''}.")
+    else:
+        messages.info(request, "Every match already has a result — nothing to simulate.")
+    return redirect('tournament_detail', pk=tournament_id)
+
+
+@login_required
 def tournament_directors(request, tournament_id):
     """
     List, add and remove the directors of a single tournament. Only the

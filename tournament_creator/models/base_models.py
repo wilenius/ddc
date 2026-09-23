@@ -141,6 +141,11 @@ class TournamentChart(models.Model):
         default=2,
         help_text="MoC only: typical sets played per match. Used to scale the free win awarded to seeds 1 & 2 in formats where their pairing is eliminated."
     )
+    # Pairs only: expected score format per match type, set at creation, e.g.
+    # {'round_robin': {'points_to': 21, 'cap': 23, 'best_of': 1}, 'semifinal': {...}}.
+    # Keys are tournament_types.MATCH_RULE_TYPES; empty means no validation for
+    # plain round robins and the format's defaults for multi-phase formats.
+    match_rules = models.JSONField(default=dict, blank=True, help_text="Pairs only: expected score format per match type (round_robin, semifinal, bronze, final).")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

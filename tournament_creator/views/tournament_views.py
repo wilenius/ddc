@@ -164,9 +164,6 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
             initial['place'] = self.request.GET.get('place')
         if 'country' in self.request.GET:
             initial['country'] = self.request.GET.get('country')
-        # Preserve number of stages
-        if 'number_of_stages' in self.request.GET:
-            initial['number_of_stages'] = self.request.GET.get('number_of_stages')
         # Preserve tournament category
         if 'tournament_category' in self.request.GET:
             initial['tournament_category'] = self.request.GET.get('tournament_category')
@@ -214,6 +211,16 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
         # Get tournament category from GET or POST
         tournament_category = self.request.GET.get('tournament_category') or self.request.POST.get('tournament_category')
         context['selected_category'] = tournament_category
+
+        # Doubles playing formats, with what the dropdown's JS needs per option
+        from ..models.tournament_types import PAIRS_FORMAT_OPTIONS
+        context['pairs_format_options'] = [
+            dict(option,
+                 pair_counts_csv=','.join(str(n) for n in option['pair_counts']),
+                 rule_types_csv=','.join(option['rule_types']))
+            for option in PAIRS_FORMAT_OPTIONS
+        ]
+        context['selected_pairs_format'] = self.request.POST.get('pairs_format', '')
 
         # Show player selection forms based on category
         if tournament_category == 'MOC':
@@ -263,17 +270,21 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
                     return render(request, self.template_name, context)
 
                 num_pairs = num_players // 2
-                # 20 pairs use the multi-phase euros format; smaller counts are plain round robins
-                if num_pairs == 20:
-                    archetype = TournamentArchetype.objects.get(
-                        tournament_category='PAIRS',
-                        name="20 pairs euros format"
-                    )
-                else:
-                    archetype = TournamentArchetype.objects.get(
-                        tournament_category='PAIRS',
-                        name=f"{num_pairs} pairs doubles tournament"
-                    )
+                # The chosen playing format; a blank choice picks the first that fits
+                # (plain round robin for 2-10 pairs, euros for 20)
+                from ..models.tournament_types import pairs_format_option
+                try:
+                    pairs_format = pairs_format_option(form.cleaned_data.get('pairs_format'), num_pairs)
+                except ValueError as e:
+                    messages.error(request, str(e))
+                    context = self.get_context_data(object=None)
+                    context['form'] = form
+                    context['moc_player_form'] = moc_player_form
+                    return render(request, self.template_name, context)
+                archetype = TournamentArchetype.objects.get(
+                    tournament_category='PAIRS',
+                    name=pairs_format['archetype'] or f"{num_pairs} pairs doubles tournament"
+                )
             else:
                 messages.error(request, "Please select a tournament type")
                 context = self.get_context_data(object=None)
@@ -353,11 +364,16 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
             archetype_impl = get_implementation(archetype)
             tournament.number_of_rounds = archetype_impl.calculate_rounds(len(pairs))
             tournament.number_of_courts = archetype_impl.calculate_courts(len(pairs))
+            # Only the rules of match types this format actually plays
+            tournament.match_rules = {
+                key: rules for key, rules in form.cleaned_data['match_rules'].items()
+                if key in pairs_format['rule_types']
+            }
 
             if getattr(archetype_impl, 'is_multi_phase', False):
-                # Multi-phase format (euros): fixed stage structure, later stages are
+                # Multi-phase format: fixed stage structure, later stages are
                 # generated from results via the "Generate next phase" action.
-                tournament.number_of_stages = len(archetype_impl.STAGE_DEFINITIONS)
+                tournament.number_of_stages = len(archetype_impl.STAGES)
                 tournament.save()
                 tournament.pairs.set(pairs)
                 stages = archetype_impl.create_stages(tournament)
@@ -369,23 +385,20 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
                 )
                 return redirect('tournament_detail', pk=tournament.pk)
 
+            tournament.number_of_stages = 1
             tournament.save()
             tournament.pairs.set(pairs)
 
-            # Create stages and generate matchups for each stage
-            num_stages = tournament.number_of_stages
-            for stage_num in range(1, num_stages + 1):
-                stage = Stage.objects.create(
-                    tournament=tournament,
-                    stage_number=stage_num,
-                    stage_type='POOL',
-                    name=f"Stage {stage_num}",
-                    scoring_mode='CUMULATIVE'
-                )
-                # Generate matchups for this stage
-                archetype_impl.generate_matchups(tournament, pairs, stage=stage)
+            stage = Stage.objects.create(
+                tournament=tournament,
+                stage_number=1,
+                stage_type='POOL',
+                name="Stage 1",
+                scoring_mode='CUMULATIVE'
+            )
+            archetype_impl.generate_matchups(tournament, pairs, stage=stage)
 
-            messages.success(request, f"Tournament created successfully with {len(pairs)} pairs and {num_stages} stage(s)!")
+            messages.success(request, f"Tournament created successfully with {len(pairs)} pairs!")
             return redirect('tournament_detail', pk=tournament.pk)
 
     def get(self, request, *args, **kwargs):

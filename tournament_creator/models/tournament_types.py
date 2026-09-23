@@ -20,6 +20,8 @@ def get_implementation(archetype: TournamentArchetype) -> Optional[Any]:
         "9 pairs doubles tournament": NinePairsFormat(),
         "10 pairs doubles tournament": TenPairsFormat(),
         "20 pairs euros format": EurosFormat(),
+        RoundRobinPlayoffsFormat.ARCHETYPE_NAME: RoundRobinPlayoffsFormat(),
+        DoubleRoundRobinFormat.ARCHETYPE_NAME: DoubleRoundRobinFormat(),
         # Monarch of the Court tournaments
         "5-player Monarch of the Court": MonarchOfTheCourt5(),
         "6-player Monarch of the Court": MonarchOfTheCourt6(),
@@ -37,6 +39,28 @@ def get_implementation(archetype: TournamentArchetype) -> Optional[Any]:
     
     return implementations.get(archetype.name)
 
+# Match types of a pairs tournament whose score rules the director sets at
+# creation (stored in TournamentChart.match_rules), with their defaults.
+MATCH_RULE_TYPES = [
+    ('round_robin', 'Round robin'),
+    ('semifinal', 'Semifinals'),
+    ('bronze', 'Bronze match'),
+    ('final', 'Final'),
+]
+DEFAULT_MATCH_RULES = {
+    'round_robin': {'points_to': 21, 'cap': 23, 'best_of': 1},
+    'semifinal': {'points_to': 15, 'cap': 18, 'best_of': 3},
+    'bronze': {'points_to': 21, 'cap': 23, 'best_of': 1},
+    'final': {'points_to': 21, 'cap': 23, 'best_of': 3},
+}
+
+
+def default_cap(points_to):
+    """Suggested point cap for games to ``points_to``: games to 15 are capped at 18,
+    everything else at two over. The director can override it."""
+    return 18 if points_to == 15 else points_to + 2
+
+
 # Base for Swedish pairs tournaments
 class PairsTournamentArchetype(TournamentArchetype):
     class Meta:
@@ -51,6 +75,10 @@ class PairsTournamentArchetype(TournamentArchetype):
 
     def calculate_courts(self, num_pairs: int):
         return self.number_of_fields
+
+    def get_score_rules(self, matchup):
+        """The round-robin rules set at creation, if any (older tournaments have none)."""
+        return (matchup.tournament_chart.match_rules or {}).get('round_robin')
 
     def generate_matchups(self, tournament_chart, pairs: List[Pair], stage=None):
         # Map pairs to seeds 1-based
@@ -189,100 +217,125 @@ class TenPairsFormat(PairsTournamentArchetype):
     name = "10 pairs doubles tournament"
     description = "Round robin: 9 rounds on 5 courts with 10 pairs."
 
-class EurosFormat(PairsTournamentArchetype):
+class MultiPhasePairsFormat(PairsTournamentArchetype):
     """
-    'Euros' format for 20 pairs (used at European Open 2024/2026).
+    Base for pairs formats played in consecutive stages, where each later stage is
+    generated from the previous stage's results ("Generate next phase").
 
-    Phase 1: 5 pools of 4 (snake seeding), single round robin within each pool.
-    Phase 2: top 2 of each pool -> A Pool (10 pairs), bottom 2 -> B Pool (10 pairs),
-             full round robin within each pool (former pool-mates play again).
-    Finals:  provisional order (A Pool ranks 1-10, B Pool ranks 11-20) is sliced into
-             groups of 4 (1-4, 5-8, ...). Each group plays semis (1v4, 2v3), then the
-             winners play a placement final and the losers a consolation match.
-    Every pair plays 3 + 9 + 2 = 14 matches.
+    A format is a list of stage specs (``STAGES``), each a dict with:
+      - ``name``, ``stage_type``: the Stage row to create
+      - ``kind``: ``'round_robin'`` or ``'playoff'``
+    Round-robin stages:
+      - ``pools``: ``'single'`` (everyone in one pool), ``'snake'`` (``pool_count``
+        snake-seeded pools), or ``'split'`` (the top half of every previous-stage
+        pool → the first pool, the bottom half → the second)
+      - ``pool_names``: optional pool names, in order
+      - ``cumulative``: standings also count the previous stages' matches between
+        the pool's pairs (a repeated round robin)
+    Playoff stages:
+      - ``groups``: ``'top4'`` (only the top four of the previous stage play) or
+        ``'all'`` (the whole order, sliced into groups of four). Each group plays
+        semis 1v4 and 2v3, then the winners and the losers play placement matches.
 
-    Phases 2 and 3 depend on earlier results, so their matchups are generated via
-    advance_to_next_stage() once the previous stage is complete.
+    Stage 1 is seeded by pair seed; each later stage by the previous stage's order
+    (its pools' standings, concatenated in pool order). Pairs that don't reach a
+    top-four playoff are placed after it in that order.
     """
-    name = "20 pairs euros format"
-    description = "Euros format: 5 pools of 4, then A/B pools of 10, then placement groups of 4."
-    number_of_pairs = 20
-    number_of_fields = 10
+    class Meta:
+        abstract = True
+
     is_multi_phase = True
+    STAGES: List[Dict] = []
+    ALLOWED_PAIR_COUNTS = range(0)
 
-    STAGE_DEFINITIONS = [
-        {'stage_number': 1, 'stage_type': 'POOL', 'name': 'Pool Phase 1'},
-        {'stage_number': 2, 'stage_type': 'POOL', 'name': 'Pool Phase 2'},
-        {'stage_number': 3, 'stage_type': 'PLAYOFF', 'name': 'Finals'},
-    ]
+    # -- Structure ---------------------------------------------------------
 
-    NUM_FIRST_PHASE_POOLS = 5
+    def stage_spec(self, stage) -> Dict:
+        return self.STAGES[stage.stage_number - 1]
+
+    def _pool_sizes(self, spec, num_pairs) -> List[int]:
+        if spec['pools'] == 'single':
+            return [num_pairs]
+        if spec['pools'] == 'snake':
+            count = spec['pool_count']
+            return [len(range(i, num_pairs, count)) for i in range(count)]
+        return [num_pairs // 2, num_pairs - num_pairs // 2]  # split
+
+    def _playoff_group_count(self, spec, num_pairs) -> int:
+        return 1 if spec['groups'] == 'top4' else num_pairs // 4
 
     def calculate_rounds(self, num_pairs):
-        return 14  # 3 (phase 1) + 9 (phase 2) + 2 (finals)
+        rounds = 0
+        for spec in self.STAGES:
+            if spec['kind'] == 'playoff':
+                rounds += 2
+            else:
+                rounds += max(len(ROUND_ROBIN_SCHEDULES[size])
+                              for size in self._pool_sizes(spec, num_pairs))
+        return rounds
 
     def calculate_courts(self, num_pairs):
-        return self.number_of_fields
-
-    def get_score_rules(self, matchup):
-        """Euros match formats (all games win by 2):
-        One game to 21, cap 23, everywhere — pool phases, consolation semis,
-        placement matches, and the third-place playoff — except in the
-        "Places 1-4" group: its semis are best-of-3 to 15 (cap 18) and its
-        final is best-of-3 to 21 (cap 23).
-        """
-        if matchup.stage is None:
-            return None
-        one_game_to_21 = {'points_to': 21, 'cap': 23, 'best_of': 1}
-        if matchup.stage.stage_number != 3:
-            return one_game_to_21
-        if matchup.pool is None or matchup.pool.order != 0:
-            return one_game_to_21
-        if matchup.round_number == 1:
-            return {'points_to': 15, 'cap': 18, 'best_of': 3}
-        # Round 2: the winners' match (the final) is on the odd court,
-        # the losers' match (third-place playoff) on the even one.
-        if matchup.court_number % 2 == 1:
-            return {'points_to': 21, 'cap': 23, 'best_of': 3}
-        return one_game_to_21
+        courts = 0
+        for spec in self.STAGES:
+            if spec['kind'] == 'playoff':
+                stage_courts = 2 * self._playoff_group_count(spec, num_pairs)
+            else:
+                stage_courts = sum(len(ROUND_ROBIN_SCHEDULES[size][0])
+                                   for size in self._pool_sizes(spec, num_pairs))
+            courts = max(courts, stage_courts)
+        return courts
 
     def create_stages(self, tournament) -> List[Stage]:
-        """Create the three stages. Each stage's standings are computed from its own matches."""
+        """Create every stage up front; only stage 1 gets its matchups right away."""
         return [
-            Stage.objects.create(tournament=tournament, scoring_mode='RESET', **definition)
-            for definition in self.STAGE_DEFINITIONS
+            Stage.objects.create(
+                tournament=tournament,
+                stage_number=stage_number,
+                stage_type=spec['stage_type'],
+                name=spec['name'],
+                scoring_mode='CUMULATIVE' if spec.get('cumulative') else 'RESET',
+            )
+            for stage_number, spec in enumerate(self.STAGES, start=1)
         ]
 
+    # -- Match rules -------------------------------------------------------
+
+    def get_match_rules(self, tournament) -> Dict[str, Dict]:
+        """The tournament's rules per match type, with defaults for any not set."""
+        stored = tournament.match_rules or {}
+        return {key: dict(stored.get(key) or DEFAULT_MATCH_RULES[key])
+                for key in DEFAULT_MATCH_RULES}
+
+    def get_score_rules(self, matchup):
+        """Round-robin rules everywhere except the top playoff group, whose semis,
+        final and bronze match have their own rules. Lower placement groups
+        (euros) play by the round-robin rules."""
+        if matchup.stage is None:
+            return None
+        rules = self.get_match_rules(matchup.tournament_chart)
+        spec = self.stage_spec(matchup.stage)
+        if spec['kind'] != 'playoff' or matchup.pool is None or matchup.pool.order != 0:
+            return rules['round_robin']
+        if matchup.round_number == 1:
+            return rules['semifinal']
+        # Round 2: the winners' match (the final) is on the odd court,
+        # the losers' match (bronze) on the even one.
+        if matchup.court_number % 2 == 1:
+            return rules['final']
+        return rules['bronze']
+
+    # -- Generation --------------------------------------------------------
+
     def generate_matchups(self, tournament_chart, pairs: List[Pair], stage=None):
-        """Generate phase 1: snake-seed 20 pairs into 5 pools of 4, round robin in each."""
-        if len(pairs) != self.number_of_pairs:
-            raise ValueError(f"This tournament format requires exactly {self.number_of_pairs} pairs")
+        """Generate stage 1 from the pairs' seeds."""
+        if len(pairs) not in self.ALLOWED_PAIR_COUNTS:
+            counts = list(self.ALLOWED_PAIR_COUNTS)
+            needed = str(counts[0]) if len(counts) == 1 else f"{counts[0]}-{counts[-1]}"
+            raise ValueError(f"This tournament format requires {needed} pairs")
         if stage is None:
-            raise ValueError("The euros format requires a stage for matchup generation")
-
-        sorted_pairs = sorted(pairs, key=lambda p: p.seed)
-
-        # Snake seeding: seeds 1-5 go to pools A-E, 6-10 to E-A, 11-15 to A-E, 16-20 to E-A.
-        pool_members = [[] for _ in range(self.NUM_FIRST_PHASE_POOLS)]
-        for block_idx in range(0, len(sorted_pairs), self.NUM_FIRST_PHASE_POOLS):
-            block = sorted_pairs[block_idx:block_idx + self.NUM_FIRST_PHASE_POOLS]
-            if (block_idx // self.NUM_FIRST_PHASE_POOLS) % 2 == 1:
-                block = list(reversed(block))
-            for pool_idx, pair in enumerate(block):
-                pool_members[pool_idx].append(pair)
-
-        for pool_idx, members in enumerate(pool_members):
-            pool = self._create_pool(
-                stage,
-                name=f"Pool {chr(ord('A') + pool_idx)}",
-                order=pool_idx,
-                ordered_pairs=members,
-            )
-            self._generate_pool_round_robin(
-                tournament_chart, stage, pool, members,
-                schedule=FourPairsSwedishFormat.schedule,
-                court_offset=pool_idx * 2,
-            )
+            raise ValueError("This format requires a stage for matchup generation")
+        seeded = sorted(pairs, key=lambda p: p.seed)
+        self._generate_round_robin(tournament_chart, stage, seeded, previous_stage=None)
 
     def advance_to_next_stage(self, tournament) -> Stage:
         """
@@ -291,22 +344,18 @@ class EurosFormat(PairsTournamentArchetype):
         Returns the stage that was populated.
         """
         stages = list(tournament.stages.order_by('stage_number'))
-        if len(stages) != 3:
-            raise ValueError("This tournament does not have the expected three stages")
-        stage1, stage2, stage3 = stages
-
-        if not stage2.matchups.exists():
-            if not self.is_stage_complete(stage1):
-                raise ValueError(f"{stage1.name} is not complete yet - record all scores first")
-            self._generate_second_phase(tournament, stage1, stage2)
-            return stage2
-        elif not stage3.matchups.exists():
-            if not self.is_stage_complete(stage2):
-                raise ValueError(f"{stage2.name} is not complete yet - record all scores first")
-            self._generate_finals(tournament, stage2, stage3)
-            return stage3
-        else:
-            raise ValueError("All stages have already been generated")
+        for previous, stage in zip(stages, stages[1:]):
+            if stage.matchups.exists():
+                continue
+            if not self.is_stage_complete(previous):
+                raise ValueError(f"{previous.name} is not complete yet - record all scores first")
+            order = self._stage_order(previous)
+            if self.stage_spec(stage)['kind'] == 'playoff':
+                self._generate_playoffs(tournament, stage, order)
+            else:
+                self._generate_round_robin(tournament, stage, order, previous_stage=previous)
+            return stage
+        raise ValueError("All stages have already been generated")
 
     def get_next_stage_to_generate(self, tournament) -> Optional[Stage]:
         """Returns the first stage without matchups, or None if all are generated."""
@@ -317,62 +366,72 @@ class EurosFormat(PairsTournamentArchetype):
         matchups = stage.matchups.annotate(num_scores=models.Count('scores'))
         return matchups.exists() and not matchups.filter(num_scores=0).exists()
 
-    def _generate_second_phase(self, tournament, stage1, stage2):
-        """Top 2 of each phase-1 pool -> A Pool, bottom 2 -> B Pool; fresh 10-team round robins."""
-        rankings = [
-            [entry['pair'] for entry in self.get_pool_standings(pool)]
-            for pool in stage1.pools.order_by('order')
-        ]
-        # Pool-internal seeding: pool winners first (in pool order), then runners-up, etc.
-        a_pool_pairs = [r[0] for r in rankings] + [r[1] for r in rankings]
-        b_pool_pairs = [r[2] for r in rankings] + [r[3] for r in rankings]
+    def _stage_order(self, stage) -> List[Pair]:
+        """The stage's pools' standings, concatenated in pool order."""
+        return [entry['pair']
+                for pool in stage.pools.order_by('order')
+                for entry in self.get_pool_standings(pool)]
 
-        for order, (name, members, court_offset) in enumerate([
-            ("A Pool", a_pool_pairs, 0),
-            ("B Pool", b_pool_pairs, 5),
-        ]):
-            pool = self._create_pool(stage2, name=name, order=order, ordered_pairs=members)
-            self._generate_pool_round_robin(
-                tournament, stage2, pool, members,
-                schedule=TenPairsFormat.schedule,
-                court_offset=court_offset,
-            )
+    def _generate_round_robin(self, tournament, stage, seeded, previous_stage):
+        spec = self.stage_spec(stage)
+        if spec['pools'] == 'single':
+            pools = [seeded]
+        elif spec['pools'] == 'snake':
+            # Seeds 1..N go to pools A..N, the next block to N..A, and so on.
+            count = spec['pool_count']
+            pools = [[] for _ in range(count)]
+            for block_idx in range(0, len(seeded), count):
+                block = seeded[block_idx:block_idx + count]
+                if (block_idx // count) % 2 == 1:
+                    block = list(reversed(block))
+                for pool_idx, pair in enumerate(block):
+                    pools[pool_idx].append(pair)
+        else:  # split
+            # Pool-internal seeding: pool winners first (in pool order), then
+            # runners-up, etc.
+            rankings = [[entry['pair'] for entry in self.get_pool_standings(pool)]
+                        for pool in previous_stage.pools.order_by('order')]
+            half = len(rankings[0]) // 2
+            pools = [
+                [ranking[rank] for rank in range(half) for ranking in rankings],
+                [ranking[rank] for rank in range(half, len(rankings[0])) for ranking in rankings],
+            ]
 
-    def _generate_finals(self, tournament, stage2, stage3):
-        """Slice the provisional order into groups of 4; each group plays semis 1v4 and 2v3."""
-        a_pool, b_pool = list(stage2.pools.order_by('order'))
-        provisional_order = (
-            [entry['pair'] for entry in self.get_pool_standings(a_pool)]
-            + [entry['pair'] for entry in self.get_pool_standings(b_pool)]
-        )
+        names = spec.get('pool_names') or [f"Pool {chr(ord('A') + i)}" for i in range(len(pools))]
+        court_offset = 0
+        for pool_idx, members in enumerate(pools):
+            pool = self._create_pool(stage, name=names[pool_idx], order=pool_idx,
+                                     ordered_pairs=members)
+            schedule = ROUND_ROBIN_SCHEDULES[len(members)]
+            self._generate_pool_round_robin(tournament, stage, pool, members,
+                                            schedule=schedule, court_offset=court_offset)
+            court_offset += len(schedule[0])
 
-        for group_idx in range(5):
+    def _generate_playoffs(self, tournament, stage, order):
+        """Slice the order into groups of 4 (or take only the top 4); each group
+        plays semis 1v4 and 2v3."""
+        spec = self.stage_spec(stage)
+        if spec['groups'] == 'top4':
+            groups = [order[:4]]
+        else:
+            groups = [order[base:base + 4] for base in range(0, len(order), 4)]
+
+        for group_idx, group in enumerate(groups):
             base = group_idx * 4
-            group = provisional_order[base:base + 4]
-            pool = self._create_pool(
-                stage3,
-                name=f"Places {base + 1}-{base + 4}",
-                order=group_idx,
-                ordered_pairs=group,
-            )
-            # Semifinals: 1v4 and 2v3 (positions within the group)
+            name = "Top 4" if spec['groups'] == 'top4' else f"Places {base + 1}-{base + 4}"
+            pool = self._create_pool(stage, name=name, order=group_idx, ordered_pairs=group)
             semi_label = self._semifinal_label(base)
-            Matchup.objects.create(
-                tournament_chart=tournament, stage=stage3, pool=pool,
-                pair1=group[0], pair2=group[3],
-                round_number=1, court_number=group_idx * 2 + 1,
-                label=semi_label,
-            )
-            Matchup.objects.create(
-                tournament_chart=tournament, stage=stage3, pool=pool,
-                pair1=group[1], pair2=group[2],
-                round_number=1, court_number=group_idx * 2 + 2,
-                label=semi_label,
-            )
+            for court, (pos1, pos2) in enumerate([(0, 3), (1, 2)], start=group_idx * 2 + 1):
+                Matchup.objects.create(
+                    tournament_chart=tournament, stage=stage, pool=pool,
+                    pair1=group[pos1], pair2=group[pos2],
+                    round_number=1, court_number=court,
+                    label=semi_label,
+                )
 
     @staticmethod
     def _semifinal_label(base):
-        """Stakes label for a finals group's semifinals. ``base`` is the 0-indexed
+        """Stakes label for a playoff group's semifinals. ``base`` is the 0-indexed
         placement the group starts at (0 → the top-four group)."""
         return "Semifinal" if base == 0 else "Placement semifinal"
 
@@ -390,7 +449,7 @@ class EurosFormat(PairsTournamentArchetype):
 
     def maybe_generate_placement_matches(self, tournament, matchup):
         """
-        Called after a score is recorded. If both semifinals of a finals group are now
+        Called after a score is recorded. If both semifinals of a playoff group are now
         scored and the placement matches don't exist yet, create them (winners play for
         the higher placement, losers for the lower).
         """
@@ -419,10 +478,27 @@ class EurosFormat(PairsTournamentArchetype):
             label=self._placement_match_label(base, winners=False),
         )
 
+    # -- Standings ---------------------------------------------------------
+
+    def _standings_matchups(self, pool):
+        """The matchups a pool's standings count: its own, plus — for a cumulative
+        stage — earlier stages' matches between the pool's pairs."""
+        matchups = pool.matchups.select_related('pair1', 'pair2').prefetch_related('scores')
+        if not self.stage_spec(pool.stage).get('cumulative'):
+            return list(matchups)
+        member_ids = list(PoolPair.objects.filter(pool=pool).values_list('pair_id', flat=True))
+        earlier = Matchup.objects.filter(
+            stage__tournament_id=pool.stage.tournament_id,
+            stage__stage_number__lt=pool.stage.stage_number,
+            pair1_id__in=member_ids, pair2_id__in=member_ids,
+        ).select_related('pair1', 'pair2').prefetch_related('scores')
+        return list(earlier) + list(matchups)
+
     def get_pool_standings(self, pool) -> List[Dict]:
         """
-        Rank the pairs in a pool by this pool's matches only, breaking win ties
-        with the DDC doubles tiebreak rules:
+        Rank the pairs in a pool by this pool's matches only (plus the earlier
+        rounds' matches in a cumulative stage), breaking win ties with the DDC
+        doubles tiebreak rules:
           Step 1: fewest forfeits — TODO: forfeits cannot be recorded yet; once
                   they can, apply this before the head-to-head steps.
           Step 2: record against the other tied teams
@@ -443,7 +519,7 @@ class EurosFormat(PairsTournamentArchetype):
                  for pair in members}
 
         scored_matchups = []
-        for m in pool.matchups.select_related('pair1', 'pair2').prefetch_related('scores'):
+        for m in self._standings_matchups(pool):
             scores = list(m.scores.all())
             if not scores:
                 continue
@@ -572,15 +648,24 @@ class EurosFormat(PairsTournamentArchetype):
 
     def get_final_standings(self, tournament) -> Optional[List[Dict]]:
         """
-        Final placements 1-20 once all finals placement matches are played.
-        Returns a list of dicts {'position', 'pair'}, or None if the finals aren't done.
+        Final placements once the last stage is fully played: the playoff groups'
+        placement matches decide their places, pairs that didn't reach a top-four
+        playoff follow in the previous stage's order. A final round-robin stage
+        is placed by its standings.
+        Returns a list of dicts {'position', 'pair'}, or None if not done yet.
         """
-        stage3 = tournament.stages.filter(stage_number=3).first()
-        if stage3 is None or not stage3.matchups.exists():
+        stages = list(tournament.stages.order_by('stage_number'))
+        if len(stages) != len(self.STAGES) or not stages[-1].matchups.exists():
             return None
+        last = stages[-1]
+        if self.stage_spec(last)['kind'] == 'round_robin':
+            if not self.is_stage_complete(last):
+                return None
+            return [{'position': position, 'pair': pair}
+                    for position, pair in enumerate(self._stage_order(last), start=1)]
 
         standings = []
-        for group_idx, pool in enumerate(stage3.pools.order_by('order')):
+        for group_idx, pool in enumerate(last.pools.order_by('order')):
             placement_matches = list(pool.matchups.filter(round_number=2).order_by('court_number'))
             if len(placement_matches) != 2 or any(not m.scores.exists() for m in placement_matches):
                 return None
@@ -594,6 +679,10 @@ class EurosFormat(PairsTournamentArchetype):
                 {'position': base + 3, 'pair': consolation_winner},
                 {'position': base + 4, 'pair': consolation_loser},
             ])
+        placed = {entry['pair'].id for entry in standings}
+        for pair in self._stage_order(stages[-2]):
+            if pair.id not in placed:
+                standings.append({'position': len(standings) + 1, 'pair': pair})
         return standings
 
     def _create_pool(self, stage, name, order, ordered_pairs) -> Pool:
@@ -604,9 +693,12 @@ class EurosFormat(PairsTournamentArchetype):
 
     def _generate_pool_round_robin(self, tournament_chart, stage, pool, ordered_pairs,
                                    schedule, court_offset):
-        """Create matchups for a pool using a schedule of pool-internal seed positions."""
+        """Create matchups for a pool using a schedule of pool-internal seed positions.
+        The pool's top seed plays every match on the pool's first court (the
+        schedules already list its match first; this keeps it guaranteed)."""
         pairs_by_position = {position: pair for position, pair in enumerate(ordered_pairs, start=1)}
         for round_idx, round_matches in enumerate(schedule, 1):
+            round_matches = sorted(round_matches, key=lambda match: 1 not in match)
             for match_idx, (pos1, pos2) in enumerate(round_matches, 1):
                 Matchup.objects.create(
                     tournament_chart=tournament_chart,
@@ -641,6 +733,133 @@ class EurosFormat(PairsTournamentArchetype):
         if team1_won:
             return matchup.pair1, matchup.pair2
         return matchup.pair2, matchup.pair1
+
+
+# Round-robin schedules (of pool-internal seed positions) by pool size
+ROUND_ROBIN_SCHEDULES = {
+    fmt.number_of_pairs: fmt.schedule
+    for fmt in (TwoPairsFormat, ThreePairsFormat, FourPairsSwedishFormat, FivePairsFormat,
+                SixPairsFormat, SevenPairsFormat, EightPairsSwedishFormat, NinePairsFormat,
+                TenPairsFormat)
+}
+
+
+class EurosFormat(MultiPhasePairsFormat):
+    """
+    'Euros' format for 20 pairs (used at European Open 2024/2026).
+
+    Phase 1: 5 pools of 4 (snake seeding), single round robin within each pool.
+    Phase 2: top 2 of each pool -> A Pool (10 pairs), bottom 2 -> B Pool (10 pairs),
+             full round robin within each pool (former pool-mates play again).
+    Finals:  provisional order (A Pool ranks 1-10, B Pool ranks 11-20) is sliced into
+             groups of 4 (1-4, 5-8, ...). Each group plays semis (1v4, 2v3), then the
+             winners play a placement final and the losers a consolation match.
+    Every pair plays 3 + 9 + 2 = 14 matches.
+    """
+    name = "20 pairs euros format"
+    description = "Euros format: 5 pools of 4, then A/B pools of 10, then placement groups of 4."
+    number_of_pairs = 20
+    ALLOWED_PAIR_COUNTS = (20,)
+    STAGES = [
+        {'name': 'Pool Phase 1', 'stage_type': 'POOL', 'kind': 'round_robin',
+         'pools': 'snake', 'pool_count': 5},
+        {'name': 'Pool Phase 2', 'stage_type': 'POOL', 'kind': 'round_robin',
+         'pools': 'split', 'pool_names': ['A Pool', 'B Pool']},
+        {'name': 'Finals', 'stage_type': 'PLAYOFF', 'kind': 'playoff', 'groups': 'all'},
+    ]
+
+
+class RoundRobinPlayoffsFormat(MultiPhasePairsFormat):
+    """Round robin, then the top four play semis 1v4 and 2v3, a final and a bronze
+    match (e.g. Finnish nationals). The rest are placed by the round robin."""
+    ARCHETYPE_NAME = "Round robin + top-4 playoffs"
+    ALLOWED_PAIR_COUNTS = range(4, 11)
+    STAGES = [
+        {'name': 'Round robin', 'stage_type': 'ROUND_ROBIN', 'kind': 'round_robin',
+         'pools': 'single', 'pool_names': ['All pairs']},
+        {'name': 'Playoffs', 'stage_type': 'PLAYOFF', 'kind': 'playoff', 'groups': 'top4'},
+    ]
+
+
+class DoubleRoundRobinFormat(MultiPhasePairsFormat):
+    """Everyone plays everyone twice (e.g. Uppsala). The second round robin is
+    reseeded by the first one's standings, so its order differs: the top two meet
+    in the last round, and the leader plays every match on court 1. Final
+    standings count both round robins."""
+    ARCHETYPE_NAME = "Double round robin, reseeded"
+    ALLOWED_PAIR_COUNTS = range(3, 11)
+    STAGES = [
+        {'name': 'Round robin 1', 'stage_type': 'ROUND_ROBIN', 'kind': 'round_robin',
+         'pools': 'single', 'pool_names': ['All pairs']},
+        {'name': 'Round robin 2', 'stage_type': 'ROUND_ROBIN', 'kind': 'round_robin',
+         'pools': 'single', 'pool_names': ['Combined standings'], 'cumulative': True},
+    ]
+
+
+# Pairs formats offered at tournament creation, in dropdown order. 'archetype' None
+# means the plain round robin for the pair count ("N pairs doubles tournament").
+# 'rule_types' are the match types whose rules the director sets (MATCH_RULE_TYPES).
+PAIRS_FORMAT_OPTIONS = [
+    {
+        'key': 'ROUND_ROBIN',
+        'label': 'Round robin',
+        'archetype': None,
+        'pair_counts': range(2, 11),
+        'rule_types': ['round_robin'],
+        'description': 'Everyone plays everyone once.',
+    },
+    {
+        'key': 'RR_PLAYOFFS',
+        'label': 'Round robin + top-4 playoffs',
+        'archetype': RoundRobinPlayoffsFormat.ARCHETYPE_NAME,
+        'pair_counts': RoundRobinPlayoffsFormat.ALLOWED_PAIR_COUNTS,
+        'rule_types': ['round_robin', 'semifinal', 'bronze', 'final'],
+        'description': 'Everyone plays everyone once, then the top 4 play semifinals '
+                       '(1v4, 2v3), a final and a bronze match.',
+    },
+    {
+        'key': 'DOUBLE_RR',
+        'label': 'Double round robin, reseeded',
+        'archetype': DoubleRoundRobinFormat.ARCHETYPE_NAME,
+        'pair_counts': DoubleRoundRobinFormat.ALLOWED_PAIR_COUNTS,
+        'rule_types': ['round_robin'],
+        'description': 'Everyone plays everyone twice. The second round robin is reseeded '
+                       'by the first: the top two meet in the last round and the leader '
+                       'plays on court 1. Standings count both.',
+    },
+    {
+        'key': 'EUROS',
+        'label': 'Euros: pools → A/B pools → placement playoffs',
+        'archetype': EurosFormat.name,
+        'pair_counts': EurosFormat.ALLOWED_PAIR_COUNTS,
+        'rule_types': ['round_robin', 'semifinal', 'bronze', 'final'],
+        'description': '5 pools of 4, then A and B pools of 10, then everyone plays semis '
+                       'and placement matches in groups of 4. Only the top group plays by '
+                       'the semifinal, final and bronze rules.',
+    },
+]
+
+
+def pairs_format_option(key, num_pairs):
+    """
+    The creation option for ``key``; a blank key picks the first option that fits
+    ``num_pairs``. Raises ValueError when the key is unknown or doesn't fit.
+    """
+    if not key:
+        for option in PAIRS_FORMAT_OPTIONS:
+            if num_pairs in option['pair_counts']:
+                return option
+        raise ValueError(f"No doubles format exists for {num_pairs} pairs.")
+    option = next((o for o in PAIRS_FORMAT_OPTIONS if o['key'] == key), None)
+    if option is None:
+        raise ValueError(f"Unknown doubles format '{key}'.")
+    if num_pairs not in option['pair_counts']:
+        counts = list(option['pair_counts'])
+        needed = str(counts[0]) if len(counts) == 1 else f"{counts[0]}–{counts[-1]}"
+        raise ValueError(f"The {option['label']} format needs {needed} pairs; "
+                         f"you selected {num_pairs}.")
+    return option
+
 
 # -- Monarch of the Court base --
 class MoCTournamentArchetype(TournamentArchetype):

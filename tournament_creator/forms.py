@@ -7,12 +7,17 @@ from django.contrib.auth.password_validation import validate_password
 from django.utils.safestring import mark_safe
 from dal import autocomplete
 from .models.base_models import Player, TournamentChart
+from .models.tournament_types import (
+    DEFAULT_MATCH_RULES, MATCH_RULE_TYPES, PAIRS_FORMAT_OPTIONS, default_cap,
+)
 from .models.notifications import NotificationBackendSetting # Added import
 
 class TournamentCreationForm(forms.ModelForm):
     # The unknown-location confirmation needs the "create anyway" button of the
     # create page; subclasses rendered elsewhere (Django admin) switch it off.
     require_location_confirmation = True
+
+    SETS_CHOICES = [(1, '1'), (3, '3'), (5, '5')]
 
     TOURNAMENT_CATEGORY_CHOICES = [
         ('', 'Select a tournament type'),
@@ -33,6 +38,15 @@ class TournamentCreationForm(forms.ModelForm):
     # location afterwards asks again instead of waving a second typo through.
     confirm_new_location = forms.CharField(required=False, widget=forms.HiddenInput)
 
+    # Doubles playing format (tournament_types.PAIRS_FORMAT_OPTIONS). Blank picks the
+    # first format that fits the pair count; the view validates it against the count.
+    pairs_format = forms.ChoiceField(
+        choices=[('', 'Automatic')] + [(o['key'], o['label']) for o in PAIRS_FORMAT_OPTIONS],
+        required=False,
+        label='Playing format',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
     # Group picker for tournaments (same as Signal backend, but without refresh button)
     signal_groups_picker = forms.MultipleChoiceField(
         label="Select Signal Groups",
@@ -47,7 +61,7 @@ class TournamentCreationForm(forms.ModelForm):
     class Meta:
         model = TournamentChart
         fields = [
-            'name', 'short_name', 'place', 'country', 'date', 'end_date', 'number_of_stages', 'format_type',
+            'name', 'short_name', 'place', 'country', 'date', 'end_date', 'format_type',
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
             'signal_recipient_usernames', 'signal_recipient_group_ids',
             'name_display_format', 'show_structure', 'default_sets_per_match',
@@ -69,7 +83,6 @@ class TournamentCreationForm(forms.ModelForm):
             'notify_by_matrix': forms.CheckboxInput,
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control', 'style': 'max-width: 200px;'}),
             'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control', 'style': 'max-width: 200px;'}),
-            'number_of_stages': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 60px;', 'min': '1', 'max': '9'}),
             'format_type': forms.Select(attrs={'class': 'form-select'}),
             'name_display_format': forms.Select(attrs={'class': 'form-select'}),
             'default_sets_per_match': forms.Select(attrs={'class': 'form-select', 'style': 'width: 80px;'}),
@@ -89,7 +102,6 @@ class TournamentCreationForm(forms.ModelForm):
             'country': 'Country',
             'date': 'Start Date',
             'end_date': 'End Date',
-            'number_of_stages': 'Stages',
             'format_type': 'Format',
             'name_display_format': 'Player Names',
             'default_sets_per_match': 'Sets per match',
@@ -98,7 +110,6 @@ class TournamentCreationForm(forms.ModelForm):
             'name': '',
             'place': '',
             'country': '',
-            'number_of_stages': '',
             'format_type': '',
             'name_display_format': '',
             'show_structure': '',
@@ -126,6 +137,24 @@ class TournamentCreationForm(forms.ModelForm):
         # this form to the fields in its fieldsets, which omit default_sets_per_match.
         if 'default_sets_per_match' in self.fields:
             self.fields['default_sets_per_match'].required = False
+
+        # Score rules per doubles match type: {type}_points, {type}_cap, {type}_sets,
+        # combined into cleaned_data['match_rules'] by clean(). Not model fields, so
+        # only the creation page renders them.
+        for key, _label in MATCH_RULE_TYPES:
+            defaults = DEFAULT_MATCH_RULES[key]
+            self.fields[f'{key}_points'] = forms.IntegerField(
+                required=False, min_value=1, max_value=99, initial=defaults['points_to'],
+                widget=forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 70px;',
+                                                'data-rule-points': key}))
+            self.fields[f'{key}_cap'] = forms.IntegerField(
+                required=False, min_value=1, max_value=99, initial=defaults['cap'],
+                widget=forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 70px;',
+                                                'data-rule-cap': key}))
+            self.fields[f'{key}_sets'] = forms.TypedChoiceField(
+                required=False, coerce=int, empty_value=None,
+                choices=self.SETS_CHOICES, initial=defaults['best_of'],
+                widget=forms.Select(attrs={'class': 'form-select', 'style': 'width: 80px;'}))
 
         # Populate the Signal group picker choices from cache.
         if 'signal_groups_picker' in self.fields:
@@ -174,6 +203,7 @@ class TournamentCreationForm(forms.ModelForm):
         checked afresh.
         """
         cleaned = super().clean()
+        cleaned['match_rules'] = self._clean_match_rules(cleaned)
         # These two drive the confirm banner and its hidden token in the template.
         self.unconfirmed_location = None
         self.location_confirmation_token = self.location_token(
@@ -203,6 +233,34 @@ class TournamentCreationForm(forms.ModelForm):
             raise forms.ValidationError(' '.join(parts) + ' Check the spelling, or confirm to create it anyway.')
 
         return cleaned
+
+    def _clean_match_rules(self, cleaned):
+        """Rules of the match types whose points were submitted, keyed by type.
+        A blank cap takes the suggested one (default_cap); a blank set count, one set."""
+        rules = {}
+        for key, label in MATCH_RULE_TYPES:
+            points = cleaned.get(f'{key}_points')
+            if points is None:
+                continue
+            cap = cleaned.get(f'{key}_cap') or default_cap(points)
+            if cap < points:
+                self.add_error(f'{key}_cap', f"{label}: the cap can't be below the points a game is played to.")
+                continue
+            rules[key] = {'points_to': points, 'cap': cap,
+                          'best_of': cleaned.get(f'{key}_sets') or 1}
+        return rules
+
+    def match_rule_rows(self):
+        """Bound fields per match type, for the rules table on the creation page."""
+        rows = []
+        for key, label in MATCH_RULE_TYPES:
+            fields = [self[f'{key}_{part}'] for part in ('points', 'cap', 'sets')]
+            rows.append({
+                'key': key, 'label': label,
+                'points': fields[0], 'cap': fields[1], 'sets': fields[2],
+                'errors': [error for field in fields for error in field.errors],
+            })
+        return rows
 
     @staticmethod
     def location_token(place, country):

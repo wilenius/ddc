@@ -5,6 +5,7 @@ from .rankings import RankingsUpdate
 from .scoring import MatchScore, PlayerScore, PairScore, ManualTiebreakResolution, ManualPoolTiebreakResolution
 from .tournament_types import (
     FourPairsSwedishFormat, EightPairsSwedishFormat, EurosFormat,
+    RoundRobinPlayoffsFormat, DoubleRoundRobinFormat,
     MonarchOfTheCourt5, MonarchOfTheCourt6, MonarchOfTheCourt7, MonarchOfTheCourt8,
     MonarchOfTheCourt9, MonarchOfTheCourt10, MonarchOfTheCourt11, MonarchOfTheCourt12,
     MonarchOfTheCourt13, MonarchOfTheCourt14, MonarchOfTheCourt15, MonarchOfTheCourt16
@@ -18,6 +19,7 @@ __all__ = [
     'RankingsUpdate',
     'MatchScore', 'PlayerScore', 'PairScore', 'ManualTiebreakResolution',
     'FourPairsSwedishFormat', 'EightPairsSwedishFormat', 'EurosFormat',
+    'RoundRobinPlayoffsFormat', 'DoubleRoundRobinFormat',
     'MonarchOfTheCourt5', 'MonarchOfTheCourt6', 'MonarchOfTheCourt7', 'MonarchOfTheCourt8',
     'MonarchOfTheCourt9', 'MonarchOfTheCourt10', 'MonarchOfTheCourt11', 'MonarchOfTheCourt12',
     'MonarchOfTheCourt13', 'MonarchOfTheCourt14', 'MonarchOfTheCourt15', 'MonarchOfTheCourt16',

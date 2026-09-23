@@ -314,8 +314,8 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
 ```
 
 ### Testing
-- Test suite has 168 tests, all passing as of 2026-07-28 — expect a green suite;
-  a failure means the change under test broke something
+- Test suite has 189 tests. As of 2026-09-23 all pass except two `test_signup`
+  failures that predate the multi-phase formats work (also failing on main)
 - `tests/test_tournament_access.py` covers location metadata/filtering and
   per-tournament director rights; tournament-creating tests need a `TC` (or
   `ADMIN`) user and must send `place`/`country` (plus `confirm_new_location`,
@@ -364,6 +364,30 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
   - Head-to-head records
   - Point differential
   - Automatic win integration
+
+- **Multi-phase pairs formats** (`MultiPhasePairsFormat` in `tournament_types.py`)
+  - A format is a list of stage specs (`STAGES`): round robins (one pool, snake-seeded
+    pools, or a top-half/bottom-half split of the previous pools; optionally
+    `cumulative` standings) and playoffs (top 4 only, or everyone in groups of 4).
+    Stage 1 is seeded by pair seed, later stages by the previous stage's standings,
+    generated via "Generate next phase". Pool standings, tiebreaks, placement-match
+    hook and final standings are shared by all formats
+  - Formats: `EurosFormat`, `RoundRobinPlayoffsFormat` (nationals: RR → semis, final,
+    bronze; 4-10 pairs), `DoubleRoundRobinFormat` (Uppsala: RR twice, the second
+    reseeded so the top two meet last and the leader stays on court 1; standings
+    count both; 3-10 pairs). A new combination is a new subclass with its `STAGES`,
+    an `ARCHETYPE_NAME` row (data migration) and an entry in `PAIRS_FORMAT_OPTIONS`
+  - Creation: PAIRS tournaments pick a "Playing format" (`pairs_format`, options that
+    don't fit the pair count are disabled; blank = first fitting option) and set
+    match rules per match type (points, cap, sets) → `TournamentChart.match_rules`
+    (keys in `MATCH_RULE_TYPES`; only the types the format plays are stored). The cap
+    defaults via `default_cap` (15 → 18, else +2). Plain round robins validate against
+    their `round_robin` rules; multi-phase formats fall back to `DEFAULT_MATCH_RULES`
+    (the Euros rules), so pre-existing Euros tournaments behave as before. Only the top
+    playoff group uses semifinal/final/bronze rules; lower placement groups use the
+    round-robin rules
+  - The old "number of stages" form field (repeated the same round robin N times) is gone
+  - Tests: `tournament_creator/tests/test_multi_phase_formats.py`
 
 - **Euros format (multi-phase pairs, 20 pairs)** — used at European Open 2024/2026
   - Archetype: `EurosFormat` in `tournament_types.py` (DB row "20 pairs euros format");

@@ -153,16 +153,6 @@
                         {% if form.end_date.errors %}<div class="invalid-feedback d-block">{{ form.end_date.errors|join:", " }}</div>{% endif %}
                     </div>
 
-                    {# Stages is hidden until a format actually uses it: the only multi-stage #}
-                    {# format is euros, which sets its own three stages. For every other format #}
-                    {# a value > 1 just repeats the identical round robin N times. The field is #}
-                    {# still rendered (as 1) because the category/archetype reload JS reads it. #}
-                    <div class="mb-3 d-none">
-                        <label for="{{ form.number_of_stages.id_for_label }}">Stages</label>
-                        {{ form.number_of_stages }}
-                        {% if form.number_of_stages.errors %}<div class="invalid-feedback d-block">{{ form.number_of_stages.errors|join:", " }}</div>{% endif %}
-                    </div>
-
                     <div class="mb-3">
                         <label for="{{ form.format_type.id_for_label }}" class="d-block">
                             Format
@@ -264,7 +254,7 @@
                                data-bs-toggle="tooltip"
                                data-bs-placement="right"
                                data-bs-html="true"
-                               title="<strong>Monarch of the Court:</strong> Cade Loving's formats for 5&ndash;16 players.<br><br><strong>Doubles:</strong> single round robin for 2&ndash;10 pairs. For exactly 20 pairs, the Euros format (originally devised by Malte &amp; Marc for the EO 2024)."></i>
+                               title="<strong>Monarch of the Court:</strong> Cade Loving's formats for 5&ndash;16 players.<br><br><strong>Doubles:</strong> round robin, round robin + top-4 playoffs, or double round robin for 2&ndash;10 pairs. For exactly 20 pairs, the Euros format (originally devised by Malte &amp; Marc for the EO 2024). Pick the playing format once the players are selected."></i>
                         </label>
                         {{ form.tournament_category }}
                         {% if form.tournament_category.errors %}<div class="invalid-feedback d-block">{{ form.tournament_category.errors|join:", " }}</div>{% endif %}
@@ -297,12 +287,72 @@
                         </label>
                         {{ moc_player_form.players }}
                         <small class="form-text text-muted d-block mt-1">
-                            The tournament format will be automatically selected based on the number of players you choose.
                             {% if selected_category == 'PAIRS' %}
                             Players will be paired in the order entered (1st & 2nd, 3rd & 4th, etc.).
+                            {% else %}
+                            The tournament format will be automatically selected based on the number of players you choose.
                             {% endif %}
                         </small>
                     </div>
+                    {% endif %}
+
+                    {% if selected_category == 'PAIRS' %}
+                    <div class="mb-3">
+                        <label for="{{ form.pairs_format.id_for_label }}">
+                            Playing format
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="How the tournament is played. Formats that don't fit the number of pairs selected are disabled."></i>
+                        </label>
+                        {# Rendered by hand: each option carries the pair counts it fits and the match types it plays #}
+                        <select name="{{ form.pairs_format.html_name }}" id="{{ form.pairs_format.id_for_label }}" class="form-select">
+                            {% for option in pairs_format_options %}
+                                <option value="{{ option.key }}"
+                                        data-pair-counts="{{ option.pair_counts_csv }}"
+                                        data-rule-types="{{ option.rule_types_csv }}"
+                                        data-description="{{ option.description }}"
+                                        {% if option.key == selected_pairs_format %}selected{% endif %}>{{ option.label }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted d-block mt-1" id="pairs-format-description"></small>
+                        {% if form.pairs_format.errors %}<div class="invalid-feedback d-block">{{ form.pairs_format.errors|join:", " }}</div>{% endif %}
+                    </div>
+
+                    <hr class="my-4">
+
+                    <h6 class="mb-3">
+                        Match rules
+                        <i class="bi bi-info-circle text-muted"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="right"
+                           title="Games are won by 2 points; the first team to reach the cap wins regardless. The cap follows the points (games to 15 are capped at 18, others at two over) unless you change it. Recorded scores that don't fit these rules ask for confirmation."></i>
+                    </h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle" style="max-width: 420px;">
+                            <thead>
+                                <tr>
+                                    <th>Match</th>
+                                    <th>Points</th>
+                                    <th>Cap</th>
+                                    <th>Sets</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in form.match_rule_rows %}
+                                    <tr data-rule-row="{{ row.key }}">
+                                        <td>{{ row.label }}</td>
+                                        <td>{{ row.points }}</td>
+                                        <td>{{ row.cap }}</td>
+                                        <td>{{ row.sets }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% for row in form.match_rule_rows %}
+                        {% for error in row.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    {% endfor %}
                     {% endif %}
                 </div>
             </div>
@@ -427,7 +477,6 @@ document.addEventListener('DOMContentLoaded', function() {
             var country = document.querySelector('input[name="country"]').value;
             var date = document.querySelector('input[name="date"]').value;
             var endDate = document.querySelector('input[name="end_date"]').value;
-            var numberOfStages = document.querySelector('input[name="number_of_stages"]').value;
             var formatType = document.querySelector('select[name="format_type"]').value;
             var nameDisplayFormat = document.querySelector('select[name="name_display_format"]').value;
             var notifyByEmail = document.querySelector('input[name="notify_by_email"]').checked;
@@ -444,7 +493,6 @@ document.addEventListener('DOMContentLoaded', function() {
                       "&country=" + encodeURIComponent(country) +
                       "&date=" + encodeURIComponent(date) +
                       "&end_date=" + encodeURIComponent(endDate) +
-                      "&number_of_stages=" + encodeURIComponent(numberOfStages) +
                       "&format_type=" + encodeURIComponent(formatType) +
                       "&name_display_format=" + encodeURIComponent(nameDisplayFormat) +
                       "&notify_by_email=" + notifyByEmail +
@@ -454,6 +502,56 @@ document.addEventListener('DOMContentLoaded', function() {
                       "&is_sandbox=" + isSandbox +
                       (setsPerMatch ? "&default_sets_per_match=" + encodeURIComponent(setsPerMatch) : "");
             window.location = url;
+        });
+    }
+
+    // Doubles playing format: disable formats that don't fit the selected pair
+    // count, describe the chosen one, and show only the match types it plays.
+    var pairsFormatSelect = document.getElementById('{{ form.pairs_format.id_for_label }}');
+    if (pairsFormatSelect) {
+        var formatDescription = document.getElementById('pairs-format-description');
+
+        function updatePairsFormat() {
+            var numPairs = Math.floor(($("#id_players").val() || []).length / 2);
+            var options = Array.prototype.slice.call(pairsFormatSelect.options);
+            options.forEach(function(option) {
+                var counts = option.dataset.pairCounts.split(',').map(Number);
+                // Nothing selected yet: leave every format available
+                option.disabled = numPairs > 0 && counts.indexOf(numPairs) === -1;
+            });
+            var selected = pairsFormatSelect.options[pairsFormatSelect.selectedIndex];
+            if (selected.disabled) {
+                var firstFitting = options.find(function(option) { return !option.disabled; });
+                if (firstFitting) {
+                    pairsFormatSelect.value = firstFitting.value;
+                    selected = firstFitting;
+                }
+            }
+            formatDescription.textContent = selected.dataset.description;
+            var ruleTypes = selected.dataset.ruleTypes.split(',');
+            document.querySelectorAll('[data-rule-row]').forEach(function(row) {
+                var used = ruleTypes.indexOf(row.dataset.ruleRow) !== -1;
+                row.style.display = used ? '' : 'none';
+                // Hidden rows aren't submitted, so their rules aren't stored
+                row.querySelectorAll('input, select').forEach(function(el) { el.disabled = !used; });
+            });
+        }
+
+        pairsFormatSelect.addEventListener('change', updatePairsFormat);
+        $("#id_players").on('change', updatePairsFormat);
+        updatePairsFormat();
+
+        // The cap follows the points (default_cap in tournament_types.py) until
+        // the director edits the cap by hand.
+        document.querySelectorAll('[data-rule-points]').forEach(function(pointsInput) {
+            var capInput = document.querySelector('[data-rule-cap="' + pointsInput.dataset.rulePoints + '"]');
+            capInput.addEventListener('input', function() { capInput.dataset.edited = '1'; });
+            pointsInput.addEventListener('input', function() {
+                var points = parseInt(pointsInput.value, 10);
+                if (!capInput.dataset.edited && points > 0) {
+                    capInput.value = points === 15 ? 18 : points + 2;
+                }
+            });
         });
     }
 

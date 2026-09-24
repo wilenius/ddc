@@ -4,7 +4,7 @@ from django.urls import reverse
 from ..forms import TournamentCreationForm
 from ..models import (Player, Pair, TournamentChart, TournamentArchetype, MatchScore, User)
 from ..models.tournament_types import (
-    DoubleRoundRobinFormat, RoundRobinPlayoffsFormat, get_implementation,
+    DoubleRoundRobinFormat, RoundRobinPlayoffsFormat, describe_match_rules, get_implementation,
 )
 
 
@@ -221,6 +221,25 @@ class MatchRulesTest(MultiPhaseTestBase):
         final, bronze = self.stages[1].matchups.filter(round_number=2).order_by('court_number')
         self.assertEqual(self.impl.get_score_rules(final), {'points_to': 21, 'cap': 25, 'best_of': 5})
         self.assertEqual(self.impl.get_score_rules(bronze), {'points_to': 11, 'cap': 13, 'best_of': 1})
+
+    def test_rules_described_in_structure_notes(self):
+        self.tournament.match_rules = {
+            'round_robin': {'points_to': 15, 'cap': 18, 'best_of': 1},
+            'semifinal': {'points_to': 21, 'cap': 23, 'best_of': 3},
+        }
+        self.tournament.show_structure = True
+        self.tournament.save()
+        self.assertEqual(describe_match_rules(self.tournament), [
+            'Round robin: 1 set to 15, cap 18',
+            'Semifinals: best of 3 sets to 21, cap 23',
+            'Bronze match: 1 set to 21, cap 23',  # default
+            'Final: best of 3 sets to 21, cap 23',  # default
+        ])
+        User.objects.create_user(username='viewer', password='test123', role='SPECTATOR')
+        client = Client()
+        client.login(username='viewer', password='test123')
+        response = client.get(reverse('tournament_detail', args=[self.tournament.pk]))
+        self.assertContains(response, 'Semifinals: best of 3 sets to 21, cap 23')
 
 
 class MultiPhaseCreationViewTest(TestCase):

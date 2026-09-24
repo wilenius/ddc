@@ -636,11 +636,16 @@
                         </tbody>
                     </table>
                 </div>
-                {% if archetype.notes %}
+                {% if archetype.notes or match_rule_notes %}
                 <div class="card-footer">
                     <small class="text-muted">
                         <strong>Notes:</strong><br>
-                        {{ archetype.notes|linebreaksbr }}
+                        {% if archetype.notes %}{{ archetype.notes|linebreaksbr }}{% endif %}
+                        {% if match_rule_notes %}
+                        <ul class="mb-0 {% if archetype.notes %}mt-2{% endif %} ps-3">
+                            {% for line in match_rule_notes %}<li>{{ line }}</li>{% endfor %}
+                        </ul>
+                        {% endif %}
                     </small>
                 </div>
                 {% endif %}

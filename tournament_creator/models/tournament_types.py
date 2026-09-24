@@ -861,6 +861,42 @@ def pairs_format_option(key, num_pairs):
     return option
 
 
+def describe_match_rules(tournament):
+    """
+    Human-readable match rules of a tournament, one line per match type, e.g.
+    "Semifinals: best of 3 sets to 15, cap 18". MoC tournaments only have a set
+    count; plain round robins created before match rules existed have none.
+    """
+    archetype = tournament.archetype
+    if archetype is None:
+        return []
+    if archetype.tournament_category == 'MOC':
+        sets = tournament.default_sets_per_match
+        return [f"Matches: {sets} set{'s' if sets != 1 else ''}"]
+
+    impl = get_implementation(archetype)
+    option = next((o for o in PAIRS_FORMAT_OPTIONS if o['archetype'] == archetype.name),
+                  PAIRS_FORMAT_OPTIONS[0])
+    if getattr(impl, 'is_multi_phase', False):
+        rules = impl.get_match_rules(tournament)
+    else:
+        rules = tournament.match_rules or {}
+
+    labels = dict(MATCH_RULE_TYPES)
+    lines = []
+    for key in option['rule_types']:
+        rule = rules.get(key)
+        if not rule:
+            continue
+        best_of = rule.get('best_of') or 1
+        sets = f"best of {best_of} sets" if best_of > 1 else "1 set"
+        lines.append(f"{labels[key]}: {sets} to {rule['points_to']}, cap {rule['cap']}")
+    if len(lines) > 1 and isinstance(impl, EurosFormat):
+        lines.append("Only the top playoff group plays by the semifinal, final and bronze "
+                     "rules; the other placement groups play by the round-robin rules.")
+    return lines
+
+
 # -- Monarch of the Court base --
 class MoCTournamentArchetype(TournamentArchetype):
     class Meta:

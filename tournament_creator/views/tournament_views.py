@@ -15,7 +15,7 @@ from datetime import time
 from ..models.base_models import (
     TournamentChart, Matchup, TournamentArchetype, Player, Pair, Pool, TournamentDirector
 )
-from ..models.tournament_types import PairsTournamentArchetype
+from ..models.tournament_types import PairsTournamentArchetype, describe_match_rules
 from ..models.scoring import MatchScore, PlayerScore, ManualTiebreakResolution, ManualPoolTiebreakResolution
 from ..models.logging import MatchResultLog
 from ..models.notifications import NotificationBackendSetting # Added import
@@ -628,6 +628,7 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
         # Generate tournament structure if show_structure is enabled
         if tournament.show_structure:
             context['tournament_structure'] = self._generate_tournament_structure(tournament, all_players, use_last_names)
+            context['match_rule_notes'] = describe_match_rules(tournament)
 
         # Set display names for the Pairs/Players list block
         if is_pairs_tournament:

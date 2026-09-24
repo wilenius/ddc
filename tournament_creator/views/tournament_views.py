@@ -228,6 +228,14 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
         elif tournament_category == 'PAIRS':
             # For pairs, we'll let the user select players and auto-detect pairs count
             context['moc_player_form'] = MoCPlayerSelectForm(self.request.POST or None)
+            # The pair editor's rows (player1, player2), refilled after a failed submit.
+            # Slots are submitted as 'players' in row order; an empty slot is ''.
+            submitted = self.request.POST.getlist('players')
+            by_id = Player.objects.in_bulk([pid for pid in submitted if pid.isdigit()])
+            slots = [by_id.get(int(pid)) if pid.isdigit() else None for pid in submitted]
+            if len(slots) % 2:
+                slots.append(None)
+            context['pair_rows'] = [(slots[i], slots[i + 1]) for i in range(0, len(slots), 2)] or [(None, None)]
         else:
             context['moc_player_form'] = None
 
@@ -240,6 +248,19 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
         # Auto-detect archetype based on player count and category
         form = self.get_form_class()(request.POST)
         moc_player_form = MoCPlayerSelectForm(request.POST)
+
+        if tournament_category == 'PAIRS':
+            # The pair editor submits both slots of every row, so an empty slot
+            # ('') would otherwise shift everyone after it into the wrong pair.
+            submitted = request.POST.getlist('players')
+            filled = [pid for pid in submitted if pid]
+            player_data = request.POST.copy()
+            player_data.setlist('players', filled)
+            moc_player_form = MoCPlayerSelectForm(player_data)
+            if len(filled) != len(submitted):
+                form.add_error(None, "Every pair needs two players.")
+            elif len(set(filled)) != len(filled):
+                form.add_error(None, "A player can only be in one pair.")
 
         if not form.is_valid() or not moc_player_form.is_valid():
             context = self.get_context_data(object=None)

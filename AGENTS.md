@@ -314,7 +314,7 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
 ```
 
 ### Testing
-- Test suite has 193 tests. As of 2026-09-23 all pass except two `test_signup`
+- Test suite has 198 tests. As of 2026-09-24 all pass except two `test_signup`
   failures that predate the multi-phase formats work (also failing on main)
 - `tests/test_tournament_access.py` covers location metadata/filtering and
   per-tournament director rights; tournament-creating tests need a `TC` (or

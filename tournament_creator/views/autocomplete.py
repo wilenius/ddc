@@ -28,7 +28,10 @@ class PlayerAutocomplete(autocomplete.Select2QuerySetView):
             
         if self.q:
             logger.info("Search query: %s", self.q)
-            qs = qs.filter(Q(first_name__icontains=self.q) | Q(last_name__icontains=self.q))
+            # Every word must match the first or last name, so "tuomas k" works
+            for term in self.q.split():
+                qs = qs.filter(Q(first_name__icontains=term) | Q(last_name__icontains=term))
+            qs = qs.order_by('last_name', 'first_name')
             logger.info("Filtered players count: %d", qs.count())
         else:
             # Return an initial set of players even without a search query

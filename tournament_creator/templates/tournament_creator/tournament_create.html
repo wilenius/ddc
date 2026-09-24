@@ -38,6 +38,35 @@
 .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
     color: #f8f9fa !important;
 }
+
+/* Doubles pair editor: one row per pair, two type-to-search player fields */
+.pair-list { counter-reset: pair; }
+.pair-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.375rem 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+.pair-row:last-child { border-bottom: none; }
+.pair-row .pair-number {
+    width: 1.75rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.pair-row .pair-number::before { counter-increment: pair; content: counter(pair); }
+.pair-slot { position: relative; flex: 1 1 10rem; min-width: 10rem; }
+.pair-row .pair-remove { padding: 0.25rem 0.5rem; }
+.pair-suggestions {
+    top: 100%;
+    left: 0;
+    width: 100%;
+    margin-top: 2px;
+    max-height: 16rem;
+    overflow-y: auto;
+}
+.pair-suggestions .dropdown-item { cursor: pointer; }
 </style>
 {% endblock %}
 
@@ -275,24 +304,60 @@
                     </div>
                     {% endif %}
 
-                    {% if selected_category %}
+                    {% if selected_category == 'MOC' %}
                     <div class="mb-3">
                         <label for="{{ moc_player_form.players.id_for_label }}">
                             Players
-                            {% if selected_category == 'MOC' %}
-                                <small class="text-muted">(Monarch of the Court)</small>
-                            {% elif selected_category == 'PAIRS' %}
-                                <small class="text-muted">(select an even number for Doubles)</small>
-                            {% endif %}
+                            <small class="text-muted">(Monarch of the Court)</small>
                         </label>
                         {{ moc_player_form.players }}
                         <small class="form-text text-muted d-block mt-1">
-                            {% if selected_category == 'PAIRS' %}
-                            Players will be paired in the order entered (1st & 2nd, 3rd & 4th, etc.).
-                            {% else %}
                             The tournament format will be automatically selected based on the number of players you choose.
-                            {% endif %}
                         </small>
+                        {% if moc_player_form.players.errors %}<div class="invalid-feedback d-block">{{ moc_player_form.players.errors|join:", " }}</div>{% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if selected_category == 'PAIRS' %}
+                    <div class="mb-3">
+                        <label class="d-block">
+                            Pairs
+                            <span class="text-muted small" id="pair-count" aria-live="polite"></span>
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="Pick both players of each pair. A new row appears when the last one is full. Seeds follow the pairs' combined ranking points, so the row order doesn't matter."></i>
+                        </label>
+                        {# Each slot submits one 'players' value in row order (empty slot = ''), #}
+                        {# so the view pairs slots 1&2, 3&4, ... exactly as shown here. #}
+                        <ol class="pair-list list-unstyled mb-2" id="pair-list">
+                            {% for player1, player2 in pair_rows %}
+                                <li class="pair-row">
+                                    <span class="pair-number text-muted"></span>
+                                    <div class="pair-slot">
+                                        <input type="text" class="form-control pair-input" placeholder="Player" value="{{ player1|default:'' }}"
+                                               autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-label="Player">
+                                        <input type="hidden" name="players" value="{{ player1.id|default:'' }}">
+                                        <ul class="dropdown-menu pair-suggestions" role="listbox"></ul>
+                                    </div>
+                                    <span class="pair-amp text-muted">&amp;</span>
+                                    <div class="pair-slot">
+                                        <input type="text" class="form-control pair-input" placeholder="Partner" value="{{ player2|default:'' }}"
+                                               autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-label="Partner">
+                                        <input type="hidden" name="players" value="{{ player2.id|default:'' }}">
+                                        <ul class="dropdown-menu pair-suggestions" role="listbox"></ul>
+                                    </div>
+                                    <button type="button" class="btn btn-link text-muted pair-remove" aria-label="Remove pair" title="Remove pair">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </li>
+                            {% endfor %}
+                        </ol>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="add-pair">
+                            <i class="bi bi-plus-lg"></i> Add pair
+                        </button>
+                        <div class="invalid-feedback d-block" id="pair-error" aria-live="polite"></div>
+                        {% if moc_player_form.players.errors %}<div class="invalid-feedback d-block">Add at least one pair.</div>{% endif %}
                     </div>
                     {% endif %}
 
@@ -357,7 +422,7 @@
                 </div>
             </div>
 
-            {% if selected_category %}
+            {% if selected_category == 'MOC' %}
                 <script>
                     $(document).ready(function() {
                         console.log("Tournament create page ready");
@@ -505,6 +570,266 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Doubles pair editor. Each slot is a text field that searches players as you
+    // type (arrow keys + Enter/Tab pick one) and a hidden 'players' input holding
+    // the picked player's id. Players picked anywhere are left out of the results.
+    var pairList = document.getElementById('pair-list');
+    function slotPlayerId(slot) { return slot.querySelector('input[name="players"]').value; }
+    function completePairCount() {
+        if (!pairList) return 0;
+        return Array.from(pairList.children).filter(function(row) {
+            return Array.from(row.querySelectorAll('.pair-slot')).every(slotPlayerId);
+        }).length;
+    }
+    if (pairList) {
+        var autocompleteUrl = "{% url 'player-autocomplete' %}";
+        var pairCount = document.getElementById('pair-count');
+        var pairError = document.getElementById('pair-error');
+        var slotCounter = 0;
+
+        function rows() { return Array.from(pairList.children); }
+        function allSlots() { return Array.from(pairList.querySelectorAll('.pair-slot')); }
+        function slotText(slot) { return slot.querySelector('.pair-input').value.trim(); }
+        function isEmptyRow(row) {
+            return Array.from(row.querySelectorAll('.pair-slot')).every(function(slot) {
+                return !slotPlayerId(slot) && !slotText(slot);
+            });
+        }
+        // A row is incomplete when it has something in it but not two picked players
+        function isIncompleteRow(row) {
+            return !isEmptyRow(row) && !Array.from(row.querySelectorAll('.pair-slot')).every(slotPlayerId);
+        }
+
+        function setupSlot(slot) {
+            var input = slot.querySelector('.pair-input');
+            var hidden = slot.querySelector('input[name="players"]');
+            var menu = slot.querySelector('.pair-suggestions');
+            var results = [], active = -1, timer = null, requestId = 0;
+            menu.id = 'pair-suggestions-' + (++slotCounter);
+            input.setAttribute('aria-controls', menu.id);
+
+            function close() {
+                menu.classList.remove('show');
+                menu.innerHTML = '';
+                input.setAttribute('aria-expanded', 'false');
+                input.removeAttribute('aria-activedescendant');
+                results = [];
+                active = -1;
+            }
+
+            function highlight(index) {
+                active = index;
+                Array.from(menu.children).forEach(function(item, i) {
+                    item.classList.toggle('active', i === index);
+                    item.setAttribute('aria-selected', i === index ? 'true' : 'false');
+                });
+                var current = menu.children[index];
+                if (current && current.id) {
+                    input.setAttribute('aria-activedescendant', current.id);
+                    current.scrollIntoView({block: 'nearest'});
+                }
+            }
+
+            function render() {
+                menu.innerHTML = '';
+                if (!results.length) {
+                    var empty = document.createElement('li');
+                    empty.className = 'dropdown-item-text text-muted small';
+                    empty.textContent = 'No matching players';
+                    menu.appendChild(empty);
+                }
+                results.forEach(function(result, i) {
+                    var item = document.createElement('li');
+                    item.className = 'dropdown-item';
+                    item.id = menu.id + '-' + i;
+                    item.setAttribute('role', 'option');
+                    item.textContent = result.text;
+                    // mousedown, not click: picks before the input loses focus
+                    item.addEventListener('mousedown', function(event) {
+                        event.preventDefault();
+                        pick(i, true);
+                    });
+                    item.addEventListener('mousemove', function() { if (active !== i) highlight(i); });
+                    menu.appendChild(item);
+                });
+                menu.classList.add('show');
+                input.setAttribute('aria-expanded', 'true');
+                highlight(results.length ? 0 : -1);
+            }
+
+            function search() {
+                var term = input.value.trim();
+                clearTimeout(timer);
+                if (!term) { close(); return; }
+                timer = setTimeout(function() {
+                    var thisRequest = ++requestId;
+                    var taken = allSlots().filter(function(s) { return s !== slot; }).map(slotPlayerId).filter(Boolean);
+                    var params = new URLSearchParams({q: term});
+                    taken.forEach(function(id) { params.append('selected', id); });
+                    fetch(autocompleteUrl + '?' + params, {
+                        headers: {'X-Requested-With': 'XMLHttpRequest'},
+                        credentials: 'same-origin'
+                    })
+                        .then(function(response) { return response.json(); })
+                        .then(function(data) {
+                            // Ignore stale responses and ones that arrive after leaving the field
+                            if (thisRequest !== requestId || document.activeElement !== input) return;
+                            results = data.results.filter(function(r) { return taken.indexOf(String(r.id)) === -1; });
+                            render();
+                        });
+                }, 150);
+            }
+
+            // Returns the next slot when it still needs a player, for moving on to it
+            function pick(index, focusNext) {
+                var result = results[index];
+                hidden.value = result.id;
+                input.value = result.text;
+                input.classList.remove('is-invalid');
+                close();
+                ensureTrailingEmptyRow();
+                refresh();
+                var slots = allSlots();
+                var next = slots[slots.indexOf(slot) + 1];
+                if (next && !slotPlayerId(next) && !slotText(next)) {
+                    if (focusNext) next.querySelector('.pair-input').focus();
+                    return next;
+                }
+                return null;
+            }
+
+            input.addEventListener('input', function() {
+                // Editing the text un-picks the player until a new one is picked
+                if (hidden.value) { hidden.value = ''; refresh(); }
+                input.classList.remove('is-invalid');
+                search();
+            });
+
+            input.addEventListener('keydown', function(event) {
+                var open = menu.classList.contains('show');
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    if (!open) { search(); return; }
+                    if (!results.length) return;
+                    var step = event.key === 'ArrowDown' ? 1 : -1;
+                    highlight((active + step + results.length) % results.length);
+                } else if (event.key === 'Enter') {
+                    if (open) {
+                        event.preventDefault();
+                        if (active >= 0) pick(active, true);
+                    }
+                } else if (event.key === 'Tab' && !event.shiftKey) {
+                    if (open && active >= 0) {
+                        var next = pick(active, false);
+                        if (next) {
+                            event.preventDefault();
+                            next.querySelector('.pair-input').focus();
+                        }
+                    }
+                } else if (event.key === 'Escape') {
+                    if (open) { event.preventDefault(); close(); }
+                }
+            });
+
+            input.addEventListener('focus', function() {
+                // Picked name: select it so typing replaces it
+                if (hidden.value) setTimeout(function() { input.select(); }, 0);
+                else if (input.value.trim()) search();
+            });
+
+            input.addEventListener('blur', function() {
+                close();
+                if (input.value.trim() && !hidden.value) input.classList.add('is-invalid');
+            });
+        }
+
+        function addRow() {
+            var row = rows()[0].cloneNode(true);
+            row.querySelectorAll('.pair-input').forEach(function(input) {
+                input.value = '';
+                input.classList.remove('is-invalid');
+                input.removeAttribute('aria-activedescendant');
+                input.setAttribute('aria-expanded', 'false');
+            });
+            row.querySelectorAll('input[name="players"]').forEach(function(hidden) {
+                hidden.value = '';
+                hidden.disabled = false;
+            });
+            row.querySelectorAll('.pair-suggestions').forEach(function(menu) {
+                menu.innerHTML = '';
+                menu.classList.remove('show');
+            });
+            pairList.appendChild(row);
+            row.querySelectorAll('.pair-slot').forEach(setupSlot);
+            return row;
+        }
+
+        function ensureTrailingEmptyRow() {
+            var all = rows();
+            if (!isEmptyRow(all[all.length - 1])) addRow();
+        }
+
+        function refresh() {
+            var complete = completePairCount();
+            pairCount.textContent = complete ? '(' + complete + (complete === 1 ? ' pair)' : ' pairs)') : '';
+            if (!pairList.querySelector('.is-invalid')) pairError.textContent = '';
+            document.dispatchEvent(new Event('pairs:changed'));
+        }
+
+        allSlots().forEach(setupSlot);
+
+        pairList.addEventListener('click', function(event) {
+            var button = event.target.closest('.pair-remove');
+            if (!button) return;
+            var row = button.closest('.pair-row');
+            if (rows().length > 1) {
+                row.remove();
+            } else {
+                row.querySelectorAll('.pair-input, input[name="players"]').forEach(function(el) { el.value = ''; });
+                row.querySelectorAll('.pair-input').forEach(function(el) { el.classList.remove('is-invalid'); });
+            }
+            ensureTrailingEmptyRow();
+            refresh();
+        });
+
+        document.getElementById('add-pair').addEventListener('click', function() {
+            ensureTrailingEmptyRow();
+            var all = rows();
+            all[all.length - 1].querySelector('.pair-input').focus();
+        });
+
+        // Empty rows aren't submitted; a half-filled row would pair the wrong players.
+        pairList.closest('form').addEventListener('submit', function(event) {
+            var incomplete = rows().filter(isIncompleteRow);
+            if (incomplete.length) {
+                event.preventDefault();
+                incomplete.forEach(function(row) {
+                    row.querySelectorAll('.pair-slot').forEach(function(slot) {
+                        if (!slotPlayerId(slot)) slot.querySelector('.pair-input').classList.add('is-invalid');
+                    });
+                });
+                pairError.textContent = incomplete.length === 1
+                    ? 'Pair ' + (rows().indexOf(incomplete[0]) + 1) + ' needs two players picked from the list.'
+                    : 'Some pairs need two players picked from the list.';
+                pairList.querySelector('.is-invalid').focus();
+                return;
+            }
+            rows().forEach(function(row) {
+                if (isEmptyRow(row)) {
+                    row.querySelectorAll('input[name="players"]').forEach(function(h) { h.disabled = true; });
+                }
+            });
+        });
+
+        // Coming back to the page from history: re-enable what the submit disabled
+        window.addEventListener('pageshow', function() {
+            pairList.querySelectorAll('input[name="players"]').forEach(function(h) { h.disabled = false; });
+        });
+
+        ensureTrailingEmptyRow();
+        refresh();
+    }
+
     // Doubles playing format: disable formats that don't fit the selected pair
     // count, describe the chosen one, and show only the match types it plays.
     var pairsFormatSelect = document.getElementById('{{ form.pairs_format.id_for_label }}');
@@ -512,7 +837,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var formatDescription = document.getElementById('pairs-format-description');
 
         function updatePairsFormat() {
-            var numPairs = Math.floor(($("#id_players").val() || []).length / 2);
+            var numPairs = completePairCount();
             var options = Array.prototype.slice.call(pairsFormatSelect.options);
             options.forEach(function(option) {
                 var counts = option.dataset.pairCounts.split(',').map(Number);
@@ -538,7 +863,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         pairsFormatSelect.addEventListener('change', updatePairsFormat);
-        $("#id_players").on('change', updatePairsFormat);
+        document.addEventListener('pairs:changed', updatePairsFormat);
         updatePairsFormat();
 
         // The cap follows the points (default_cap in tournament_types.py) until

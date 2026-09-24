@@ -312,6 +312,34 @@ class MultiPhaseCreationViewTest(TestCase):
         self.assertEqual(impl.get_score_rules(tournament.matchups.first()),
                          {'points_to': 11, 'cap': 13, 'best_of': 3})
 
+    def test_pairs_follow_editor_rows(self):
+        a, b, c, d = self.players[:4]
+        self.assertEqual(self.create(2, players=[c.id, a.id, d.id, b.id]).status_code, 302)
+        tournament = TournamentChart.objects.latest('id')
+        self.assertEqual({frozenset((p.player1_id, p.player2_id)) for p in tournament.pairs.all()},
+                         {frozenset((c.id, a.id)), frozenset((d.id, b.id))})
+
+    def test_half_filled_pair_is_rejected(self):
+        a, b, c = self.players[:3]
+        response = self.create(2, players=[a.id, '', b.id, c.id])
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Every pair needs two players.')
+        self.assertFalse(TournamentChart.objects.exists())
+        # The rows come back as entered, the gap included
+        self.assertEqual(response.context['pair_rows'], [(a, None), (b, c)])
+
+    def test_player_in_two_pairs_is_rejected(self):
+        a, b, c = self.players[:3]
+        response = self.create(2, players=[a.id, b.id, a.id, c.id])
+        self.assertContains(response, 'A player can only be in one pair.')
+        self.assertFalse(TournamentChart.objects.exists())
+
+    def test_player_search_matches_every_word(self):
+        Player.objects.create(first_name='Tuomas', last_name='Kivi', ranking=50)
+        Player.objects.create(first_name='Tuomas', last_name='Aho', ranking=51)
+        response = self.client.get(reverse('player-autocomplete'), {'q': 'tuomas ki'})
+        self.assertEqual([r['text'] for r in response.json()['results']], ['Tuomas Kivi'])
+
     def test_blank_format_picks_plain_round_robin(self):
         self.assertEqual(self.create(6).status_code, 302)
         tournament = TournamentChart.objects.latest('id')
@@ -335,6 +363,8 @@ class MultiPhaseCreationViewTest(TestCase):
         response = self.client.get(reverse('tournament_create') + '?tournament_category=PAIRS')
         self.assertContains(response, 'Round robin + top-4 playoffs')
         self.assertContains(response, 'data-rule-row="semifinal"')
+        # The pair editor starts with one empty pair: two player slots
+        self.assertContains(response, 'class="pair-slot"', count=2)
 
     def test_detail_page_through_the_playoffs(self):
         self.create(4, pairs_format='RR_PLAYOFFS')

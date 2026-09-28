@@ -1,0 +1,59 @@
+{# One match of a league's by-date schedule (tournament_detail) #}
+<tr>
+    <td style="width: 60%;">
+        {% if matchup.match_date %}
+        {# Per-match calendar popup trigger wrapping icon and time #}
+        <div class="d-inline-block me-2 match-calendar-container"
+             data-date="{{ matchup.match_date|date:'Y-m-d' }}"
+             data-time="{% if matchup.match_time %}{{ matchup.match_time|time:'H:i' }}{% endif %}"
+             data-summary="{{ matchup.get_team1_player1.display_name }} & {{ matchup.get_team1_player2.display_name }} vs {{ matchup.get_team2_player1.display_name }} & {{ matchup.get_team2_player2.display_name }}">
+            
+            <a href="#" class="add-match-calendar text-decoration-none d-inline-flex align-items-center" title="Add this match to calendar">
+                <i class="bi bi-calendar-plus me-1"></i>
+                {% if matchup.match_time %}
+                    <strong>{{ matchup.match_time|time:"H:i" }}</strong>
+                {% endif %}
+            </a>
+            
+            <div class="match-calendar-popup card shadow-sm p-2 small d-none position-absolute" style="z-index: 1000;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <strong>Add match to your calendar</strong>
+                    <button type="button" class="btn btn-sm btn-link text-danger close-match-popup" aria-label="Close">&times;</button>
+                </div>
+                <div class="match-calendar-options" data-init="0">
+                    <a href="#" class="match-gc-link">Google</a> |
+                    <a href="#" class="match-ics-link">Apple</a> |
+                    <a href="#" class="match-outlook-link">Outlook</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <span class="matchup-display">
+            {{ matchup.get_team1_player1.display_name }} & {{ matchup.get_team1_player2.display_name }}
+            vs
+            {{ matchup.get_team2_player1.display_name }} & {{ matchup.get_team2_player2.display_name }}
+        </span>
+        {% if show_league_courts and matchup.match_date %}
+            <small class="text-muted text-nowrap">&middot; Court {{ matchup.court_number }}</small>
+        {% endif %}
+    </td>
+    <td style="width: 40%;">
+        {% if matchup.scores.all %}
+            <span class="match-scores">
+                {% for score in matchup.scores.all %}
+                    {{ score.team1_score }}–{{ score.team2_score }}{% if not forloop.last %}, {% endif %}
+                {% endfor %}
+            </span>
+            {% if can_record_scores %}
+                {% include "tournament_creator/partials/record_result_button.html" with label="Edit" button_class="btn-outline-primary btn-sm ms-2" %}
+            {% endif %}
+        {% else %}
+            {% if can_record_scores %}
+                {% include "tournament_creator/partials/record_result_button.html" with label="Record Score" button_class="btn-primary btn-sm" %}
+            {% else %}
+                <span class="text-muted">Not played</span>
+            {% endif %}
+        {% endif %}
+    </td>
+</tr>

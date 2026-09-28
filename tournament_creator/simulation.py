@@ -89,3 +89,56 @@ def record_result(tournament, matchup, team1_scores, team2_scores, user):
     result = json.loads(response.content)
     if result.get('status') != 'success':
         raise ValueError(f"Failed to record matchup {matchup.id}: {result.get('message')}")
+
+
+def simulate_signups(tournament, user, rng=random):
+    """
+    Fill a sign-up with random ranking players (doubles: random pairs) up to its
+    maximum, as if they had signed up themselves. Returns the number of entries added.
+    """
+    from .models.base_models import Player, TournamentSignup
+    signups = list(tournament.signups.all())
+    entered = {p.id for s in signups for p in s.players()}
+    free = list(Player.objects.exclude(id__in=entered))
+    rng.shuffle(free)
+    per_entry = 2 if tournament.signup_category == 'PAIRS' else 1
+    wanted = max(0, (tournament.signup_max or len(signups)) - len(signups))
+    added = 0
+    while added < wanted and len(free) >= per_entry:
+        player = free.pop()
+        partner = free.pop() if per_entry == 2 else None
+        TournamentSignup.objects.create(tournament=tournament, player=player, partner=partner,
+                                        signed_up_by=user)
+        added += 1
+    return added
+
+
+def simulate_availability(tournament, rng=random):
+    """
+    Pick league time slots for every signed-up player who hasn't answered yet:
+    each player can make a random share of the slots, skips some days entirely,
+    and doubles partners mostly pick alike. Returns the number of players answered.
+    """
+    from .models.base_models import LeagueAvailability
+    slots = list(tournament.league_slots.all())
+    days = {s.date for s in slots}
+    answered = 0
+    for signup in tournament.signups.select_related('player', 'partner'):
+        first_picks = None
+        for player in signup.players():
+            if signup.times_saved_at(player) is not None:
+                continue
+            rate = rng.uniform(0.4, 0.85)
+            free_days = {d for d in days if rng.random() > 0.25}
+            picks = {s.id for s in slots if s.date in free_days and rng.random() < rate}
+            if first_picks is not None:
+                # A partner's week often looks like their partner's
+                picks = {sid for sid in first_picks if rng.random() < 0.8} | {
+                    sid for sid in picks if rng.random() < 0.3}
+            first_picks = picks
+            LeagueAvailability.objects.filter(player=player, slot__tournament=tournament).delete()
+            LeagueAvailability.objects.bulk_create(
+                LeagueAvailability(signup=signup, player=player, slot_id=sid) for sid in picks)
+            signup.mark_times_saved(player)
+            answered += 1
+    return answered

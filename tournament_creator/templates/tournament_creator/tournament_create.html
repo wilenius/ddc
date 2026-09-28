@@ -341,6 +341,80 @@
                             <small class="form-text text-muted d-block mt-1" id="signup-limits-note"></small>
                             {% if form.signup_max.errors %}<div class="invalid-feedback d-block">{{ form.signup_max.errors|join:", " }}</div>{% endif %}
                         </div>
+
+                        {# Sign-up leagues: the times matches can be played at, and the scheduling rules #}
+                        <div id="league-settings" {% if form.format_type.value != 'LEAGUE' %}style="display: none;"{% endif %}>
+                            <hr class="my-4">
+                            <h6 class="mb-3">
+                                League time slots
+                                <i class="bi bi-info-circle text-muted"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="right"
+                                   title="The days and start times matches can be played at; each start time fits one match per court. Players pick the ones they can make when signing up, and closing the sign-up schedules the matches into them. Directors can add and remove slots later."></i>
+                            </h6>
+                            <div id="slot-rows">
+                                {% for day, times in slot_rows %}
+                                <div class="slot-row d-flex flex-wrap align-items-center gap-2 mb-2">
+                                    <input type="date" name="slot_date" value="{{ day }}" class="form-control" style="max-width: 200px;" aria-label="Day">
+                                    <input type="text" name="slot_times" value="{{ times }}" class="form-control" style="max-width: 260px;"
+                                           placeholder="e.g., 18:00, 19:00, 20:00" aria-label="Start times">
+                                    <button type="button" class="btn btn-sm btn-outline-danger remove-slot-row" title="Remove day">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <button type="button" class="btn btn-outline-secondary btn-sm mb-3" id="add-slot-row">
+                                <i class="bi bi-plus-lg"></i> Add a day
+                            </button>
+
+                            <div class="mb-3">
+                                <label for="{{ form.league_courts.id_for_label }}">
+                                    Courts in use
+                                    <i class="bi bi-info-circle text-muted"
+                                       data-bs-toggle="tooltip"
+                                       data-bs-placement="right"
+                                       title="How many league matches can be played at the same time."></i>
+                                </label>
+                                {{ form.league_courts }}
+                                {% if form.league_courts.errors %}<div class="invalid-feedback d-block">{{ form.league_courts.errors|join:", " }}</div>{% endif %}
+                            </div>
+                            <div class="mb-3">
+                                <label for="{{ form.league_max_matches_per_day.id_for_label }}">
+                                    Matches per player per day <span class="text-muted">(optional)</span>
+                                    <i class="bi bi-info-circle text-muted"
+                                       data-bs-toggle="tooltip"
+                                       data-bs-placement="right"
+                                       title="The most matches a player plays in one day. Leave empty for no limit."></i>
+                                </label>
+                                {{ form.league_max_matches_per_day }}
+                                {% if form.league_max_matches_per_day.errors %}<div class="invalid-feedback d-block">{{ form.league_max_matches_per_day.errors|join:", " }}</div>{% endif %}
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check" style="padding-left: 0;">
+                                    {{ form.league_back_to_back }}
+                                    <label class="form-check-label" for="{{ form.league_back_to_back.id_for_label }}" style="padding-left: 1.5em;">
+                                        Allow back-to-back matches
+                                        <i class="bi bi-info-circle text-muted"
+                                           data-bs-toggle="tooltip"
+                                           data-bs-placement="right"
+                                           title="Whether a player may play in two consecutive time slots of the same day."></i>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check" style="padding-left: 0;">
+                                    {{ form.league_avoid_parallel }}
+                                    <label class="form-check-label" for="{{ form.league_avoid_parallel.id_for_label }}" style="padding-left: 1.5em;">
+                                        Avoid parallel matches
+                                        <i class="bi bi-info-circle text-muted"
+                                           data-bs-toggle="tooltip"
+                                           data-bs-placement="right"
+                                           title="Play on one court whenever possible, so the other courts stay free (e.g. for pickup games). A second court is used only as a last resort; this takes priority over following the seeded order of matches."></i>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     {% endif %}
 
@@ -642,6 +716,42 @@ document.addEventListener('DOMContentLoaded', function() {
             if (on) { updateDeadline(); updateLimits(); }
             document.dispatchEvent(new Event('signup:toggled'));
         }
+
+        // Sign-up leagues: time slot rows and scheduling rules
+        var leagueSettings = document.getElementById('league-settings');
+        var formatTypeSelect = document.querySelector('select[name="format_type"]');
+        function toggleLeague() {
+            var on = formatTypeSelect.value === 'LEAGUE';
+            leagueSettings.style.display = on ? '' : 'none';
+            leagueSettings.querySelectorAll('input, select, button').forEach(function(el) { el.disabled = !on; });
+        }
+        formatTypeSelect.addEventListener('change', toggleLeague);
+        toggleLeague();
+        var slotRows = document.getElementById('slot-rows');
+        document.getElementById('add-slot-row').addEventListener('click', function() {
+            var last = slotRows.lastElementChild;
+            var row = last.cloneNode(true);
+            var lastDate = last.querySelector('input[name="slot_date"]').value;
+            var dateInput = row.querySelector('input[name="slot_date"]');
+            // Default to a week after the previous day, keeping its times
+            if (lastDate) {
+                var d = new Date(lastDate + 'T00:00');
+                d.setDate(d.getDate() + 7);
+                var pad = function(n) { return String(n).padStart(2, '0'); };
+                dateInput.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+            }
+            slotRows.appendChild(row);
+        });
+        slotRows.addEventListener('click', function(e) {
+            var button = e.target.closest('.remove-slot-row');
+            if (!button) return;
+            var row = button.closest('.slot-row');
+            if (slotRows.children.length > 1) {
+                row.remove();
+            } else {
+                row.querySelectorAll('input').forEach(function(el) { el.value = ''; });
+            }
+        });
 
         signupCheckbox.addEventListener('change', toggleSignup);
         startInput.addEventListener('change', updateDeadline);

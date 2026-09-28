@@ -7,6 +7,7 @@ from .views.tournament_views import (
     reset_sandbox_scores, simulate_sandbox_scores, tournament_directors
 )
 from .views.signup_views import tournament_signup, close_signup
+from .views.league_views import league_times, league_slots, league_schedule, simulate_league_signups
 from .views.player_views import PlayerListView, PlayerCreateView
 from .views.autocomplete import PlayerAutocomplete, LinkablePlayerAutocomplete
 from .views.rankings_views import update_rankings, check_update_status
@@ -24,6 +25,10 @@ urlpatterns = [
          record_match_result, name='record_match_result'),
     path('tournaments/<int:tournament_id>/signup/', tournament_signup, name='tournament_signup'),
     path('tournaments/<int:tournament_id>/signup/close/', close_signup, name='close_signup'),
+    path('tournaments/<int:tournament_id>/signup/times/', league_times, name='league_times'),
+    path('tournaments/<int:tournament_id>/signup/slots/', league_slots, name='league_slots'),
+    path('tournaments/<int:tournament_id>/signup/simulate/', simulate_league_signups, name='simulate_league_signups'),
+    path('tournaments/<int:tournament_id>/league/schedule/', league_schedule, name='league_schedule'),
     path('tournaments/<int:tournament_id>/directors/', tournament_directors, name='tournament_directors'),
     path('tournaments/<int:tournament_id>/tiebreak/', manual_tiebreak_resolution, name='manual_tiebreak_resolution'),
     path('tournaments/<int:tournament_id>/generate-next-stage/', generate_next_stage, name='generate_next_stage'),

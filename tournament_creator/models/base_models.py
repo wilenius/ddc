@@ -170,6 +170,17 @@ class TournamentChart(models.Model):
     signup_deadline = models.DateTimeField(null=True, blank=True)
     signup_min = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Fewest entries (players for MoC, pairs for doubles) the tournament is played with.")
     signup_max = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Most entries accepted; sign-up closes when it's full.")
+    # Sign-up leagues: players enter the LeagueSlots they can play in, and
+    # closing the sign-up schedules the matches into them (league_scheduler).
+    league_courts = models.PositiveSmallIntegerField(default=2, help_text="Sign-up leagues: courts in use at the same time.")
+    league_max_matches_per_day = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Sign-up leagues: most matches a player plays in a day; blank for no limit.")
+    league_back_to_back = models.BooleanField(default=True, help_text="Sign-up leagues: players may play in two consecutive time slots.")
+    league_avoid_parallel = models.BooleanField(default=False, help_text="Sign-up leagues: play on one court whenever possible, keeping the others free (e.g. for pickup games).")
+
+    @property
+    def is_signup_league(self):
+        """A league whose matches are scheduled from the players' time slots."""
+        return self.uses_signup and self.format_type == 'LEAGUE'
 
     @property
     def awaiting_signups(self):
@@ -302,6 +313,10 @@ class TournamentSignup(models.Model):
         related_name='tournament_signups',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    # Sign-up leagues: when each player last saved their time slots (null until
+    # they have), so "no slots picked" can be told apart from "not answered".
+    player_times_saved_at = models.DateTimeField(null=True, blank=True)
+    partner_times_saved_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ['tournament', 'player']
@@ -310,9 +325,50 @@ class TournamentSignup(models.Model):
     def players(self):
         return [p for p in (self.player, self.partner) if p]
 
+    def times_saved_at(self, player):
+        return self.player_times_saved_at if player == self.player else self.partner_times_saved_at
+
+    def mark_times_saved(self, player):
+        from django.utils import timezone
+        field = 'player_times_saved_at' if player == self.player else 'partner_times_saved_at'
+        setattr(self, field, timezone.now())
+        self.save(update_fields=[field])
+
+    def partner_of(self, player):
+        """The other player of a doubles entry (None for MoC)."""
+        if player == self.player:
+            return self.partner
+        return self.player if player == self.partner else None
+
     def __str__(self):
         names = ' & '.join(str(p) for p in self.players())
         return f"{names} — {self.tournament.name}"
+
+class LeagueSlot(models.Model):
+    """A time a sign-up league's match can be played at: one match per court.
+    Consecutive slots of a day count as back-to-back."""
+    tournament = models.ForeignKey(TournamentChart, on_delete=models.CASCADE, related_name='league_slots')
+    date = models.DateField()
+    start_time = models.TimeField()
+
+    class Meta:
+        unique_together = ['tournament', 'date', 'start_time']
+        ordering = ['date', 'start_time']
+
+    def __str__(self):
+        return f"{self.date:%a %d.%m.} {self.start_time:%H:%M}"
+
+
+class LeagueAvailability(models.Model):
+    """A player of a sign-up entry can play in a slot. Kept per player, so doubles
+    partners answer separately; a pair can play when both can."""
+    signup = models.ForeignKey(TournamentSignup, on_delete=models.CASCADE, related_name='availabilities')
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='league_availabilities')
+    slot = models.ForeignKey(LeagueSlot, on_delete=models.CASCADE, related_name='availabilities')
+
+    class Meta:
+        unique_together = ['player', 'slot']
+
 
 class TournamentPlayer(models.Model):
     tournament_chart = models.ForeignKey(TournamentChart, on_delete=models.CASCADE)

@@ -1,0 +1,177 @@
+{% extends 'tournament_creator/base.html' %}
+
+{% block title %}Time slots - {{ tournament.name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'tournament_list' %}">Tournaments</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'tournament_signup' tournament.id %}">{{ tournament.name }}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Time slots</li>
+            </ol>
+        </nav>
+
+        <h2 class="mb-3">Time slots &amp; scheduling rules</h2>
+
+        <div class="card mb-4">
+            <div class="card-header">Time slots</div>
+            <div class="card-body">
+                <p class="text-muted small">
+                    The number on each slot is how many of the {{ player_count }} signed-up players can play then
+                    (hover for names). Removing a slot also removes the players' picks for it.
+                </p>
+                {% for day, slots in days %}
+                    <h6 class="mb-2 {% if not forloop.first %}mt-3{% endif %}">{{ day|date:"l j F Y" }}</h6>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for slot in slots %}
+                            <form method="post" class="mb-0"
+                                  onsubmit="return confirm('Remove the slot {{ slot }}{% if slot.available_count %} and {{ slot.available_count }} player{{ slot.available_count|pluralize }}\' picks for it{% endif %}?')">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete_slot">
+                                <input type="hidden" name="slot" value="{{ slot.id }}">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <span class="btn btn-outline-secondary" style="cursor: default;"
+                                          {% if slot.available_names %}title="{{ slot.available_names }}"{% endif %}>
+                                        {{ slot.start_time|time:"H:i" }}
+                                        <span class="badge {% if slot.available_count %}text-bg-primary{% else %}text-bg-light{% endif %} ms-1">{{ slot.available_count }}</span>
+                                    </span>
+                                    <button type="submit" class="btn btn-outline-danger" title="Remove slot">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+                            </form>
+                        {% endfor %}
+                    </div>
+                {% empty %}
+                    <p class="text-muted">No time slots yet.</p>
+                {% endfor %}
+
+                <hr class="my-4">
+
+                <h6 class="mb-3">
+                    Add a day
+                    <i class="bi bi-info-circle text-muted"
+                       data-bs-toggle="tooltip"
+                       data-bs-placement="right"
+                       title="Adds a slot at each start time; times the day already has are skipped."></i>
+                </h6>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="add_day">
+                    <div class="mb-3">
+                        <label for="{{ day_form.date.id_for_label }}">Day</label>
+                        {{ day_form.date }}
+                        {% if day_form.date.errors %}<div class="invalid-feedback d-block">{{ day_form.date.errors|join:", " }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ day_form.times.id_for_label }}">Start times</label>
+                        {{ day_form.times }}
+                        {% if day_form.times.errors %}<div class="invalid-feedback d-block">{{ day_form.times.errors|join:", " }}</div>{% endif %}
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="bi bi-plus-lg"></i> Add slots
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">Scheduling rules</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="rules">
+                    <div class="mb-3">
+                        <label for="{{ settings_form.league_courts.id_for_label }}">
+                            Courts in use
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="How many league matches can be played at the same time."></i>
+                        </label>
+                        {{ settings_form.league_courts }}
+                        {% if settings_form.league_courts.errors %}<div class="invalid-feedback d-block">{{ settings_form.league_courts.errors|join:", " }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ settings_form.league_max_matches_per_day.id_for_label }}">
+                            Matches per player per day <span class="text-muted">(optional)</span>
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="The most matches a player plays in one day. Leave empty for no limit."></i>
+                        </label>
+                        {{ settings_form.league_max_matches_per_day }}
+                        {% if settings_form.league_max_matches_per_day.errors %}<div class="invalid-feedback d-block">{{ settings_form.league_max_matches_per_day.errors|join:", " }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check" style="padding-left: 0;">
+                            {{ settings_form.league_back_to_back }}
+                            <label class="form-check-label" for="{{ settings_form.league_back_to_back.id_for_label }}" style="padding-left: 1.5em;">
+                                Allow back-to-back matches
+                                <i class="bi bi-info-circle text-muted"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="right"
+                                   title="Whether a player may play in two consecutive time slots of the same day."></i>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check" style="padding-left: 0;">
+                            {{ settings_form.league_avoid_parallel }}
+                            <label class="form-check-label" for="{{ settings_form.league_avoid_parallel.id_for_label }}" style="padding-left: 1.5em;">
+                                Avoid parallel matches
+                                <i class="bi bi-info-circle text-muted"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="right"
+                                   title="Play on one court whenever possible, so the other courts stay free (e.g. for pickup games). A second court is used only as a last resort; this takes priority over following the seeded order of matches."></i>
+                            </label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="bi bi-check-lg"></i> Save rules
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">Players' times</div>
+            {% if status %}
+                <ul class="list-group list-group-flush">
+                    {% for signup, player, saved in status %}
+                        <li class="list-group-item d-flex align-items-center">
+                            {% include "tournament_creator/partials/league_times_badge.html" with answered=saved %}
+                            <a href="{% url 'league_times' tournament.id %}?player={{ player.id }}"
+                               class="btn btn-sm btn-outline-secondary ms-auto">
+                                <i class="bi bi-pencil"></i> {% if saved %}Edit{% else %}Pick{% endif %} times
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+                {% if missing_count %}
+                    <div class="card-footer small text-muted">
+                        {{ missing_count }} player{{ missing_count|pluralize }} haven't picked their times yet.
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="card-body text-muted">Nobody has signed up yet.</div>
+            {% endif %}
+        </div>
+
+        <a href="{% url 'tournament_signup' tournament.id %}" class="btn btn-secondary mb-4">Back to sign-up</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

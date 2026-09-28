@@ -86,6 +86,14 @@ def tournament_signup(request, tournament_id):
     signups = list(tournament.signups.select_related('player', 'partner', 'signed_up_by'))
     for signup in signups:
         signup.can_withdraw = _can_withdraw(tournament, signup, user, can_administer)
+    # Sign-up leagues: who has picked their time slots
+    league = tournament.is_signup_league
+    missing_times = []
+    if league:
+        for signup in signups:
+            signup.player_answered = signup.player_times_saved_at is not None
+            signup.partner_answered = signup.partner_times_saved_at is not None
+            missing_times += [p for p in signup.players() if signup.times_saved_at(p) is None]
     my_signup = next((s for s in signups if own_player and own_player in s.players()), None)
     is_pairs = tournament.signup_category == 'PAIRS'
     pairs_format = next((o for o in PAIRS_FORMAT_OPTIONS if o['key'] == tournament.signup_pairs_format), None)
@@ -105,6 +113,12 @@ def tournament_signup(request, tournament_id):
         'format_label': (pairs_format['label'] if pairs_format else 'Round robin') if is_pairs
                         else 'Monarch of the Court',
         'directors': [d for d in [tournament.created_by, *tournament.directors.all()] if d],
+        'is_league': league,
+        'slot_count': tournament.league_slots.count() if league else 0,
+        'missing_times': missing_times,
+        'my_times_answered': bool(league and my_signup and my_signup.times_saved_at(own_player)),
+        'my_times_count': (tournament.league_slots.filter(availabilities__player=own_player).count()
+                           if league and own_player else 0),
     })
 
 
@@ -134,5 +148,9 @@ def close_signup(request, tournament_id):
         tournament.refresh_from_db()
         messages.error(request, str(e))
         return redirect('tournament_signup', tournament_id=tournament_id)
+    if tournament.is_signup_league:
+        from .league_views import schedule_from_availability
+        _result, schedule_message = schedule_from_availability(tournament)
+        message = f"{message} {schedule_message}"
     messages.success(request, f"Sign-up closed. {message}")
     return redirect('tournament_detail', pk=tournament_id)

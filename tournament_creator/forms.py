@@ -67,6 +67,7 @@ class TournamentCreationForm(forms.ModelForm):
             'name_display_format', 'show_structure', 'default_sets_per_match',
             'archived', 'is_sandbox',
             'uses_signup', 'signup_deadline', 'signup_min', 'signup_max',
+            'league_courts', 'league_max_matches_per_day', 'league_back_to_back', 'league_avoid_parallel',
         ]
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Summer League 2025'}),
@@ -93,6 +94,10 @@ class TournamentCreationForm(forms.ModelForm):
                 format='%Y-%m-%dT%H:%M'),
             'signup_min': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 80px;', 'min': 1}),
             'signup_max': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 80px;', 'min': 1}),
+            'league_courts': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 80px;', 'min': 1, 'max': 20}),
+            'league_max_matches_per_day': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 80px;', 'min': 1}),
+            'league_back_to_back': forms.CheckboxInput,
+            'league_avoid_parallel': forms.CheckboxInput,
             'signal_recipient_usernames': forms.Textarea(attrs={
                 'rows': 2,
                 'placeholder': 'Optional: +358401234567, +358409876543 (leave empty to use global settings)',
@@ -144,6 +149,9 @@ class TournamentCreationForm(forms.ModelForm):
         # this form to the fields in its fieldsets, which omit default_sets_per_match.
         if 'default_sets_per_match' in self.fields:
             self.fields['default_sets_per_match'].required = False
+        # Only sign-up leagues show the court count; others keep the model default
+        if 'league_courts' in self.fields:
+            self.fields['league_courts'].required = False
 
         # Score rules per doubles match type: {type}_points, {type}_cap, {type}_sets,
         # combined into cleaned_data['match_rules'] by clean(). Not model fields, so
@@ -213,6 +221,8 @@ class TournamentCreationForm(forms.ModelForm):
         cleaned['match_rules'] = self._clean_match_rules(cleaned)
         if cleaned.get('uses_signup') and 'tournament_category' in self.fields:
             self._clean_signup(cleaned)
+            if cleaned.get('format_type') == 'LEAGUE':
+                self._clean_league_slots(cleaned)
         # These two drive the confirm banner and its hidden token in the template.
         self.unconfirmed_location = None
         self.location_confirmation_token = self.location_token(
@@ -303,6 +313,30 @@ class TournamentCreationForm(forms.ModelForm):
         if minimum > maximum:
             self.add_error('signup_max', "The maximum can't be below the minimum.")
 
+    def _clean_league_slots(self, cleaned):
+        """A sign-up league's time slots, from the day rows of the creation page
+        (``slot_date`` and ``slot_times`` lists): cleaned['league_slots'] is a
+        sorted list of (date, time)."""
+        slots, self.slot_rows = set(), []
+        for day_text, times_text in zip(self.data.getlist('slot_date'), self.data.getlist('slot_times')):
+            if not day_text.strip() and not times_text.strip():
+                continue
+            self.slot_rows.append((day_text, times_text))
+            try:
+                day = date.fromisoformat(day_text.strip())
+            except ValueError:
+                self.add_error(None, f"Time slots: '{day_text}' isn't a date.")
+                continue
+            try:
+                times = parse_slot_times(times_text)
+            except ValueError as e:
+                self.add_error(None, f"Time slots on {day:%d.%m.%Y}: {e}")
+                continue
+            slots.update((day, t) for t in times)
+        if not slots and not self.errors:
+            self.add_error(None, "Add at least one day with the times matches can be played at.")
+        cleaned['league_slots'] = sorted(slots)
+
     def match_rule_rows(self):
         """Bound fields per match type, for the rules table on the creation page."""
         rows = []
@@ -333,6 +367,9 @@ class TournamentCreationForm(forms.ModelForm):
             return None
         return next((k for k in known if k.lower() == matches[0]), None)
 
+    def clean_league_courts(self):
+        return self.cleaned_data.get('league_courts') or TournamentChart._meta.get_field('league_courts').default
+
     def clean_default_sets_per_match(self):
         # Fall back to the model's default when empty (the field is hidden for non-MoC).
         value = self.cleaned_data.get('default_sets_per_match')
@@ -361,6 +398,52 @@ class TournamentCreationForm(forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+def parse_slot_times(text):
+    """Start times from free text such as '18:00, 19.30 20': a sorted list of
+    ``datetime.time``. Raises ValueError naming what isn't a time, or if none are given."""
+    import re
+    from datetime import time
+    times = set()
+    for token in re.split(r'[\s,;]+', text.strip()):
+        if not token:
+            continue
+        match = re.fullmatch(r'(\d{1,2})(?:[:.](\d{2}))?', token)
+        hour, minute = (int(match.group(1)), int(match.group(2) or 0)) if match else (99, 0)
+        if hour > 23 or minute > 59:
+            raise ValueError(f"'{token}' isn't a time (use e.g. 18:00).")
+        times.add(time(hour, minute))
+    if not times:
+        raise ValueError("give at least one start time.")
+    return sorted(times)
+
+
+class LeagueSettingsForm(forms.ModelForm):
+    """A sign-up league's scheduling rules, editable until (and after) scheduling."""
+    class Meta:
+        model = TournamentChart
+        fields = ['league_courts', 'league_max_matches_per_day', 'league_back_to_back', 'league_avoid_parallel']
+        widgets = TournamentCreationForm.Meta.widgets
+
+    def clean_league_courts(self):
+        courts = self.cleaned_data['league_courts']
+        if not courts:
+            raise forms.ValidationError("At least one court is needed.")
+        return courts
+
+
+class LeagueDayForm(forms.Form):
+    """Add one day's time slots to a sign-up league."""
+    date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control', 'style': 'max-width: 200px;'}))
+    times = forms.CharField(widget=forms.TextInput(attrs={
+        'class': 'form-control', 'style': 'max-width: 320px;', 'placeholder': 'e.g., 18:00, 19:00, 20:00'}))
+
+    def clean_times(self):
+        try:
+            return parse_slot_times(self.cleaned_data['times'])
+        except ValueError as e:
+            raise forms.ValidationError(str(e)[0].upper() + str(e)[1:])
+
 
 class TournamentDirectorAddForm(forms.Form):
     """Appoint another user as director of a single tournament.

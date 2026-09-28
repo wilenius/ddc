@@ -85,6 +85,20 @@
                         <i class="bi bi-check-circle-fill text-success"></i>
                         You're signed up{% if is_pairs %}: <strong>{{ my_signup.player }} &amp; {{ my_signup.partner }}</strong>{% endif %}.
                     </p>
+                    {% if is_league %}
+                        <div class="alert {% if my_times_answered %}alert-light border{% else %}alert-warning{% endif %} py-2">
+                            {% if my_times_answered %}
+                                <i class="bi bi-calendar-check"></i>
+                                You can play in {{ my_times_count }} of the {{ slot_count }} time slots.
+                            {% else %}
+                                <i class="bi bi-calendar-x"></i>
+                                <strong>Pick the times you can play</strong> so your matches can be scheduled.
+                            {% endif %}
+                            <a href="{% url 'league_times' tournament.id %}" class="btn btn-sm btn-primary ms-2">
+                                <i class="bi bi-calendar-week"></i> Your times
+                            </a>
+                        </div>
+                    {% endif %}
                     {% if my_signup.can_withdraw %}
                         <form method="post" class="mb-0"
                               onsubmit="return confirm('Withdraw {% if is_pairs %}your pair {% endif %}from this tournament?')">
@@ -141,7 +155,11 @@
                     {% for signup in signups %}
                         <li class="list-group-item d-flex align-items-center flex-wrap">
                             <span class="ms-2">
-                                {{ signup.player }}{% if signup.partner %} &amp; {{ signup.partner }}{% endif %}
+                                {% if is_league %}
+                                    {% include "tournament_creator/partials/league_times_badge.html" with player=signup.player answered=signup.player_answered %}{% if signup.partner %} &amp; {% include "tournament_creator/partials/league_times_badge.html" with player=signup.partner answered=signup.partner_answered %}{% endif %}
+                                {% else %}
+                                    {{ signup.player }}{% if signup.partner %} &amp; {{ signup.partner }}{% endif %}
+                                {% endif %}
                             </span>
                             <span class="ms-auto d-flex align-items-center">
                                 <span class="text-muted small me-3" title="{{ signup.created_at|date:'j M Y H:i' }}">
@@ -205,6 +223,41 @@
                     </form>
                 {% endif %}
 
+                {% if is_league %}
+                    <hr class="my-4">
+
+                    <h6 class="mb-3">
+                        League time slots
+                        <i class="bi bi-info-circle text-muted"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="right"
+                           title="Add or remove time slots, change the scheduling rules, see who can play when, and pick times for players without an account."></i>
+                    </h6>
+                    <p class="mb-2">
+                        {{ slot_count }} time slot{{ slot_count|pluralize }}.
+                        {% if missing_times %}
+                            <span class="text-warning-emphasis">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                {{ missing_times|length }} player{{ missing_times|length|pluralize }} haven't picked their times:
+                                {{ missing_times|join:", " }}.
+                            </span>
+                        {% elif signups %}
+                            <i class="bi bi-check-circle text-success"></i> Everyone has picked their times.
+                        {% endif %}
+                    </p>
+                    <a href="{% url 'league_slots' tournament.id %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-calendar-week"></i> Time slots &amp; scheduling rules
+                    </a>
+                    {% if tournament.is_sandbox %}
+                        <form method="post" action="{% url 'simulate_league_signups' tournament.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-shuffle"></i> Simulate sign-ups &amp; times
+                            </button>
+                        </form>
+                    {% endif %}
+                {% endif %}
+
                 <hr class="my-4">
 
                 <h6 class="mb-3">
@@ -212,7 +265,7 @@
                     <i class="bi bi-info-circle text-muted"
                        data-bs-toggle="tooltip"
                        data-bs-placement="right"
-                       title="Creates the schedule from the entries above; the format follows the number of entries. Entries can't be changed afterwards."></i>
+                       title="Creates the schedule from the entries above; the format follows the number of entries.{% if is_league %} The matches are then scheduled into the time slots their players can all make.{% endif %} Entries can't be changed afterwards."></i>
                 </h6>
                 {% if below_minimum %}
                     <p class="text-muted mb-0">
@@ -220,7 +273,7 @@
                     </p>
                 {% else %}
                     <form method="post" action="{% url 'close_signup' tournament.id %}" class="mb-0"
-                          onsubmit="return confirm('{% if signup_open %}The sign-up deadline hasn\'t passed yet. {% endif %}Close the sign-up and create the schedule for {{ signups|length }} {{ unit }}?')">
+                          onsubmit="return confirm('{% if signup_open %}The sign-up deadline hasn\'t passed yet. {% endif %}{% if missing_times %}{{ missing_times|length }} player{{ missing_times|length|pluralize }} haven\'t picked their times, so their matches can\'t be scheduled. {% endif %}Close the sign-up and create the schedule for {{ signups|length }} {{ unit }}?')">
                         {% csrf_token %}
                         <button type="submit" class="btn {% if signup_open %}btn-outline-primary{% else %}btn-primary{% endif %}">
                             <i class="bi bi-calendar-check"></i> Close sign-up and create schedule

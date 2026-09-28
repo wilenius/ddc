@@ -227,6 +227,11 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
         # MoC player counts a sign-up sheet can be limited to
         from ..models.tournament_types import signup_entry_counts
         context['moc_entry_counts_csv'] = ','.join(str(n) for n in signup_entry_counts('MOC'))
+        # Sign-up league day rows (date, times text), refilled after a failed submit
+        context['slot_rows'] = [
+            row for row in zip(self.request.POST.getlist('slot_date'), self.request.POST.getlist('slot_times'))
+            if any(part.strip() for part in row)
+        ] or [('', '')]
 
         # Show player selection forms based on category
         if tournament_category == 'MOC':
@@ -295,6 +300,11 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
             tournament.number_of_rounds = 0
             tournament.number_of_courts = 0
             tournament.save()
+            if tournament.is_signup_league:
+                from ..models.base_models import LeagueSlot
+                LeagueSlot.objects.bulk_create(
+                    LeagueSlot(tournament=tournament, date=day, start_time=start)
+                    for day, start in form.cleaned_data['league_slots'])
             messages.success(request, "Tournament created. Players can now sign up on this page.")
             return redirect('tournament_signup', tournament_id=tournament.pk)
 
@@ -591,6 +601,9 @@ class TournamentDetailView(SpectatorAccessMixin, DetailView):
 
             # Check if all matches have dates assigned
             context['all_matches_have_dates'] = all(m.match_date for m in all_matchups)
+            context['unscheduled_matchups'] = [m for m in all_matchups if not m.match_date]
+            # Sign-up leagues assign courts; others keep the seeded court numbers
+            context['show_league_courts'] = tournament.is_signup_league and tournament.league_courts > 1
 
         if is_pairs_tournament:
             # For doubles tournaments, use PairScore
@@ -1336,7 +1349,13 @@ def generate_next_stage(request, tournament_id):
 
     try:
         new_stage = archetype_impl.advance_to_next_stage(tournament)
-        messages.success(request, f"{new_stage.name} has been generated!")
+        message = f"{new_stage.name} has been generated!"
+        if tournament.is_signup_league:
+            # Fit the new phase's matches around the ones already scheduled
+            from .league_views import schedule_from_availability
+            _result, schedule_message = schedule_from_availability(tournament, keep_scheduled=True)
+            message = f"{message} {schedule_message}"
+        messages.success(request, message)
     except ValueError as e:
         messages.error(request, str(e))
     return redirect('tournament_detail', pk=tournament_id)

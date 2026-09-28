@@ -1,0 +1,119 @@
+{% extends 'tournament_creator/base.html' %}
+
+{% block title %}Times - {{ tournament.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* A partner's picks: a person icon on the chip, so both answers are visible at once */
+    .slot-chip .partner-mark { display: none; }
+    .slot-chip.partner-can .partner-mark { display: inline; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'tournament_list' %}">Tournaments</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'tournament_signup' tournament.id %}">{{ tournament.name }}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{% if is_own %}Your times{% else %}{{ player }}'s times{% endif %}</li>
+            </ol>
+        </nav>
+
+        <h2 class="mb-1">{% if is_own %}When can you play?{% else %}When can {{ player }} play?{% endif %}</h2>
+        <p class="text-muted">
+            Pick every time slot {% if is_own %}you{% else %}{{ player }}{% endif %} can make: the more, the easier the schedule.
+            {% if partner %}
+                Doubles partners pick separately; a match can be played when both of you can.
+            {% endif %}
+        </p>
+
+        {% if partner %}
+            <div class="alert {% if partner_answered %}alert-info{% else %}alert-light border{% endif %} py-2">
+                {% if partner_answered %}
+                    <i class="bi bi-person-check"></i>
+                    Times {{ partner }} can make are marked with <i class="bi bi-person-fill"></i>.
+                    <span id="both-count"></span>
+                {% else %}
+                    <i class="bi bi-hourglass-split"></i>
+                    {{ partner }} hasn't picked their times yet; once they have, their picks show here too.
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            {% if not is_own %}<input type="hidden" name="player" value="{{ player.id }}">{% endif %}
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    {% for day, slots in days %}
+                        <h6 class="mb-2 {% if not forloop.first %}mt-3{% endif %}">{{ day|date:"l j F Y" }}</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for slot in slots %}
+                                <input type="checkbox" class="btn-check slot-input" name="slots" value="{{ slot.id }}"
+                                       id="slot-{{ slot.id }}" autocomplete="off"
+                                       {% if slot.mine %}checked{% endif %}
+                                       data-partner="{% if slot.partner %}1{% endif %}">
+                                <label class="btn btn-outline-primary slot-chip {% if slot.partner %}partner-can{% endif %}"
+                                       for="slot-{{ slot.id }}"
+                                       {% if slot.partner %}title="{{ partner }} can play"{% endif %}>
+                                    {{ slot.start_time|time:"H:i" }}
+                                    <i class="bi bi-person-fill partner-mark" aria-label="{{ partner }} can play"></i>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    {% empty %}
+                        <p class="text-muted mb-0">No time slots have been added yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 mb-4">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg"></i> Save times
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="select-all">Select all</button>
+                <button type="button" class="btn btn-outline-secondary" id="select-none">Clear</button>
+                {% if partner_answered %}
+                    <button type="button" class="btn btn-outline-secondary" id="copy-partner">
+                        <i class="bi bi-people"></i> Same as {{ partner }}
+                    </button>
+                {% endif %}
+                <a href="{% url 'tournament_signup' tournament.id %}" class="btn btn-link">Cancel</a>
+            </div>
+            {% if not answered %}
+                <p class="text-muted small">
+                    <i class="bi bi-info-circle"></i>
+                    Save even if you can't make any of these times, so the directors know you've answered.
+                </p>
+            {% endif %}
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var inputs = Array.from(document.querySelectorAll('.slot-input'));
+    var bothCount = document.getElementById('both-count');
+    function updateBoth() {
+        if (!bothCount) return;
+        var both = inputs.filter(function(el) { return el.checked && el.dataset.partner; }).length;
+        bothCount.textContent = 'You can both play in ' + both + ' slot' + (both === 1 ? '' : 's') + '.';
+    }
+    inputs.forEach(function(el) { el.addEventListener('change', updateBoth); });
+    function setAll(pick) {
+        inputs.forEach(function(el) { el.checked = pick(el); });
+        updateBoth();
+    }
+    document.getElementById('select-all').addEventListener('click', function() { setAll(function() { return true; }); });
+    document.getElementById('select-none').addEventListener('click', function() { setAll(function() { return false; }); });
+    var copy = document.getElementById('copy-partner');
+    if (copy) copy.addEventListener('click', function() { setAll(function(el) { return !!el.dataset.partner; }); });
+    updateBoth();
+});
+</script>
+{% endblock %}

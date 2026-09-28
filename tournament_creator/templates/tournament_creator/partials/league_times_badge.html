@@ -1,0 +1,2 @@
+{# A signed-up player's name, marked by whether they have picked their league time slots #}
+<span class="text-nowrap">{{ player }}{% if answered %} <i class="bi bi-calendar-check text-success" title="Has picked their times"></i>{% else %} <i class="bi bi-calendar-x text-warning" title="Hasn't picked their times yet"></i>{% endif %}</span>

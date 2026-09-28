@@ -98,10 +98,60 @@
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Match Schedule</h5>
-                {% if is_league_format and can_administer %}
-                    <a href="{% url 'tournament_settings' tournament_id=tournament.id %}" class="btn btn-sm btn-primary">
-                        <i class="bi bi-calendar"></i> Assign Dates & Times
+                {% if tournament.is_signup_league and viewer_is_participant and not can_administer %}
+                    <a href="{% url 'league_times' tournament.id %}" class="btn btn-sm btn-outline-primary"
+                       title="Changes are used when a director reschedules">
+                        <i class="bi bi-calendar-week"></i> Your times
                     </a>
+                {% endif %}
+                {% if is_league_format and can_administer %}
+                    <div class="d-flex flex-wrap gap-1 justify-content-end">
+                        {% if tournament.is_signup_league and viewer_is_participant %}
+                            <a href="{% url 'league_times' tournament.id %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-calendar-week"></i> Your times
+                            </a>
+                        {% endif %}
+                        {% if tournament.is_signup_league %}
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button"
+                                        data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-magic"></i> Schedule
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li>
+                                        <form method="post" action="{% url 'league_schedule' tournament.id %}" class="mb-0">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="mode" value="unplaced">
+                                            <button type="submit" class="dropdown-item">
+                                                <i class="bi bi-calendar-plus"></i> Schedule unplaced matches
+                                                <div class="small text-muted">Matches with a date keep it</div>
+                                            </button>
+                                        </form>
+                                    </li>
+                                    <li>
+                                        <form method="post" action="{% url 'league_schedule' tournament.id %}" class="mb-0"
+                                              onsubmit="return confirm('Reschedule every unplayed match from today on? Dates players already know may change.')">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="mode" value="all">
+                                            <button type="submit" class="dropdown-item">
+                                                <i class="bi bi-arrow-repeat"></i> Reschedule all unplayed matches
+                                                <div class="small text-muted">After changes to times, slots or rules</div>
+                                            </button>
+                                        </form>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" href="{% url 'league_slots' tournament.id %}">
+                                            <i class="bi bi-calendar-week"></i> Time slots &amp; rules
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        {% endif %}
+                        <a href="{% url 'tournament_settings' tournament_id=tournament.id %}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-calendar"></i> Assign Dates & Times
+                        </a>
+                    </div>
                 {% endif %}
             </div>
             <div class="card-body">
@@ -182,8 +232,9 @@
                     {% if not all_matches_have_dates %}
                         <div class="alert alert-warning">
                             <i class="bi bi-exclamation-triangle"></i>
-                            Some matches don't have dates assigned yet.
-                            <a href="{% url 'tournament_settings' tournament_id=tournament.id %}">Assign dates</a> to display them properly.
+                            {{ unscheduled_matchups|length }} match{{ unscheduled_matchups|length|pluralize:"es" }} {{ unscheduled_matchups|length|pluralize:"has,have" }} no date yet{% if can_administer %}:
+                            {% if tournament.is_signup_league %}add time slots or ask players to pick more times, then schedule {{ unscheduled_matchups|length|pluralize:"it,them" }} from the Schedule menu, or{% endif %}
+                            <a href="{% url 'tournament_settings' tournament_id=tournament.id %}">assign dates</a> by hand{% endif %}.
                         </div>
                     {% endif %}
 
@@ -193,64 +244,25 @@
                             <table class="table table-sm table-bordered">
                                 <tbody>
                                     {% for matchup in matchups_by_date|dict_get:date %}
-                                        <tr>
-                                            <td style="width: 60%;">
-                                                {# Per-match calendar popup trigger wrapping icon and time #}
-                                                <div class="d-inline-block me-2 match-calendar-container"
-                                                     data-date="{{ date|date:'Y-m-d' }}"
-                                                     data-time="{% if matchup.match_time %}{{ matchup.match_time|time:'H:i' }}{% endif %}"
-                                                     data-summary="{{ matchup.get_team1_player1.display_name }} & {{ matchup.get_team1_player2.display_name }} vs {{ matchup.get_team2_player1.display_name }} & {{ matchup.get_team2_player2.display_name }}">
-                                                    
-                                                    <a href="#" class="add-match-calendar text-decoration-none d-inline-flex align-items-center" title="Add this match to calendar">
-                                                        <i class="bi bi-calendar-plus me-1"></i>
-                                                        {% if matchup.match_time %}
-                                                            <strong>{{ matchup.match_time|time:"H:i" }}</strong>
-                                                        {% endif %}
-                                                    </a>
-                                                    
-                                                    <div class="match-calendar-popup card shadow-sm p-2 small d-none position-absolute" style="z-index: 1000;">
-                                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                                            <strong>Add match to your calendar</strong>
-                                                            <button type="button" class="btn btn-sm btn-link text-danger close-match-popup" aria-label="Close">&times;</button>
-                                                        </div>
-                                                        <div class="match-calendar-options" data-init="0">
-                                                            <a href="#" class="match-gc-link">Google</a> |
-                                                            <a href="#" class="match-ics-link">Apple</a> |
-                                                            <a href="#" class="match-outlook-link">Outlook</a>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <span class="matchup-display">
-                                                    {{ matchup.get_team1_player1.display_name }} & {{ matchup.get_team1_player2.display_name }}
-                                                    vs
-                                                    {{ matchup.get_team2_player1.display_name }} & {{ matchup.get_team2_player2.display_name }}
-                                                </span>
-                                            </td>
-                                            <td style="width: 40%;">
-                                                {% if matchup.scores.all %}
-                                                    <span class="match-scores">
-                                                        {% for score in matchup.scores.all %}
-                                                            {{ score.team1_score }}–{{ score.team2_score }}{% if not forloop.last %}, {% endif %}
-                                                        {% endfor %}
-                                                    </span>
-                                                    {% if can_record_scores %}
-                                                        {% include "tournament_creator/partials/record_result_button.html" with label="Edit" button_class="btn-outline-primary btn-sm ms-2" %}
-                                                    {% endif %}
-                                                {% else %}
-                                                    {% if can_record_scores %}
-                                                        {% include "tournament_creator/partials/record_result_button.html" with label="Record Score" button_class="btn-primary btn-sm" %}
-                                                    {% else %}
-                                                        <span class="text-muted">Not played</span>
-                                                    {% endif %}
-                                                {% endif %}
-                                            </td>
-                                        </tr>
+                                        {% include "tournament_creator/partials/league_match_row.html" %}
                                     {% endfor %}
                                 </tbody>
                             </table>
                         </div>
                     {% endfor %}
+
+                    {% if unscheduled_matchups %}
+                        <h6 class="mt-3 mb-1 text-muted">Not scheduled yet</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <tbody>
+                                    {% for matchup in unscheduled_matchups %}
+                                        {% include "tournament_creator/partials/league_match_row.html" %}
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
                 {% elif has_multiple_stages %}
                     {# Show tabs for multi-stage tournaments #}
                     <ul class="nav nav-tabs" role="tablist">

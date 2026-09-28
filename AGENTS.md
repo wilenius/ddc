@@ -314,7 +314,7 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
 ```
 
 ### Testing
-- Test suite has 215 tests. As of 2026-09-28 all pass except two `test_signup`
+- Test suite has 262 tests. As of 2026-09-28 all pass except two `test_signup`
   failures that predate the multi-phase formats work (also failing on main).
   Note `test_signup` is account self-signup; tournament sign-up sheets are
   `test_tournament_signups`
@@ -410,6 +410,30 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
     `create_tournament_schedule` — the same helper normal creation uses — with the
     entries in sign-up order
   - Tests: `tournament_creator/tests/test_tournament_signups.py`
+
+- **Sign-up leagues** (`format_type='LEAGUE'` + sign-up sheet; `views/league_views.py`,
+  `league_scheduler.py`)
+  - At creation the director adds days with start times → `LeagueSlot` rows (one match
+    per court per slot; consecutive slots of a day count as back-to-back) and sets the
+    rules: `league_courts`, `league_max_matches_per_day`, `league_back_to_back`,
+    `league_avoid_parallel`. Slots and rules stay editable on `league_slots`
+  - Each signed-up player picks their slots on `league_times` (`LeagueAvailability`,
+    per player: doubles partners answer separately and see each other's picks; a pair
+    can play when both can). `TournamentSignup.player/partner_times_saved_at` tells
+    "picked nothing" from "hasn't answered". Directors pick for anyone (`?player=`)
+  - Closing the sign-up (and "Generate next phase") runs `schedule_from_availability`,
+    which fills `match_date`/`match_time`/`court_number`. Matches that fit no slot stay
+    undated and are listed under "Not scheduled yet"; the detail page's Schedule menu
+    places unplaced matches or reschedules all unplayed ones (played matches keep
+    their slot; only slots from today on are used)
+  - The scheduler is OR-Tools CP-SAT (`ortools` in requirements), solved
+    lexicographically: most matches scheduled > fewest parallel matches (only with
+    avoid-parallel) > closest to the seeded order (match's place in the seeded
+    schedule vs its slot's place in the season). 6 s limit per stage to stay under
+    gunicorn's 30 s timeout
+  - Practice leagues: "Simulate sign-ups & times" on the sign-up page, or
+    `manage.py simulate_signups <id> [--times-only] [--seed N]`
+  - Tests: `tests/test_league_scheduler.py` (pure scheduler), `tests/test_league_signups.py`
 
 - **Euros format (multi-phase pairs, 20 pairs)** — used at European Open 2024/2026
   - Archetype: `EurosFormat` in `tournament_types.py` (DB row "20 pairs euros format");

@@ -861,6 +861,20 @@ def pairs_format_option(key, num_pairs):
     return option
 
 
+def signup_entry_counts(category, pairs_format_key=''):
+    """
+    Entry counts a sign-up tournament can be played with, ascending: players for
+    MoC (one per existing archetype), pairs for doubles (the chosen format's counts;
+    a blank key means the round robin, which is what closing the sign-up then picks).
+    """
+    if category == 'MOC':
+        names = TournamentArchetype.objects.filter(tournament_category='MOC').values_list('name', flat=True)
+        return sorted(int(name.split('-')[0]) for name in names
+                      if name.endswith('-player Monarch of the Court') and name.split('-')[0].isdigit())
+    option = next((o for o in PAIRS_FORMAT_OPTIONS if o['key'] == pairs_format_key), PAIRS_FORMAT_OPTIONS[0])
+    return list(option['pair_counts'])
+
+
 def describe_match_rules(tournament):
     """
     Human-readable match rules of a tournament, one line per match type, e.g.

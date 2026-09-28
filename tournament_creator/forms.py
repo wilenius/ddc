@@ -65,7 +65,8 @@ class TournamentCreationForm(forms.ModelForm):
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
             'signal_recipient_usernames', 'signal_recipient_group_ids',
             'name_display_format', 'show_structure', 'default_sets_per_match',
-            'archived', 'is_sandbox'
+            'archived', 'is_sandbox',
+            'uses_signup', 'signup_deadline', 'signup_min', 'signup_max',
         ]
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Summer League 2025'}),
@@ -86,6 +87,12 @@ class TournamentCreationForm(forms.ModelForm):
             'format_type': forms.Select(attrs={'class': 'form-select'}),
             'name_display_format': forms.Select(attrs={'class': 'form-select'}),
             'default_sets_per_match': forms.Select(attrs={'class': 'form-select', 'style': 'width: 80px;'}),
+            'uses_signup': forms.CheckboxInput,
+            'signup_deadline': forms.DateTimeInput(
+                attrs={'type': 'datetime-local', 'class': 'form-control', 'style': 'max-width: 240px;'},
+                format='%Y-%m-%dT%H:%M'),
+            'signup_min': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 80px;', 'min': 1}),
+            'signup_max': forms.NumberInput(attrs={'class': 'form-control', 'style': 'width: 80px;', 'min': 1}),
             'signal_recipient_usernames': forms.Textarea(attrs={
                 'rows': 2,
                 'placeholder': 'Optional: +358401234567, +358409876543 (leave empty to use global settings)',
@@ -204,6 +211,8 @@ class TournamentCreationForm(forms.ModelForm):
         """
         cleaned = super().clean()
         cleaned['match_rules'] = self._clean_match_rules(cleaned)
+        if cleaned.get('uses_signup') and 'tournament_category' in self.fields:
+            self._clean_signup(cleaned)
         # These two drive the confirm banner and its hidden token in the template.
         self.unconfirmed_location = None
         self.location_confirmation_token = self.location_token(
@@ -249,6 +258,50 @@ class TournamentCreationForm(forms.ModelForm):
             rules[key] = {'points_to': points, 'cap': cap,
                           'best_of': cleaned.get(f'{key}_sets') or 1}
         return rules
+
+    @staticmethod
+    def default_signup_deadline(start_date):
+        """Two days before the tournament, at the end of that day (local time)."""
+        from datetime import datetime, time, timedelta
+        from django.utils import timezone
+        return timezone.make_aware(datetime.combine(start_date - timedelta(days=2), time(23, 59)))
+
+    def _clean_signup(self, cleaned):
+        """Defaults and bounds of a sign-up tournament's deadline and entry limits.
+
+        The limits count players for MoC and pairs for doubles, bounded by the
+        formats that exist for that many entries (signup_entry_counts).
+        """
+        from .models.tournament_types import signup_entry_counts
+        start = cleaned.get('date')
+        if cleaned.get('signup_deadline') is None and start:
+            cleaned['signup_deadline'] = self.default_signup_deadline(start)
+        deadline = cleaned.get('signup_deadline')
+        if deadline and start:
+            from django.utils import timezone
+            if timezone.localtime(deadline).date() > start:
+                self.add_error('signup_deadline', "The sign-up deadline can't be after the tournament starts.")
+
+        category = cleaned.get('tournament_category')
+        if category not in ('MOC', 'PAIRS'):
+            return
+        counts = signup_entry_counts(category, cleaned.get('pairs_format') or '')
+        if not counts:
+            self.add_error(None, "No formats exist for this tournament type.")
+            return
+        unit = 'players' if category == 'MOC' else 'pairs'
+        low, high = counts[0], counts[-1]
+        if cleaned.get('signup_min') is None:
+            cleaned['signup_min'] = max(4, low)
+        if cleaned.get('signup_max') is None:
+            cleaned['signup_max'] = high
+        minimum, maximum = cleaned['signup_min'], cleaned['signup_max']
+        if not low <= minimum <= high:
+            self.add_error('signup_min', f"The minimum must be between {low} and {high} {unit}.")
+        if not low <= maximum <= high:
+            self.add_error('signup_max', f"The maximum must be between {low} and {high} {unit}.")
+        if minimum > maximum:
+            self.add_error('signup_max', "The maximum can't be below the minimum.")
 
     def match_rule_rows(self):
         """Bound fields per match type, for the rules table on the creation page."""
@@ -338,6 +391,67 @@ class TournamentDirectorAddForm(forms.Form):
         self.fields['user'].label_from_instance = (
             lambda user: f"{user.player.first_name} {user.player.last_name} ({user.username})"
         )
+
+
+class TournamentSignupForm(forms.Form):
+    """An entry to a sign-up tournament.
+
+    Players sign themselves up (``player`` is the viewer's own ranking player);
+    directors pick the player too, so they can enter people without an account.
+    Doubles entries also name the partner, who needs no account.
+    """
+    player = forms.ModelChoiceField(
+        queryset=Player.objects.all(),
+        label="Player",
+        empty_label='',
+        widget=forms.Select(attrs={'class': 'form-select signup-player-select'}),
+    )
+    partner = forms.ModelChoiceField(
+        queryset=Player.objects.all(),
+        label="Partner",
+        empty_label='',
+        widget=forms.Select(attrs={'class': 'form-select signup-player-select'}),
+    )
+
+    def __init__(self, tournament, *args, own_player=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tournament = tournament
+        self.own_player = own_player
+        if own_player is not None:
+            del self.fields['player']
+        if tournament.signup_category != 'PAIRS':
+            del self.fields['partner']
+        # Only offer players who aren't in yet
+        available = Player.objects.exclude(pk__in=self.entered_ids()).order_by('first_name', 'last_name')
+        if own_player is not None:
+            available = available.exclude(pk=own_player.pk)
+        for field in self.fields.values():
+            field.queryset = available
+
+    def entered_ids(self):
+        """Ids of the players already signed up, as player or partner."""
+        signups = self.tournament.signups.all()
+        return (set(signups.values_list('player_id', flat=True))
+                | set(signups.exclude(partner=None).values_list('partner_id', flat=True)))
+
+    def clean(self):
+        cleaned = super().clean()
+        player = self.own_player or cleaned.get('player')
+        partner = cleaned.get('partner')
+        if self.errors or player is None:
+            return cleaned
+        cleaned['player'] = player
+        if partner is not None and partner == player:
+            self.add_error('partner', "Pick someone else as your partner." if self.own_player
+                           else "Pick two different players.")
+            return cleaned
+
+        if self.own_player and self.own_player.pk in self.entered_ids():
+            raise forms.ValidationError("You're already signed up.")
+        maximum = self.tournament.signup_max
+        if maximum and self.tournament.signups.count() >= maximum:
+            raise forms.ValidationError("The tournament is full.")
+        return cleaned
 
 
 class PairForm(forms.Form):

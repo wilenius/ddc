@@ -167,6 +167,10 @@ class TournamentChartAdmin(admin.ModelAdmin):
         ('Notification Settings', {
             'fields': ('notify_by_email', 'notify_by_signal', 'notify_by_matrix')
         }),
+        ('Sign-up (sign-up tournaments only)', {
+            'fields': ('signup_deadline', 'signup_min', 'signup_max'),
+            'classes': ('collapse',)
+        }),
         ('Signal Recipients (Optional - overrides global settings)', {
             'fields': ('signal_groups_picker', 'signal_recipient_usernames', 'signal_recipient_group_ids'),
             'classes': ('collapse',)

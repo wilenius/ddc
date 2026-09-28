@@ -1,0 +1,255 @@
+{% extends 'tournament_creator/base.html' %}
+
+{% block title %}Sign-up - {{ tournament.name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'tournament_list' %}">Tournaments</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ tournament.name }}</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex align-items-start">
+            <div>
+                <h2 class="mb-1">{{ tournament.name }}</h2>
+                <p class="text-muted mb-3">
+                    {% if tournament.location %}
+                        <i class="bi bi-geo-alt"></i> {{ tournament.location }}
+                        <span class="mx-2">&middot;</span>
+                    {% endif %}
+                    <i class="bi bi-calendar3"></i>
+                    {% if tournament.end_date and tournament.end_date != tournament.date %}
+                        {{ tournament.date }} &ndash; {{ tournament.end_date }}
+                    {% else %}
+                        {{ tournament.date }}
+                    {% endif %}
+                    <span class="mx-2">&middot;</span>
+                    {{ format_label }}
+                    {% if directors %}
+                        <span class="mx-2">&middot;</span>
+                        <i class="bi bi-person-badge"></i>
+                        Directed by
+                        {% for director in directors %}{{ director.display_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    {% endif %}
+                </p>
+            </div>
+            {% if can_administer %}
+                <div class="dropdown ms-auto">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button"
+                            id="tournamentManageMenu" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-sliders"></i> Manage
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tournamentManageMenu">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'tournament_directors' tournament.id %}">
+                                <i class="bi bi-person-badge"></i> Tournament directors
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item text-danger" href="{% url 'tournament_delete' tournament.pk %}"
+                               onclick="return confirm('Are you sure you want to delete this tournament? This action cannot be undone.')">
+                                <i class="bi bi-trash"></i> Delete tournament
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            {% endif %}
+        </div>
+
+        {# Status: when sign-up closes and how full it is #}
+        <div class="alert {% if signup_open %}alert-info{% else %}alert-secondary{% endif %}">
+            {% if signup_open %}
+                <i class="bi bi-pencil-square"></i>
+                <strong>Sign-up is open</strong> until {{ tournament.signup_deadline|date:"l j F Y, H:i" }}.
+            {% else %}
+                <i class="bi bi-lock"></i>
+                <strong>Sign-up has closed.</strong> The schedule is published once a director has created it.
+            {% endif %}
+            <div class="small mt-1">
+                {{ signups|length }} {{ unit }} signed up
+                {% if tournament.signup_max %}of at most {{ tournament.signup_max }}{% endif %}
+                {% if tournament.signup_min %}&middot; at least {{ tournament.signup_min }} needed{% endif %}
+            </div>
+        </div>
+
+        {% if self_form or my_signup %}
+        <div class="card mb-4">
+            <div class="card-header">Your entry</div>
+            <div class="card-body">
+                {% if my_signup %}
+                    <p class="mb-2">
+                        <i class="bi bi-check-circle-fill text-success"></i>
+                        You're signed up{% if is_pairs %}: <strong>{{ my_signup.player }} &amp; {{ my_signup.partner }}</strong>{% endif %}.
+                    </p>
+                    {% if my_signup.can_withdraw %}
+                        <form method="post" class="mb-0"
+                              onsubmit="return confirm('Withdraw {% if is_pairs %}your pair {% endif %}from this tournament?')">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="withdraw">
+                            <input type="hidden" name="signup" value="{{ my_signup.id }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-x-lg"></i> Withdraw
+                            </button>
+                        </form>
+                    {% endif %}
+                {% elif not signup_open %}
+                    <p class="text-muted mb-0">You didn't sign up before the deadline. Ask a director if you'd still like to play.</p>
+                {% elif is_full %}
+                    <p class="text-muted mb-0">The tournament is full.</p>
+                {% else %}
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="signup">
+                        {% if self_form.non_field_errors %}
+                            <div class="alert alert-danger">{{ self_form.non_field_errors|join:" " }}</div>
+                        {% endif %}
+                        {% if is_pairs %}
+                            <div class="mb-3">
+                                <label for="{{ self_form.partner.id_for_label }}">
+                                    Partner
+                                    <i class="bi bi-info-circle text-muted"
+                                       data-bs-toggle="tooltip"
+                                       data-bs-placement="right"
+                                       title="Your partner doesn't need an account. Players already signed up aren't listed. Missing from the list? Add them to the rankings first."></i>
+                                </label>
+                                <div style="max-width: 420px;">{{ self_form.partner }}</div>
+                                {% if self_form.partner.errors %}<div class="invalid-feedback d-block">{{ self_form.partner.errors|join:", " }}</div>{% endif %}
+                            </div>
+                        {% endif %}
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-person-plus"></i> Sign up{% if is_pairs %} as a pair{% endif %}
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+        {% elif signup_open %}
+            <p class="text-muted">
+                <i class="bi bi-info-circle"></i>
+                Only player accounts linked to a ranking player can sign up.
+            </p>
+        {% endif %}
+
+        <div class="card mb-4">
+            <div class="card-header">Signed up</div>
+            {% if signups %}
+                <ol class="list-group list-group-flush list-group-numbered">
+                    {% for signup in signups %}
+                        <li class="list-group-item d-flex align-items-center flex-wrap">
+                            <span class="ms-2">
+                                {{ signup.player }}{% if signup.partner %} &amp; {{ signup.partner }}{% endif %}
+                            </span>
+                            <span class="ms-auto d-flex align-items-center">
+                                <span class="text-muted small me-3" title="{{ signup.created_at|date:'j M Y H:i' }}">
+                                    {{ signup.created_at|date:"j M" }}{% if signup.signed_up_by and can_administer %} by {{ signup.signed_up_by.display_name }}{% endif %}
+                                </span>
+                                {% if signup.can_withdraw and signup != my_signup %}
+                                    <form method="post" class="mb-0"
+                                          onsubmit="return confirm('Remove this entry from the tournament?')">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="withdraw">
+                                        <input type="hidden" name="signup" value="{{ signup.id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove entry">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </span>
+                        </li>
+                    {% endfor %}
+                </ol>
+            {% else %}
+                <div class="card-body text-muted">Nobody has signed up yet.</div>
+            {% endif %}
+        </div>
+
+        {% if can_administer %}
+        <div class="card mb-4">
+            <div class="card-header">Director tools</div>
+            <div class="card-body">
+                <h6 class="mb-3">
+                    Add an entry
+                    <i class="bi bi-info-circle text-muted"
+                       data-bs-toggle="tooltip"
+                       data-bs-placement="right"
+                       title="Enter players who have no account, or who missed the deadline. Directors can add and remove entries until the schedule is created."></i>
+                </h6>
+                {% if is_full %}
+                    <p class="text-muted">The tournament is full.</p>
+                {% else %}
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="add">
+                        {% if add_form.non_field_errors %}
+                            <div class="alert alert-danger">{{ add_form.non_field_errors|join:" " }}</div>
+                        {% endif %}
+                        <div class="mb-3">
+                            <label for="{{ add_form.player.id_for_label }}">Player</label>
+                            <div style="max-width: 420px;">{{ add_form.player }}</div>
+                            {% if add_form.player.errors %}<div class="invalid-feedback d-block">{{ add_form.player.errors|join:", " }}</div>{% endif %}
+                        </div>
+                        {% if is_pairs %}
+                            <div class="mb-3">
+                                <label for="{{ add_form.partner.id_for_label }}">Partner</label>
+                                <div style="max-width: 420px;">{{ add_form.partner }}</div>
+                                {% if add_form.partner.errors %}<div class="invalid-feedback d-block">{{ add_form.partner.errors|join:", " }}</div>{% endif %}
+                            </div>
+                        {% endif %}
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="bi bi-plus-lg"></i> Add {% if is_pairs %}pair{% else %}player{% endif %}
+                        </button>
+                    </form>
+                {% endif %}
+
+                <hr class="my-4">
+
+                <h6 class="mb-3">
+                    Close sign-up
+                    <i class="bi bi-info-circle text-muted"
+                       data-bs-toggle="tooltip"
+                       data-bs-placement="right"
+                       title="Creates the schedule from the entries above; the format follows the number of entries. Entries can't be changed afterwards."></i>
+                </h6>
+                {% if below_minimum %}
+                    <p class="text-muted mb-0">
+                        At least {{ tournament.signup_min }} {{ unit }} are needed before the schedule can be created.
+                    </p>
+                {% else %}
+                    <form method="post" action="{% url 'close_signup' tournament.id %}" class="mb-0"
+                          onsubmit="return confirm('{% if signup_open %}The sign-up deadline hasn\'t passed yet. {% endif %}Close the sign-up and create the schedule for {{ signups|length }} {{ unit }}?')">
+                        {% csrf_token %}
+                        <button type="submit" class="btn {% if signup_open %}btn-outline-primary{% else %}btn-primary{% endif %}">
+                            <i class="bi bi-calendar-check"></i> Close sign-up and create schedule
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    // Type-to-search player pickers
+    if (window.jQuery && $.fn.select2) {
+        $('.signup-player-select').select2({
+            width: '100%',
+            placeholder: 'Type a name…',
+            allowClear: true
+        });
+    }
+});
+</script>
+{% endblock %}

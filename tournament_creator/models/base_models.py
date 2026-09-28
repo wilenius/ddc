@@ -161,6 +161,27 @@ class TournamentChart(models.Model):
         blank=True,
         related_name='directed_tournaments',
     )
+    # Sign-up tournaments are created without entrants: players sign up themselves
+    # (doubles: with their partner) until the deadline, then a director closes the
+    # sign-up, which picks the format from the entry count and creates the schedule.
+    uses_signup = models.BooleanField(default=False, help_text="Entrants sign up themselves instead of being picked at creation.")
+    signup_category = models.CharField(max_length=12, blank=True, choices=[('MOC', 'Monarch of the Court'), ('PAIRS', 'Doubles (Pairs)')], help_text="Sign-up tournaments only: MoC or doubles (the archetype isn't known until sign-up closes).")
+    signup_pairs_format = models.CharField(max_length=20, blank=True, help_text="Sign-up doubles only: the chosen playing format (PAIRS_FORMAT_OPTIONS key); blank picks by pair count.")
+    signup_deadline = models.DateTimeField(null=True, blank=True)
+    signup_min = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Fewest entries (players for MoC, pairs for doubles) the tournament is played with.")
+    signup_max = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Most entries accepted; sign-up closes when it's full.")
+
+    @property
+    def awaiting_signups(self):
+        """True while a sign-up tournament has no schedule yet."""
+        return self.uses_signup and self.archetype_id is None
+
+    def signup_is_open(self):
+        """Players can still sign up or withdraw themselves (directors always can)."""
+        from django.utils import timezone
+        return self.awaiting_signups and (
+            self.signup_deadline is None or timezone.now() < self.signup_deadline
+        )
 
     @property
     def location(self):
@@ -267,6 +288,31 @@ class TournamentDirector(models.Model):
 
     def __str__(self):
         return f"{self.user} — director of {self.tournament.name}"
+
+class TournamentSignup(models.Model):
+    """One entry of a sign-up tournament: a player (MoC) or a player and partner (doubles)."""
+    tournament = models.ForeignKey(TournamentChart, on_delete=models.CASCADE, related_name='signups')
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='signups')
+    partner = models.ForeignKey(Player, on_delete=models.CASCADE, null=True, blank=True, related_name='partner_signups')
+    signed_up_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tournament_signups',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['tournament', 'player']
+        ordering = ['created_at', 'id']
+
+    def players(self):
+        return [p for p in (self.player, self.partner) if p]
+
+    def __str__(self):
+        names = ' & '.join(str(p) for p in self.players())
+        return f"{names} — {self.tournament.name}"
 
 class TournamentPlayer(models.Model):
     tournament_chart = models.ForeignKey(TournamentChart, on_delete=models.CASCADE)

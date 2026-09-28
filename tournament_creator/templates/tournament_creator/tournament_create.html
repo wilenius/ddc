@@ -290,6 +290,60 @@
                         {% if form.tournament_category.help_text %}<small class="form-text text-muted">{{ form.tournament_category.help_text }}</small>{% endif %}
                     </div>
 
+                    {% if selected_category == 'MOC' or selected_category == 'PAIRS' %}
+                    <div class="mb-3">
+                        <div class="form-check" style="padding-left: 0;">
+                            {{ form.uses_signup }}
+                            <label class="form-check-label" for="{{ form.uses_signup.id_for_label }}" style="padding-left: 1.5em;">
+                                Open a sign-up sheet instead of entering the {% if selected_category == 'PAIRS' %}pairs{% else %}players{% endif %} now
+                                <i class="bi bi-info-circle text-muted"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="right"
+                                   title="Players with an account sign up themselves{% if selected_category == 'PAIRS' %} and name their partner{% endif %} until the deadline. A director then closes the sign-up, which creates the schedule; the format follows the number of entries."></i>
+                            </label>
+                        </div>
+                        {% if form.uses_signup.errors %}<div class="invalid-feedback d-block">{{ form.uses_signup.errors|join:", " }}</div>{% endif %}
+                    </div>
+
+                    <div id="signup-settings" {% if not form.uses_signup.value %}style="display: none;"{% endif %}
+                         data-moc-counts="{% if selected_category == 'MOC' %}{{ moc_entry_counts_csv }}{% endif %}">
+                        <div class="mb-3">
+                            <label for="{{ form.signup_deadline.id_for_label }}">
+                                Sign-up deadline
+                                <i class="bi bi-info-circle text-muted"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="right"
+                                   title="Players can sign up and withdraw until then. Defaults to 23:59 two days before the tournament."></i>
+                            </label>
+                            {{ form.signup_deadline }}
+                            {% if form.signup_deadline.errors %}<div class="invalid-feedback d-block">{{ form.signup_deadline.errors|join:", " }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label for="{{ form.signup_min.id_for_label }}">
+                                Minimum <span class="signup-unit">{% if selected_category == 'PAIRS' %}pairs{% else %}players{% endif %}</span>
+                                <i class="bi bi-info-circle text-muted"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="right"
+                                   title="The schedule can't be created with fewer entries."></i>
+                            </label>
+                            {{ form.signup_min }}
+                            {% if form.signup_min.errors %}<div class="invalid-feedback d-block">{{ form.signup_min.errors|join:", " }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label for="{{ form.signup_max.id_for_label }}">
+                                Maximum <span class="signup-unit">{% if selected_category == 'PAIRS' %}pairs{% else %}players{% endif %}</span>
+                                <i class="bi bi-info-circle text-muted"
+                                   data-bs-toggle="tooltip"
+                                   data-bs-placement="right"
+                                   title="Sign-up closes when this many have signed up. Limited by the largest format available{% if selected_category == 'PAIRS' %} for the playing format below{% endif %}."></i>
+                            </label>
+                            {{ form.signup_max }}
+                            <small class="form-text text-muted d-block mt-1" id="signup-limits-note"></small>
+                            {% if form.signup_max.errors %}<div class="invalid-feedback d-block">{{ form.signup_max.errors|join:", " }}</div>{% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+
                     {% if selected_category == 'MOC' %}
                     <div class="mb-3">
                         <label for="{{ form.default_sets_per_match.id_for_label }}">
@@ -305,7 +359,7 @@
                     {% endif %}
 
                     {% if selected_category == 'MOC' %}
-                    <div class="mb-3">
+                    <div class="mb-3 entrants-section">
                         <label for="{{ moc_player_form.players.id_for_label }}">
                             Players
                             <small class="text-muted">(Monarch of the Court)</small>
@@ -319,7 +373,7 @@
                     {% endif %}
 
                     {% if selected_category == 'PAIRS' %}
-                    <div class="mb-3">
+                    <div class="mb-3 entrants-section">
                         <label class="d-block">
                             Pairs
                             <span class="text-muted small" id="pair-count" aria-live="polite"></span>
@@ -532,6 +586,69 @@ document.addEventListener('DOMContentLoaded', function() {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 
+    // Sign-up sheet: instead of the player/pair pickers, a deadline and entry limits.
+    // The pickers are disabled rather than just hidden, so they're neither
+    // required nor submitted.
+    var signupCheckbox = document.getElementById('{{ form.uses_signup.id_for_label }}');
+    var signupSettings = document.getElementById('signup-settings');
+    function signupMode() { return !!(signupCheckbox && signupCheckbox.checked); }
+
+    if (signupCheckbox && signupSettings) {
+        var deadlineInput = document.getElementById('{{ form.signup_deadline.id_for_label }}');
+        var minInput = document.getElementById('{{ form.signup_min.id_for_label }}');
+        var maxInput = document.getElementById('{{ form.signup_max.id_for_label }}');
+        var limitsNote = document.getElementById('signup-limits-note');
+        var startInput = document.querySelector('input[name="date"]');
+        [deadlineInput, minInput, maxInput].forEach(function(el) {
+            if (el.value) el.dataset.edited = '1';
+            el.addEventListener('input', function() { el.dataset.edited = '1'; });
+        });
+
+        // Default deadline: 23:59 two days before the start (TournamentCreationForm.default_signup_deadline)
+        function updateDeadline() {
+            if (deadlineInput.dataset.edited || !startInput.value) return;
+            var d = new Date(startInput.value + 'T00:00');
+            d.setDate(d.getDate() - 2);
+            var pad = function(n) { return String(n).padStart(2, '0'); };
+            deadlineInput.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T23:59';
+        }
+
+        // Entry counts the formats allow: players for MoC, pairs for the chosen doubles format
+        function entryCounts() {
+            var formatSelect = document.getElementById('{{ form.pairs_format.id_for_label }}');
+            var csv = formatSelect
+                ? formatSelect.options[formatSelect.selectedIndex].dataset.pairCounts
+                : signupSettings.dataset.mocCounts;
+            return (csv || '').split(',').filter(Boolean).map(Number);
+        }
+        function updateLimits() {
+            var counts = entryCounts();
+            if (!counts.length) return;
+            var low = counts[0], high = counts[counts.length - 1];
+            [minInput, maxInput].forEach(function(el) { el.min = low; el.max = high; });
+            if (!minInput.dataset.edited) minInput.value = Math.max(4, low);
+            if (!maxInput.dataset.edited) maxInput.value = high;
+            limitsNote.textContent = 'Formats exist for ' + low + '–' + high + ' ' +
+                (signupSettings.dataset.mocCounts ? 'players.' : 'pairs.');
+        }
+
+        function toggleSignup() {
+            var on = signupMode();
+            signupSettings.style.display = on ? '' : 'none';
+            document.querySelectorAll('.entrants-section').forEach(function(section) {
+                section.style.display = on ? 'none' : '';
+                section.querySelectorAll('input, select, button').forEach(function(el) { el.disabled = on; });
+            });
+            if (on) { updateDeadline(); updateLimits(); }
+            document.dispatchEvent(new Event('signup:toggled'));
+        }
+
+        signupCheckbox.addEventListener('change', toggleSignup);
+        startInput.addEventListener('change', updateDeadline);
+        document.addEventListener('signup:limits', function() { if (signupMode()) updateLimits(); });
+        toggleSignup();
+    }
+
     // Tournament category change handler - reload page to show player selection
     var categorySelect = document.getElementById('{{ form.tournament_category.id_for_label }}');
     if (categorySelect) {
@@ -565,6 +682,7 @@ document.addEventListener('DOMContentLoaded', function() {
                       "&notify_by_matrix=" + notifyByMatrix +
                       "&show_structure=" + showStructure +
                       "&is_sandbox=" + isSandbox +
+                      "&uses_signup=" + signupMode() +
                       (setsPerMatch ? "&default_sets_per_match=" + encodeURIComponent(setsPerMatch) : "");
             window.location = url;
         });
@@ -800,6 +918,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Empty rows aren't submitted; a half-filled row would pair the wrong players.
         pairList.closest('form').addEventListener('submit', function(event) {
+            if (signupMode()) return;  // the pair editor is disabled and ignored
             var incomplete = rows().filter(isIncompleteRow);
             if (incomplete.length) {
                 event.preventDefault();
@@ -823,6 +942,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Coming back to the page from history: re-enable what the submit disabled
         window.addEventListener('pageshow', function() {
+            if (signupMode()) return;
             pairList.querySelectorAll('input[name="players"]').forEach(function(h) { h.disabled = false; });
         });
 
@@ -837,7 +957,8 @@ document.addEventListener('DOMContentLoaded', function() {
         var formatDescription = document.getElementById('pairs-format-description');
 
         function updatePairsFormat() {
-            var numPairs = completePairCount();
+            // With a sign-up sheet the pair count isn't known yet: every format is available
+            var numPairs = signupMode() ? 0 : completePairCount();
             var options = Array.prototype.slice.call(pairsFormatSelect.options);
             options.forEach(function(option) {
                 var counts = option.dataset.pairCounts.split(',').map(Number);
@@ -860,10 +981,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Hidden rows aren't submitted, so their rules aren't stored
                 row.querySelectorAll('input, select').forEach(function(el) { el.disabled = !used; });
             });
+            document.dispatchEvent(new Event('signup:limits'));
         }
 
         pairsFormatSelect.addEventListener('change', updatePairsFormat);
         document.addEventListener('pairs:changed', updatePairsFormat);
+        document.addEventListener('signup:toggled', updatePairsFormat);
         updatePairsFormat();
 
         // The cap follows the points (default_cap in tournament_types.py) until

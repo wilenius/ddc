@@ -7,7 +7,7 @@ from django.db import models
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.conf import settings
-from django.db import connections
+from django.db import connections, transaction
 import json
 import logging
 import threading
@@ -186,6 +186,9 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
         # Preserve practice tournament checkbox state
         if 'is_sandbox' in self.request.GET:
             initial['is_sandbox'] = self.request.GET.get('is_sandbox') == 'true'
+        # Preserve the sign-up sheet choice
+        if 'uses_signup' in self.request.GET:
+            initial['uses_signup'] = self.request.GET.get('uses_signup') == 'true'
         # Preserve sets per match (MoC only)
         if 'default_sets_per_match' in self.request.GET:
             initial['default_sets_per_match'] = self.request.GET.get('default_sets_per_match')
@@ -221,6 +224,9 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
             for option in PAIRS_FORMAT_OPTIONS
         ]
         context['selected_pairs_format'] = self.request.POST.get('pairs_format', '')
+        # MoC player counts a sign-up sheet can be limited to
+        from ..models.tournament_types import signup_entry_counts
+        context['moc_entry_counts_csv'] = ','.join(str(n) for n in signup_entry_counts('MOC'))
 
         # Show player selection forms based on category
         if tournament_category == 'MOC':
@@ -248,8 +254,10 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
         # Auto-detect archetype based on player count and category
         form = self.get_form_class()(request.POST)
         moc_player_form = MoCPlayerSelectForm(request.POST)
+        # Sign-up tournaments are created without entrants (see tournament_signup)
+        signup = bool(request.POST.get('uses_signup'))
 
-        if tournament_category == 'PAIRS':
+        if tournament_category == 'PAIRS' and not signup:
             # The pair editor submits both slots of every row, so an empty slot
             # ('') would otherwise shift everyone after it into the wrong pair.
             submitted = request.POST.getlist('players')
@@ -262,165 +270,45 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
             elif len(set(filled)) != len(filled):
                 form.add_error(None, "A player can only be in one pair.")
 
-        if not form.is_valid() or not moc_player_form.is_valid():
+        def rerender():
             context = self.get_context_data(object=None)
             context['form'] = form
             context['moc_player_form'] = moc_player_form
             return render(request, self.template_name, context)
 
-        # Get players in the order they were selected (from POST data)
-        # The form widget submits player IDs in selection order
-        player_ids = request.POST.getlist('players')
+        if not form.is_valid() or (not signup and not moc_player_form.is_valid()):
+            return rerender()
+
+        if tournament_category not in ('MOC', 'PAIRS'):
+            messages.error(request, "Please select a tournament type")
+            return rerender()
+
+        tournament = form.save(commit=False)
+        tournament.created_by = request.user
+        tournament.match_rules = form.cleaned_data['match_rules']
+
+        if signup:
+            tournament.signup_category = tournament_category
+            if tournament_category == 'PAIRS':
+                tournament.signup_pairs_format = form.cleaned_data.get('pairs_format') or ''
+            # Filled in when the sign-up is closed and the format is known
+            tournament.number_of_rounds = 0
+            tournament.number_of_courts = 0
+            tournament.save()
+            messages.success(request, "Tournament created. Players can now sign up on this page.")
+            return redirect('tournament_signup', tournament_id=tournament.pk)
+
+        # Players in the order they were selected; for doubles, partners are consecutive
+        player_ids = [pid for pid in request.POST.getlist('players') if pid]
         players = [Player.objects.get(id=pid) for pid in player_ids]
-        num_players = len(players)
-
-        # Find the matching archetype
         try:
-            if tournament_category == 'MOC':
-                archetype = TournamentArchetype.objects.get(
-                    tournament_category='MOC',
-                    name=f"{num_players}-player Monarch of the Court"
-                )
-            elif tournament_category == 'PAIRS':
-                # For pairs, num_players should be even
-                if num_players % 2 != 0:
-                    messages.error(request, f"Pairs tournaments require an even number of players. You selected {num_players} players.")
-                    context = self.get_context_data(object=None)
-                    context['form'] = form
-                    context['moc_player_form'] = moc_player_form
-                    return render(request, self.template_name, context)
-
-                num_pairs = num_players // 2
-                # The chosen playing format; a blank choice picks the first that fits
-                # (plain round robin for 2-10 pairs, euros for 20)
-                from ..models.tournament_types import pairs_format_option
-                try:
-                    pairs_format = pairs_format_option(form.cleaned_data.get('pairs_format'), num_pairs)
-                except ValueError as e:
-                    messages.error(request, str(e))
-                    context = self.get_context_data(object=None)
-                    context['form'] = form
-                    context['moc_player_form'] = moc_player_form
-                    return render(request, self.template_name, context)
-                archetype = TournamentArchetype.objects.get(
-                    tournament_category='PAIRS',
-                    name=pairs_format['archetype'] or f"{num_pairs} pairs doubles tournament"
-                )
-            else:
-                messages.error(request, "Please select a tournament type")
-                context = self.get_context_data(object=None)
-                context['form'] = form
-                return render(request, self.template_name, context)
-        except TournamentArchetype.DoesNotExist:
-            messages.error(request, f"No tournament format exists for {num_players} players in {tournament_category} category. Available sizes may vary.")
-            context = self.get_context_data(object=None)
-            context['form'] = form
-            context['moc_player_form'] = moc_player_form
-            return render(request, self.template_name, context)
-        # Create tournament with auto-detected archetype
-        if tournament_category == 'MOC':
-            # MoC tournaments use individual players
-            tournament = form.save(commit=False)
-            tournament.archetype = archetype
-            tournament.created_by = request.user
-            tournament.number_of_rounds = archetype.calculate_rounds(num_players)
-            tournament.number_of_courts = archetype.calculate_courts(num_players)
-            tournament.save()
-            tournament.players.set(players)
-
-            # Create a single default stage for MoC tournaments
-            from ..models.base_models import Stage
-            from ..models.tournament_types import get_implementation
-
-            # Get the archetype implementation for matchup generation
-            archetype_impl = get_implementation(archetype)
-
-            if tournament.number_of_stages == 1:
-                stage = Stage.objects.create(
-                    tournament=tournament,
-                    stage_number=1,
-                    stage_type='ROUND_ROBIN',
-                    name="Main Stage",
-                    scoring_mode='CUMULATIVE'
-                )
-                archetype_impl.generate_matchups(tournament, players, stage=stage)
-            else:
-                # Multi-stage MoC (future feature)
-                for stage_num in range(1, tournament.number_of_stages + 1):
-                    stage = Stage.objects.create(
-                        tournament=tournament,
-                        stage_number=stage_num,
-                        stage_type='ROUND_ROBIN',
-                        name=f"Stage {stage_num}",
-                        scoring_mode='CUMULATIVE'
-                    )
-                    archetype_impl.generate_matchups(tournament, players, stage=stage)
-
-            messages.success(request, f"Tournament created successfully with {num_players} players!")
-            return redirect('tournament_detail', pk=tournament.pk)
-
-        elif tournament_category == 'PAIRS':
-            # For pairs tournaments, create pairs from consecutive players in entry order
-            # Keep players in the order they were entered (not sorted by ranking)
-            pairs = []
-            for i in range(0, len(players), 2):
-                pair = Pair.objects.create(
-                    player1=players[i],
-                    player2=players[i+1],
-                    entry_order=len(pairs) + 1  # 1-based entry order
-                )
-                pairs.append(pair)
-
-            # Now assign seeds based on combined ranking points (higher points = lower seed number)
-            pairs_sorted_by_ranking = sorted(pairs, key=lambda p: p.ranking_points_sum, reverse=True)
-            for idx, pair in enumerate(pairs_sorted_by_ranking, start=1):
-                pair.seed = idx
-                pair.save()
-
-            tournament = form.save(commit=False)
-            tournament.archetype = archetype
-            tournament.created_by = request.user
-            from ..models.tournament_types import get_implementation
-            from ..models.base_models import Stage
-            archetype_impl = get_implementation(archetype)
-            tournament.number_of_rounds = archetype_impl.calculate_rounds(len(pairs))
-            tournament.number_of_courts = archetype_impl.calculate_courts(len(pairs))
-            # Only the rules of match types this format actually plays
-            tournament.match_rules = {
-                key: rules for key, rules in form.cleaned_data['match_rules'].items()
-                if key in pairs_format['rule_types']
-            }
-
-            if getattr(archetype_impl, 'is_multi_phase', False):
-                # Multi-phase format: fixed stage structure, later stages are
-                # generated from results via the "Generate next phase" action.
-                tournament.number_of_stages = len(archetype_impl.STAGES)
-                tournament.save()
-                tournament.pairs.set(pairs)
-                stages = archetype_impl.create_stages(tournament)
-                archetype_impl.generate_matchups(tournament, pairs, stage=stages[0])
-                messages.success(
-                    request,
-                    f"Tournament created with {len(pairs)} pairs. {stages[0].name} is ready; "
-                    "later phases are generated once the previous phase is complete."
-                )
-                return redirect('tournament_detail', pk=tournament.pk)
-
-            tournament.number_of_stages = 1
-            tournament.save()
-            tournament.pairs.set(pairs)
-
-            stage = Stage.objects.create(
-                tournament=tournament,
-                stage_number=1,
-                stage_type='POOL',
-                name="Stage 1",
-                scoring_mode='CUMULATIVE'
-            )
-            archetype_impl.generate_matchups(tournament, pairs, stage=stage)
-
-            messages.success(request, f"Tournament created successfully with {len(pairs)} pairs!")
-            return redirect('tournament_detail', pk=tournament.pk)
+            message = create_tournament_schedule(
+                tournament, tournament_category, players, form.cleaned_data.get('pairs_format'))
+        except ValueError as e:
+            messages.error(request, str(e))
+            return rerender()
+        messages.success(request, message)
+        return redirect('tournament_detail', pk=tournament.pk)
 
     def get(self, request, *args, **kwargs):
         self.object = None  # required for CreateView context
@@ -442,10 +330,143 @@ class TournamentCreateView(TournamentCreatorRequiredMixin, CreateView):
                 return render(request, 'tournament_creator/tournament_create.html', context)
         return super().get(request, *args, **kwargs)
 
+
+@transaction.atomic
+def create_tournament_schedule(tournament, category, players, pairs_format_key=''):
+    """
+    Pick the format that fits the entrants, save ``tournament`` with it and create
+    the schedule. ``players`` are the MoC players, or for doubles the pair partners
+    consecutively (1&2, 3&4, ...). ``tournament.match_rules`` holds the submitted
+    rules; only the types the chosen format plays are kept.
+
+    Raises ValueError before anything is saved when no format fits. Returns the
+    success message. Used both at creation and when a sign-up is closed.
+    """
+    from ..models.base_models import Stage
+    from ..models.tournament_types import get_implementation, pairs_format_option
+    num_players = len(players)
+
+    if category == 'MOC':
+        try:
+            archetype = TournamentArchetype.objects.get(
+                tournament_category='MOC',
+                name=f"{num_players}-player Monarch of the Court"
+            )
+        except TournamentArchetype.DoesNotExist:
+            raise ValueError(f"No tournament format exists for {num_players} players in MOC category. Available sizes may vary.")
+        # MoC tournaments use individual players
+        tournament.archetype = archetype
+        tournament.number_of_rounds = archetype.calculate_rounds(num_players)
+        tournament.number_of_courts = archetype.calculate_courts(num_players)
+        tournament.save()
+        tournament.players.set(players)
+
+        # Get the archetype implementation for matchup generation
+        archetype_impl = get_implementation(archetype)
+
+        if tournament.number_of_stages == 1:
+            stage = Stage.objects.create(
+                tournament=tournament,
+                stage_number=1,
+                stage_type='ROUND_ROBIN',
+                name="Main Stage",
+                scoring_mode='CUMULATIVE'
+            )
+            archetype_impl.generate_matchups(tournament, players, stage=stage)
+        else:
+            # Multi-stage MoC (future feature)
+            for stage_num in range(1, tournament.number_of_stages + 1):
+                stage = Stage.objects.create(
+                    tournament=tournament,
+                    stage_number=stage_num,
+                    stage_type='ROUND_ROBIN',
+                    name=f"Stage {stage_num}",
+                    scoring_mode='CUMULATIVE'
+                )
+                archetype_impl.generate_matchups(tournament, players, stage=stage)
+
+        return f"Tournament created successfully with {num_players} players!"
+
+    # For pairs, num_players should be even
+    if num_players % 2 != 0:
+        raise ValueError(f"Pairs tournaments require an even number of players. You selected {num_players} players.")
+    num_pairs = num_players // 2
+    # The chosen playing format; a blank choice picks the first that fits
+    # (plain round robin for 2-10 pairs, euros for 20)
+    pairs_format = pairs_format_option(pairs_format_key, num_pairs)
+    try:
+        archetype = TournamentArchetype.objects.get(
+            tournament_category='PAIRS',
+            name=pairs_format['archetype'] or f"{num_pairs} pairs doubles tournament"
+        )
+    except TournamentArchetype.DoesNotExist:
+        raise ValueError(f"No tournament format exists for {num_players} players in PAIRS category. Available sizes may vary.")
+
+    # For pairs tournaments, create pairs from consecutive players in entry order
+    # Keep players in the order they were entered (not sorted by ranking)
+    pairs = []
+    for i in range(0, len(players), 2):
+        pair = Pair.objects.create(
+            player1=players[i],
+            player2=players[i+1],
+            entry_order=len(pairs) + 1  # 1-based entry order
+        )
+        pairs.append(pair)
+
+    # Now assign seeds based on combined ranking points (higher points = lower seed number)
+    pairs_sorted_by_ranking = sorted(pairs, key=lambda p: p.ranking_points_sum, reverse=True)
+    for idx, pair in enumerate(pairs_sorted_by_ranking, start=1):
+        pair.seed = idx
+        pair.save()
+
+    tournament.archetype = archetype
+    archetype_impl = get_implementation(archetype)
+    tournament.number_of_rounds = archetype_impl.calculate_rounds(len(pairs))
+    tournament.number_of_courts = archetype_impl.calculate_courts(len(pairs))
+    # Only the rules of match types this format actually plays
+    tournament.match_rules = {
+        key: rules for key, rules in (tournament.match_rules or {}).items()
+        if key in pairs_format['rule_types']
+    }
+
+    if getattr(archetype_impl, 'is_multi_phase', False):
+        # Multi-phase format: fixed stage structure, later stages are
+        # generated from results via the "Generate next phase" action.
+        tournament.number_of_stages = len(archetype_impl.STAGES)
+        tournament.save()
+        tournament.pairs.set(pairs)
+        stages = archetype_impl.create_stages(tournament)
+        archetype_impl.generate_matchups(tournament, pairs, stage=stages[0])
+        return (f"Tournament created with {len(pairs)} pairs. {stages[0].name} is ready; "
+                "later phases are generated once the previous phase is complete.")
+
+    tournament.number_of_stages = 1
+    tournament.save()
+    tournament.pairs.set(pairs)
+
+    stage = Stage.objects.create(
+        tournament=tournament,
+        stage_number=1,
+        stage_type='POOL',
+        name="Stage 1",
+        scoring_mode='CUMULATIVE'
+    )
+    archetype_impl.generate_matchups(tournament, pairs, stage=stage)
+
+    return f"Tournament created successfully with {len(pairs)} pairs!"
+
+
 class TournamentDetailView(SpectatorAccessMixin, DetailView):
     model = TournamentChart
     template_name = 'tournament_creator/tournament_detail.html'
     context_object_name = 'tournament'
+
+    def get(self, request, *args, **kwargs):
+        # A sign-up tournament has no schedule to show until the sign-up is closed
+        if self.get_object().awaiting_signups:
+            return redirect('tournament_signup', tournament_id=kwargs['pk'])
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         tournament = self.get_object()

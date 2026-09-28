@@ -14,13 +14,30 @@
                                 <i class="bi bi-geo-alt"></i> {{ tournament.location }}
                             </h6>
                         {% endif %}
-                        <p class="card-text">
-                            Date: {{ tournament.date }}{% if tournament.end_date %} &ndash; {{ tournament.end_date }}{% endif %}<br>
-                            Players: {{ tournament.players.count }}<br>
-                            Rounds: {{ tournament.number_of_rounds }}<br>
-                            Courts: {{ tournament.number_of_courts }}
-                        </p>
-                        <a href="{% url 'tournament_detail' tournament.id %}" class="btn btn-primary">View Details</a>
+                        {% if tournament.awaiting_signups %}
+                            <p class="card-text">
+                                Date: {{ tournament.date }}{% if tournament.end_date %} &ndash; {{ tournament.end_date }}{% endif %}<br>
+                                {% if tournament.signup_is_open %}
+                                    <span class="badge bg-success">Sign-up open</span>
+                                    until {{ tournament.signup_deadline|date:"j M, H:i" }}<br>
+                                {% else %}
+                                    <span class="badge bg-secondary">Sign-up closed</span><br>
+                                {% endif %}
+                                Signed up: {{ tournament.signups.count }}{% if tournament.signup_max %} / {{ tournament.signup_max }}{% endif %}
+                                {% if tournament.signup_category == 'PAIRS' %}pairs{% else %}players{% endif %}
+                            </p>
+                            <a href="{% url 'tournament_signup' tournament.id %}" class="btn btn-primary">
+                                {% if tournament.signup_is_open %}Sign up{% else %}View sign-ups{% endif %}
+                            </a>
+                        {% else %}
+                            <p class="card-text">
+                                Date: {{ tournament.date }}{% if tournament.end_date %} &ndash; {{ tournament.end_date }}{% endif %}<br>
+                                Players: {{ tournament.players.count }}<br>
+                                Rounds: {{ tournament.number_of_rounds }}<br>
+                                Courts: {{ tournament.number_of_courts }}
+                            </p>
+                            <a href="{% url 'tournament_detail' tournament.id %}" class="btn btn-primary">View Details</a>
+                        {% endif %}
                     </div>
                 </div>
             </div>

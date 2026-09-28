@@ -314,8 +314,10 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
 ```
 
 ### Testing
-- Test suite has 198 tests. As of 2026-09-24 all pass except two `test_signup`
-  failures that predate the multi-phase formats work (also failing on main)
+- Test suite has 215 tests. As of 2026-09-28 all pass except two `test_signup`
+  failures that predate the multi-phase formats work (also failing on main).
+  Note `test_signup` is account self-signup; tournament sign-up sheets are
+  `test_tournament_signups`
 - `tests/test_tournament_access.py` covers location metadata/filtering and
   per-tournament director rights; tournament-creating tests need a `TC` (or
   `ADMIN`) user and must send `place`/`country` (plus `confirm_new_location`,
@@ -393,6 +395,21 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
     result following that match's score rules, including finals/bronze created along
     the way. The simulation lives in `tournament_creator/simulation.py`, shared with
     `manage.py simulate_scores`
+
+- **Sign-up tournaments** (`views/signup_views.py`, `TournamentSignup`)
+  - "Open a sign-up sheet" at creation (MoC or doubles) creates the tournament with no
+    entrants, no archetype and 0 rounds/courts; `awaiting_signups` (= `uses_signup` and
+    no archetype yet) redirects the detail page to `tournament_signup`
+  - Players (role PLAYER/TC/ADMIN with a linked ranking `Player`) sign up and withdraw
+    until `signup_deadline` (default 23:59 two days before the start); doubles entries
+    name a partner (any ranking player). Directors add/remove entries at any time
+  - `signup_min`/`signup_max` count players (MoC) or pairs (doubles), bounded by
+    `signup_entry_counts` (MoC archetypes 5-16; the chosen doubles format's pair counts).
+    Defaults: min = max(4, format min), max = format max. Sign-up stops when full
+  - A director closes the sign-up (`close_signup`), which runs
+    `create_tournament_schedule` — the same helper normal creation uses — with the
+    entries in sign-up order
+  - Tests: `tournament_creator/tests/test_tournament_signups.py`
 
 - **Euros format (multi-phase pairs, 20 pairs)** — used at European Open 2024/2026
   - Archetype: `EurosFormat` in `tournament_types.py` (DB row "20 pairs euros format");

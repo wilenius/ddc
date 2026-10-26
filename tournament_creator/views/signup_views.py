@@ -35,6 +35,39 @@ def _can_withdraw(tournament, signup, user, can_administer):
     return signup.signed_up_by_id == user.pk or (player is not None and player in signup.players())
 
 
+# Doubles sign-up leagues choose between these when the sign-up closes, once it's
+# known whether the season's slots fit two round robins: (key, label, repeats)
+LEAGUE_FORMAT_CHOICES = [
+    ('ROUND_ROBIN', 'Round robin once', 1),
+    ('DOUBLE_RR', 'Round robin twice', 2),
+]
+
+
+def league_format_choices(tournament, num_entries, check_fit=False):
+    """
+    The round-robin choices for closing a doubles league's sign-up (empty for other
+    tournaments, or a league set to another format). With ``check_fit`` each fitting
+    choice gets ``fit`` = (matches that fit the picked slots, total, optimal).
+    """
+    current = tournament.signup_pairs_format or 'ROUND_ROBIN'
+    keys = [key for key, _label, _repeats in LEAGUE_FORMAT_CHOICES]
+    if not (tournament.is_signup_league and tournament.signup_category == 'PAIRS' and current in keys):
+        return []
+    from .league_views import preview_league_fit
+    choices = []
+    for key, label, repeats in LEAGUE_FORMAT_CHOICES:
+        option = next(o for o in PAIRS_FORMAT_OPTIONS if o['key'] == key)
+        available = num_entries in option['pair_counts']
+        choices.append({
+            'key': key,
+            'label': label,
+            'available': available,
+            'selected': key == current,
+            'fit': preview_league_fit(tournament, repeats) if check_fit and available else None,
+        })
+    return choices
+
+
 @login_required
 def tournament_signup(request, tournament_id):
     tournament = get_object_or_404(TournamentChart, id=tournament_id)
@@ -97,6 +130,14 @@ def tournament_signup(request, tournament_id):
     my_signup = next((s for s in signups if own_player and own_player in s.players()), None)
     is_pairs = tournament.signup_category == 'PAIRS'
     pairs_format = next((o for o in PAIRS_FORMAT_OPTIONS if o['key'] == tournament.signup_pairs_format), None)
+    format_choices = league_format_choices(
+        tournament, len(signups), check_fit=can_administer and request.GET.get('fit') == '1')
+    if format_choices:
+        format_label = 'Round robin once or twice (decided when the sign-up closes)'
+    elif is_pairs:
+        format_label = pairs_format['label'] if pairs_format else 'Round robin'
+    else:
+        format_label = 'Monarch of the Court'
 
     return render(request, 'tournament_creator/tournament_signup.html', {
         'tournament': tournament,
@@ -110,8 +151,9 @@ def tournament_signup(request, tournament_id):
         'below_minimum': len(signups) < (tournament.signup_min or 0),
         'is_pairs': is_pairs,
         'unit': 'pairs' if is_pairs else 'players',
-        'format_label': (pairs_format['label'] if pairs_format else 'Round robin') if is_pairs
-                        else 'Monarch of the Court',
+        'format_label': format_label,
+        'format_choices': format_choices,
+        'fit_checked': any(c['fit'] for c in format_choices),
         'directors': [d for d in [tournament.created_by, *tournament.directors.all()] if d],
         'is_league': league,
         'slot_count': tournament.league_slots.count() if league else 0,
@@ -139,6 +181,15 @@ def close_signup(request, tournament_id):
         messages.error(request, f"Only {len(signups)} {unit} have signed up; the tournament needs at "
                                 f"least {tournament.signup_min}. Add entries or delete the tournament.")
         return redirect('tournament_signup', tournament_id=tournament_id)
+
+    # Doubles leagues: once or twice round robin (nothing posted keeps the current choice)
+    chosen = next((c for c in league_format_choices(tournament, len(signups))
+                   if c['key'] == request.POST.get('pairs_format')), None)
+    if chosen:
+        if not chosen['available']:
+            messages.error(request, f"{chosen['label']} isn't possible with {len(signups)} {unit}.")
+            return redirect('tournament_signup', tournament_id=tournament_id)
+        tournament.signup_pairs_format = chosen['key']
 
     players = [player for signup in signups for player in signup.players()]
     try:

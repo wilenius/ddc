@@ -260,7 +260,7 @@
 
                 <hr class="my-4">
 
-                <h6 class="mb-3">
+                <h6 class="mb-3" id="close-signup">
                     Close sign-up
                     <i class="bi bi-info-circle text-muted"
                        data-bs-toggle="tooltip"
@@ -275,6 +275,41 @@
                     <form method="post" action="{% url 'close_signup' tournament.id %}" class="mb-0"
                           onsubmit="return confirm('{% if signup_open %}The sign-up deadline hasn\'t passed yet. {% endif %}{% if missing_times %}{{ missing_times|length }} player{{ missing_times|length|pluralize }} haven\'t picked their times, so their matches can\'t be scheduled. {% endif %}Close the sign-up and create the schedule for {{ signups|length }} {{ unit }}?')">
                         {% csrf_token %}
+                        {% if format_choices %}
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    Format
+                                    <i class="bi bi-info-circle text-muted"
+                                       data-bs-toggle="tooltip"
+                                       data-bs-placement="right"
+                                       title="Twice: both round robins are created now and scheduled together over the season, the second in the same order as the first. Standings count both. Check the fit to see how many matches each choice gets into the time slots the players picked."></i>
+                                </label>
+                                {% for choice in format_choices %}
+                                    <div class="form-check" style="padding-left: 0;">
+                                        <input class="form-check-input" type="radio" name="pairs_format"
+                                               id="format-{{ choice.key }}" value="{{ choice.key }}"
+                                               style="margin-left: 0;"
+                                               {% if choice.selected and choice.available %}checked{% endif %}
+                                               {% if not choice.available %}disabled{% endif %} required>
+                                        <label class="form-check-label" for="format-{{ choice.key }}" style="padding-left: 1.5em;">
+                                            {{ choice.label }}
+                                            {% if not choice.available %}
+                                                <span class="text-muted">(not possible with {{ signups|length }} {{ unit }})</span>
+                                            {% elif choice.fit %}
+                                                &middot;
+                                                <span class="{% if choice.fit.0 == choice.fit.1 %}text-success{% else %}text-warning-emphasis{% endif %}">
+                                                    {{ choice.fit.0 }} of {{ choice.fit.1 }} matches fit
+                                                </span>
+                                                {% if not choice.fit.2 %}<span class="text-muted">(at least; the check hit its time limit)</span>{% endif %}
+                                            {% endif %}
+                                        </label>
+                                    </div>
+                                {% endfor %}
+                                <a href="?fit=1#close-signup" class="btn btn-sm btn-outline-secondary mt-2">
+                                    <i class="bi bi-calculator"></i> {% if fit_checked %}Check the fit again{% else %}Check how many matches fit{% endif %}
+                                </a>
+                            </div>
+                        {% endif %}
                         <button type="submit" class="btn {% if signup_open %}btn-outline-primary{% else %}btn-primary{% endif %}">
                             <i class="bi bi-calendar-check"></i> Close sign-up and create schedule
                         </button>

@@ -449,6 +449,9 @@ def create_tournament_schedule(tournament, category, players, pairs_format_key='
         tournament.save()
         tournament.pairs.set(pairs)
         stages = archetype_impl.create_stages(tournament)
+        if tournament.is_signup_league and hasattr(archetype_impl, 'generate_all_stages'):
+            archetype_impl.generate_all_stages(tournament, pairs, stages)
+            return f"Tournament created with {len(pairs)} pairs; all {len(stages)} round robins are ready."
         archetype_impl.generate_matchups(tournament, pairs, stage=stages[0])
         return (f"Tournament created with {len(pairs)} pairs. {stages[0].name} is ready; "
                 "later phases are generated once the previous phase is complete.")

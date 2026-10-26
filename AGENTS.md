@@ -431,6 +431,13 @@ matchups_by_stage = {stage.id: [m for m in all_matchups if m.stage_id == stage.i
     avoid-parallel) > closest to the seeded order (match's place in the seeded
     schedule vs its slot's place in the season). 6 s limit per stage to stay under
     gunicorn's 30 s timeout
+  - Doubles leagues set to a round robin choose "once" or "twice" (`DOUBLE_RR`) when the
+    sign-up closes (`league_format_choices` in `signup_views.py`); "Check how many
+    matches fit" (`?fit=1`) dry-runs the scheduler for both (`preview_league_fit`,
+    `schedule_league(fit_only=True)`). In a sign-up league the double round robin
+    creates both round robins at close, the second NOT reseeded
+    (`DoubleRoundRobinFormat.generate_all_stages`), so the whole season is scheduled
+    at once
   - Practice leagues: "Simulate sign-ups & times" on the sign-up page, or
     `manage.py simulate_signups <id> [--times-only] [--seed N]`
   - Tests: `tests/test_league_scheduler.py` (pure scheduler), `tests/test_league_signups.py`

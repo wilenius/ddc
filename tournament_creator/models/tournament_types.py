@@ -795,6 +795,15 @@ class DoubleRoundRobinFormat(MultiPhasePairsFormat):
          'pools': 'single', 'pool_names': ['Combined standings'], 'cumulative': True},
     ]
 
+    def generate_all_stages(self, tournament, pairs, stages):
+        """Leagues: both round robins up front, the second in the same seeded order
+        (not reseeded), so the whole season can be scheduled at once and no round
+        robin waits for the other's last match."""
+        self.generate_matchups(tournament, pairs, stage=stages[0])
+        seeded = sorted(pairs, key=lambda p: p.seed)
+        for stage in stages[1:]:
+            self._generate_round_robin(tournament, stage, seeded, previous_stage=None)
+
 
 # Pairs formats offered at tournament creation, in dropdown order. 'archetype' None
 # means the plain round robin for the pair count ("N pairs doubles tournament").

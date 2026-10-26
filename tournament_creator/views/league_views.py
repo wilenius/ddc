@@ -53,6 +53,54 @@ def _seeded_order(matchup):
     return (matchup.stage.stage_number if matchup.stage_id else 0, matchup.round_number, -strength)
 
 
+def _scheduling_inputs(tournament):
+    """(all slots, Slots from today on, player id -> slot ids, scheduler rules)."""
+    from ..league_scheduler import Slot
+
+    today = timezone.localdate()
+    db_slots = list(tournament.league_slots.all())
+    open_slots = [Slot(s.id, s.date, s.start_time) for s in db_slots if s.date >= today]
+    availability = {}
+    for player_id, slot_id in LeagueAvailability.objects.filter(
+            slot__tournament=tournament).values_list('player_id', 'slot_id'):
+        availability.setdefault(player_id, set()).add(slot_id)
+    rules = {
+        'courts': tournament.league_courts,
+        'max_per_day': tournament.league_max_matches_per_day,
+        'allow_back_to_back': tournament.league_back_to_back,
+        'avoid_parallel': tournament.league_avoid_parallel,
+    }
+    return db_slots, open_slots, availability, rules
+
+
+def preview_league_fit(tournament, repeats):
+    """
+    Dry run before closing a doubles league's sign-up: how many of the round robin's
+    matches (played ``repeats`` times) fit the slots the players picked. Returns
+    (fitting, total, optimal), or None if no round robin exists for the entry count.
+    Saves nothing.
+    """
+    from ..league_scheduler import Match, schedule_league
+    from ..models.tournament_types import ROUND_ROBIN_SCHEDULES
+
+    entries = [frozenset(p.id for p in signup.players())
+               for signup in tournament.signups.select_related('player', 'partner')]
+    schedule = ROUND_ROBIN_SCHEDULES.get(len(entries))
+    if not schedule:
+        return None
+    # Every pairing meets once per round robin, whatever the seeding, so positions
+    # can follow sign-up order here.
+    matches = []
+    for repeat in range(1, repeats + 1):
+        for round_number, round_matches in enumerate(schedule, 1):
+            for pos1, pos2 in round_matches:
+                matches.append(Match(len(matches), entries[pos1 - 1] | entries[pos2 - 1],
+                                     (repeat, round_number, 0)))
+    _db_slots, open_slots, availability, rules = _scheduling_inputs(tournament)
+    result = schedule_league(matches, open_slots, availability, fit_only=True, **rules)
+    return len(result.assignments), len(matches), result.optimal
+
+
 @transaction.atomic
 def schedule_from_availability(tournament, keep_scheduled=False):
     """
@@ -60,16 +108,10 @@ def schedule_from_availability(tournament, keep_scheduled=False):
     matches keep their slot; with ``keep_scheduled`` so do matches that already have
     a date, and only the unplaced ones are scheduled. Returns (result, message).
     """
-    from ..league_scheduler import FixedMatch, Match, Slot, schedule_league
+    from ..league_scheduler import FixedMatch, Match, schedule_league
 
-    today = timezone.localdate()
-    db_slots = list(tournament.league_slots.all())
+    db_slots, open_slots, availability, rules = _scheduling_inputs(tournament)
     slot_at = {(s.date, s.start_time): s.id for s in db_slots}
-    open_slots = [Slot(s.id, s.date, s.start_time) for s in db_slots if s.date >= today]
-    availability = {}
-    for player_id, slot_id in LeagueAvailability.objects.filter(
-            slot__tournament=tournament).values_list('player_id', 'slot_id'):
-        availability.setdefault(player_id, set()).add(slot_id)
 
     matchups = list(tournament.matchups.select_related(
         'stage', 'pair1__player1', 'pair1__player2', 'pair2__player1', 'pair2__player2',
@@ -88,12 +130,7 @@ def schedule_from_availability(tournament, keep_scheduled=False):
 
     result = schedule_league(
         [Match(m.id, _matchup_players(m), _seeded_order(m)) for m in to_schedule],
-        open_slots, availability,
-        courts=tournament.league_courts,
-        max_per_day=tournament.league_max_matches_per_day,
-        allow_back_to_back=tournament.league_back_to_back,
-        avoid_parallel=tournament.league_avoid_parallel,
-        fixed=fixed,
+        open_slots, availability, fixed=fixed, **rules,
     )
     slot_by_id = {s.id: s for s in db_slots}
     for matchup in to_schedule:

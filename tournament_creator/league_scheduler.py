@@ -69,11 +69,12 @@ class ScheduleResult:
 
 
 def schedule_league(matches, slots, availability, courts=1, max_per_day=None,
-                    allow_back_to_back=True, avoid_parallel=False, fixed=()):
+                    allow_back_to_back=True, avoid_parallel=False, fixed=(), fit_only=False):
     """
     ``availability`` maps player id -> set of slot ids. ``fixed`` are matches that
     keep their slot. Returns a ``ScheduleResult``; matches that fit no slot are
     listed in ``unscheduled`` rather than failing the whole schedule.
+    ``fit_only`` stops after goal 1, for a quick count of how many matches fit.
     """
     from ortools.sat.python import cp_model
 
@@ -176,9 +177,10 @@ def schedule_league(matches, slots, availability, courts=1, max_per_day=None,
     )
 
     goals = [(sum(scheduled.values()), 'max')]
-    if avoid_parallel and parallel_terms:
-        goals.append((sum(parallel_terms), 'min'))
-    goals.append((seeding_cost, 'min'))
+    if not fit_only:
+        if avoid_parallel and parallel_terms:
+            goals.append((sum(parallel_terms), 'min'))
+        goals.append((seeding_cost, 'min'))
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = STAGE_TIME_LIMIT

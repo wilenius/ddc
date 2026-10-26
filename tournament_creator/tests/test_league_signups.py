@@ -341,6 +341,55 @@ class LeagueSchedulingTests(LeagueTestBase):
         self.close(tournament)
         self.assertEqual(set(tournament.matchups.values_list('court_number', flat=True)), {1})
 
+    def test_double_round_robin_chosen_at_close(self):
+        tournament = self.league(days=4)
+        self.enter_pairs(tournament, 4)
+        self.everyone_everywhere(tournament)
+        self.client.login(username='creator', password='test123')
+        self.client.post(reverse('close_signup', args=[tournament.id]), {'pairs_format': 'DOUBLE_RR'})
+        tournament.refresh_from_db()
+        self.assertEqual(tournament.signup_pairs_format, 'DOUBLE_RR')
+        # Both round robins exist right away and are scheduled, the second after the first
+        stages = list(tournament.stages.order_by('stage_number'))
+        self.assertEqual([s.matchups.count() for s in stages], [6, 6])
+        self.assertFalse(tournament.matchups.filter(match_date=None).exists())
+        self.assert_schedule_respects_availability(tournament)
+        last_first = max((m.match_date, m.match_time) for m in stages[0].matchups.all())
+        first_second = min((m.match_date, m.match_time) for m in stages[1].matchups.all())
+        self.assertLess(last_first, first_second)
+        response = self.client.get(reverse('tournament_detail', args=[tournament.id]))
+        self.assertNotContains(response, 'Generate next phase')
+
+    def test_once_chosen_at_close(self):
+        tournament = self.league(signup_pairs_format='DOUBLE_RR')
+        self.enter_pairs(tournament, 4)
+        self.everyone_everywhere(tournament)
+        self.client.login(username='creator', password='test123')
+        self.client.post(reverse('close_signup', args=[tournament.id]), {'pairs_format': 'ROUND_ROBIN'})
+        self.assertEqual(tournament.matchups.count(), 6)
+        self.assertEqual(tournament.stages.count(), 1)
+
+    def test_fit_check_counts_matches(self):
+        tournament = self.league(days=2, hours=(18, 19, 20), league_courts=1)  # 6 slots
+        self.enter_pairs(tournament, 4)
+        self.everyone_everywhere(tournament)
+        self.client.login(username='creator', password='test123')
+        url = reverse('tournament_signup', args=[tournament.id])
+        response = self.client.get(url)
+        self.assertContains(response, 'Round robin twice')
+        self.assertNotContains(response, 'of 6 matches fit')
+        response = self.client.get(url, {'fit': '1'})
+        self.assertContains(response, '6 of 6 matches fit')
+        self.assertContains(response, '6 of 12 matches fit')
+        self.assertFalse(tournament.matchups.exists())
+
+    def test_no_choice_for_other_formats(self):
+        tournament = self.league(signup_pairs_format='RR_PLAYOFFS')
+        self.enter_pairs(tournament, 4)
+        self.client.login(username='creator', password='test123')
+        response = self.client.get(reverse('tournament_signup', args=[tournament.id]))
+        self.assertNotContains(response, 'Round robin twice')
+
     def test_schedule_is_directors_only(self):
         tournament = self.league()
         self.enter_pairs(tournament, 4)

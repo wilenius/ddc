@@ -161,6 +161,12 @@ class TournamentChart(models.Model):
         blank=True,
         related_name='directed_tournaments',
     )
+    # Kodiak-of-the-Kourt 5 players: option A is 5 rounds, options B and C
+    # each add 5 more (all 15 possible matchups).
+    five_player_rounds = models.PositiveSmallIntegerField(
+        default=5,
+        choices=[(5, '5 (Kodiak option A)'), (10, '10 (options A + B)'), (15, '15 (options A + B + C)')],
+        help_text="MoC with 5 players: rounds to play. Ignored for other player counts.")
     # Sign-up tournaments are created without entrants: players sign up themselves
     # (doubles: with their partner) until the deadline, then a director closes the
     # sign-up, which picks the format from the entry count and creates the schedule.

@@ -981,50 +981,65 @@ class MonarchOfTheCourt8(MoCTournamentArchetype):
 # 5-player Monarch of the Court (Option A)
 class MonarchOfTheCourt5(MoCTournamentArchetype):
     name = "5-player Monarch of the Court"
-    description = "MoC: 5-player specific schedule (Option A)."
-    
-    def calculate_rounds(self, num_players):
+    description = "MoC: 5-player Kodiak schedule, 5, 10 or 15 rounds (options A, A+B, A+B+C)."
+
+    # Cade Loving's Kodiak-of-the-Kourt 5-player options (data/kodiak.md). Every
+    # round one player has a bye. Option A has every even matchup; B and C are
+    # "add these rounds", and A+B+C together are all 15 possible matchups.
+    # (p1, p2, p3, p4) = seed indexes of pair 1 and pair 2.
+    OPTION_A = [
+        (0, 1, 2, 4),  # bye 4: 1&2 vs 3&5 (3 v 8)
+        (0, 2, 3, 4),  # bye 2: 1&3 vs 4&5 (4 v 9)
+        (1, 4, 2, 3),  # bye 1: 2&5 vs 3&4 (7 v 7)
+        (0, 4, 1, 3),  # bye 3: 1&5 vs 2&4 (6 v 6)
+        (0, 3, 1, 2),  # bye 5: 1&4 vs 2&3 (5 v 5)
+    ]
+    OPTION_B = [
+        (0, 1, 2, 3),  # bye 5: 1&2 vs 3&4 (3 v 7)
+        (0, 2, 1, 4),  # bye 4: 1&3 vs 2&5 (4 v 7)
+        (0, 4, 2, 3),  # bye 2: 1&5 vs 3&4 (6 v 7)
+        (1, 3, 2, 4),  # bye 1: 2&4 vs 3&5 (6 v 8)
+        (0, 3, 1, 4),  # bye 3: 1&4 vs 2&5 (5 v 7)
+    ]
+    OPTION_C = [
+        (0, 1, 3, 4),  # bye 3: 1&2 vs 4&5 (3 v 9)
+        (0, 2, 1, 3),  # bye 5: 1&3 vs 2&4 (4 v 6)
+        (0, 3, 2, 4),  # bye 2: 1&4 vs 3&5 (5 v 8)
+        (1, 2, 3, 4),  # bye 1: 2&3 vs 4&5 (5 v 9)
+        (0, 4, 1, 2),  # bye 4: 1&5 vs 2&3 (6 v 5)
+    ]
+    ROUND_OPTIONS = (5, 10, 15)
+
+    def calculate_rounds(self, num_players, rounds=5):
         if num_players != 5:
             raise ValueError("This tournament type requires exactly 5 players")
-        return 5
-    
+        if rounds not in self.ROUND_OPTIONS:
+            raise ValueError("A 5-player tournament has 5, 10 or 15 rounds")
+        return rounds
+
     def calculate_courts(self, num_players):
         return 1
-    
+
     def generate_matchups(self, tournament_chart, players: List[Player], stage=None):
         if len(players) != 5:
             raise ValueError("This tournament type requires exactly 5 players")
+        rounds = self.calculate_rounds(5, getattr(tournament_chart, 'five_player_rounds', 5) or 5)
 
         # Sort players by ranking
         sorted_players = sorted(players, key=lambda p: p.ranking if p.ranking is not None else 9999)
 
-        # Define schedule according to the 5-player Option A format
-        schedule = [
-            # Round 1: 1&2 vs 3&5 (3 v 8)
-            [(0, 1, 2, 4)],
-            # Round 2: 1&3 vs 4&5 (4 v 9)
-            [(0, 2, 3, 4)],
-            # Round 3: 1&5 vs 3&4 (7 v 7)
-            [(0, 4, 2, 3)],
-            # Round 4: 1&5 vs 2&4 (6 v 6)
-            [(0, 4, 1, 3)],
-            # Round 5: 1&4 vs 2&3 (5 v 5)
-            [(0, 3, 1, 2)],
-        ]
-
-        # Create matchups
-        for round_idx, round_matches in enumerate(schedule, 1):
-            for field_idx, (p1, p2, p3, p4) in enumerate(round_matches, 1):
-                Matchup.objects.create(
-                    tournament_chart=tournament_chart,
-                    stage=stage,
-                    pair1_player1=sorted_players[p1],
-                    pair1_player2=sorted_players[p2],
-                    pair2_player1=sorted_players[p3],
-                    pair2_player2=sorted_players[p4],
-                    round_number=round_idx,
-                    court_number=field_idx
-                )
+        schedule = (self.OPTION_A + self.OPTION_B + self.OPTION_C)[:rounds]
+        for round_idx, (p1, p2, p3, p4) in enumerate(schedule, 1):
+            Matchup.objects.create(
+                tournament_chart=tournament_chart,
+                stage=stage,
+                pair1_player1=sorted_players[p1],
+                pair1_player2=sorted_players[p2],
+                pair2_player1=sorted_players[p3],
+                pair2_player2=sorted_players[p4],
+                round_number=round_idx,
+                court_number=1
+            )
 
 # 6-player Monarch of the Court (Option A)
 class MonarchOfTheCourt6(MoCTournamentArchetype):

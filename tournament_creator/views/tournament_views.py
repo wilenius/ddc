@@ -367,6 +367,9 @@ def create_tournament_schedule(tournament, category, players, pairs_format_key='
         # MoC tournaments use individual players
         tournament.archetype = archetype
         tournament.number_of_rounds = archetype.calculate_rounds(num_players)
+        if num_players == 5:
+            # Kodiak options A, A+B or A+B+C
+            tournament.number_of_rounds = tournament.five_player_rounds
         tournament.number_of_courts = archetype.calculate_courts(num_players)
         tournament.save()
         tournament.players.set(players)

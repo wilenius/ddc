@@ -54,18 +54,7 @@ class TournamentFormatsTest(TestCase):
             ).count()
             self.assertEqual(court_count, 1)
             
-        # In 5-player MoC, player distribution varies based on the specific schedule:
-        # Player 1 (seed 1, index 0) plays in all 5 rounds
-        # Player 2 (seed 2, index 1) plays in 3 rounds (sits out 2)
-        # Players 3-5 play in 4 rounds each (sit out 1 round)
-        expected_matches = {
-            0: 5,  # Player 1 plays in all rounds
-            1: 3,  # Player 2 sits out rounds 2 and 3
-            2: 4,  # Player 3 sits out round 1
-            3: 4,  # Player 4 sits out round 4
-            4: 4,  # Player 5 sits out round 5
-        }
-
+        # Kodiak option A: every player has exactly one bye
         for idx, player in enumerate(players):
             match_count = Matchup.objects.filter(
                 tournament_chart=tournament
@@ -75,12 +64,33 @@ class TournamentFormatsTest(TestCase):
                 models.Q(pair2_player1=player) |
                 models.Q(pair2_player2=player)
             ).count()
-            self.assertEqual(
-                match_count,
-                expected_matches[idx],
-                f"Player {idx+1} should play in {expected_matches[idx]} matches, got {match_count}"
-            )
-            
+            self.assertEqual(match_count, 4, f"Player {idx+1} should play 4 matches, got {match_count}")
+
+        # Round 3 is 2&5 vs 3&4 (seed 1 has the bye)
+        m = Matchup.objects.get(tournament_chart=tournament, round_number=3)
+        self.assertEqual({m.pair1_player1, m.pair1_player2}, {players[1], players[4]})
+        self.assertEqual({m.pair2_player1, m.pair2_player2}, {players[2], players[3]})
+
+    def test_5_player_tournament_10_and_15_rounds(self):
+        """Kodiak options B and C each add 5 rounds; all 15 are every possible matchup"""
+        players = [Player.objects.create(first_name=f'P{i+1}', last_name='Test', ranking=i+1)
+                   for i in range(5)]
+        for rounds in (10, 15):
+            tournament = TournamentChart.objects.create(
+                name=f'{rounds} rounds', date='2025-01-01', number_of_rounds=rounds,
+                number_of_courts=1, five_player_rounds=rounds)
+            MonarchOfTheCourt5().generate_matchups(tournament, players)
+            matchups = Matchup.objects.filter(tournament_chart=tournament)
+            self.assertEqual(sorted(m.round_number for m in matchups), list(range(1, rounds + 1)))
+            for player in players:
+                played = sum(player in (m.pair1_player1, m.pair1_player2, m.pair2_player1, m.pair2_player2)
+                             for m in matchups)
+                self.assertEqual(played, rounds * 4 // 5)
+            if rounds == 15:
+                keys = {frozenset([frozenset([m.pair1_player1_id, m.pair1_player2_id]),
+                                   frozenset([m.pair2_player1_id, m.pair2_player2_id])]) for m in matchups}
+                self.assertEqual(len(keys), 15)
+
     def test_generate_6_player_tournament(self):
         """Test generation of 6-player tournament format"""
         # Create 6 players

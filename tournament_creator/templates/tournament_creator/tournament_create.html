@@ -430,6 +430,18 @@
                         {{ form.default_sets_per_match }}
                         {% if form.default_sets_per_match.errors %}<div class="invalid-feedback d-block">{{ form.default_sets_per_match.errors|join:", " }}</div>{% endif %}
                     </div>
+
+                    <div class="mb-3">
+                        <label for="{{ form.five_player_rounds.id_for_label }}">
+                            Rounds with 5 players
+                            <i class="bi bi-info-circle text-muted"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="right"
+                               title="Kodiak-of-the-Kourt: option A has every even matchup in 5 rounds; options B and C each add 5 more rounds, and all 15 rounds play every possible matchup. Only used when exactly 5 players play."></i>
+                        </label>
+                        {{ form.five_player_rounds }}
+                        {% if form.five_player_rounds.errors %}<div class="invalid-feedback d-block">{{ form.five_player_rounds.errors|join:", " }}</div>{% endif %}
+                    </div>
                     {% endif %}
 
                     {% if selected_category == 'MOC' %}

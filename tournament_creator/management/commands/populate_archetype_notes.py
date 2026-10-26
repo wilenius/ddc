@@ -46,7 +46,8 @@ class Command(BaseCommand):
             ),
             # Monarch of the Court tournaments
             "5-player Monarch of the Court": (
-                "Three format options available (Simple, Double Your Fun, Full Permutation).\n"
+                "Kodiak options: A \"Simple\" (5 rounds), plus B \"Double Your Fun\" (10 rounds), "
+                "plus C \"Full Permutation\" (15 rounds, every possible matchup). Each player has one bye every 5 rounds.\n"
                 "Because Option A contains all the even-matchup possibilities, some pairings are repeated in Options B & C."
             ),
             "6-player Monarch of the Court": (

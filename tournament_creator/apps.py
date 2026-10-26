@@ -24,7 +24,7 @@ class TournamentCreatorConfig(AppConfig):
         ARCHETYPES = [
             dict(name="4 pairs doubles tournament", description="Round robin: 3 rounds on 2 fields with 4 pairs.", tournament_category="PAIRS"),
             dict(name="8 pairs doubles tournament", description="Round robin: 7 rounds on 4 fields with 8 pairs.", tournament_category="PAIRS"),
-            dict(name="5-player Monarch of the Court", description="MoC: 5-player specific schedule (Option A).", tournament_category="MOC"),
+            dict(name="5-player Monarch of the Court", description="MoC: 5-player Kodiak schedule, 5, 10 or 15 rounds (options A, A+B, A+B+C).", tournament_category="MOC"),
             dict(name="6-player Monarch of the Court", description="MoC: 6-player specific schedule (Option A).", tournament_category="MOC"),
             dict(name="7-player Monarch of the Court", description="MoC: 7-player specific schedule.", tournament_category="MOC"),
             dict(name="8-player Monarch of the Court", description="MoC: 8-player specific schedule.", tournament_category="MOC"),

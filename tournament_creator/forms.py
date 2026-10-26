@@ -64,7 +64,7 @@ class TournamentCreationForm(forms.ModelForm):
             'name', 'short_name', 'place', 'country', 'date', 'end_date', 'format_type',
             'notify_by_email', 'notify_by_signal', 'notify_by_matrix',
             'signal_recipient_usernames', 'signal_recipient_group_ids',
-            'name_display_format', 'show_structure', 'default_sets_per_match',
+            'name_display_format', 'show_structure', 'default_sets_per_match', 'five_player_rounds',
             'archived', 'is_sandbox',
             'uses_signup', 'signup_deadline', 'signup_min', 'signup_max',
             'league_courts', 'league_max_matches_per_day', 'league_back_to_back', 'league_avoid_parallel',
@@ -88,6 +88,7 @@ class TournamentCreationForm(forms.ModelForm):
             'format_type': forms.Select(attrs={'class': 'form-select'}),
             'name_display_format': forms.Select(attrs={'class': 'form-select'}),
             'default_sets_per_match': forms.Select(attrs={'class': 'form-select', 'style': 'width: 80px;'}),
+            'five_player_rounds': forms.Select(attrs={'class': 'form-select', 'style': 'max-width: 260px;'}),
             'uses_signup': forms.CheckboxInput,
             'signup_deadline': forms.DateTimeInput(
                 attrs={'type': 'datetime-local', 'class': 'form-control', 'style': 'max-width: 240px;'},
@@ -117,6 +118,7 @@ class TournamentCreationForm(forms.ModelForm):
             'format_type': 'Format',
             'name_display_format': 'Player Names',
             'default_sets_per_match': 'Sets per match',
+            'five_player_rounds': 'Rounds with 5 players',
         }
         help_texts = {
             'name': '',
@@ -126,6 +128,7 @@ class TournamentCreationForm(forms.ModelForm):
             'name_display_format': '',
             'show_structure': '',
             'default_sets_per_match': '',
+            'five_player_rounds': '',
         }
 
     def __init__(self, *args, **kwargs):
@@ -149,6 +152,8 @@ class TournamentCreationForm(forms.ModelForm):
         # this form to the fields in its fieldsets, which omit default_sets_per_match.
         if 'default_sets_per_match' in self.fields:
             self.fields['default_sets_per_match'].required = False
+        if 'five_player_rounds' in self.fields:
+            self.fields['five_player_rounds'].required = False
         # Only sign-up leagues show the court count; others keep the model default
         if 'league_courts' in self.fields:
             self.fields['league_courts'].required = False
@@ -369,6 +374,10 @@ class TournamentCreationForm(forms.ModelForm):
 
     def clean_league_courts(self):
         return self.cleaned_data.get('league_courts') or TournamentChart._meta.get_field('league_courts').default
+
+    def clean_five_player_rounds(self):
+        # Shown for MoC only; others keep the model default
+        return self.cleaned_data.get('five_player_rounds') or TournamentChart._meta.get_field('five_player_rounds').default
 
     def clean_default_sets_per_match(self):
         # Fall back to the model's default when empty (the field is hidden for non-MoC).
